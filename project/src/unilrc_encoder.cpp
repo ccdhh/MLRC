@@ -152,19 +152,7 @@ void ECProject::encode_unilrc(int k, int r, int z, unsigned char **data_ptrs, un
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z) * k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_rs_matrix1(encode_matrix, m, k);
-    for(int i = 0; i < k; i++){
-        int row = i / (k / z);
-        encode_matrix[(m + row) * k + i] = 1;
-    }
-    for(int i = 0; i < z; i++){
-        for(int j = 0; j < k; j++){
-            for(int l = 0; l < r / z; l++){
-                encode_matrix[(m + i) * k + j] ^= encode_matrix[(k + i * r / z + l) * k + j];
-            }
-        }
-    }
+    gen_unilrc_matrix(encode_matrix, k, r, z);
 
     unsigned char *g_tbls = new unsigned char[k * (r + z) * 32];
     ec_init_tables(k, r + z, &encode_matrix[k * k], g_tbls);
@@ -181,19 +169,7 @@ void ECProject::partial_encode_unilrc(int k, int r, int z, int data_block_num, u
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z) * k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_rs_matrix1(encode_matrix, m, k);
-    for(int i = 0; i < k; i++){
-        int row = i / (k / z);
-        encode_matrix[(m + row) * k + i] = 1;
-    }
-    for(int i = 0; i < z; i++){
-        for(int j = 0; j < k; j++){
-            for(int l = 0; l < r / z; l++){
-                encode_matrix[(m + i) * k + j] ^= encode_matrix[(k + i * r / z + l) * k + j];
-            }
-        }
-    }
+    gen_unilrc_matrix(encode_matrix, k, r, z);
 
     unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
     for (int i = 0; i < r + z; i++) {
@@ -224,12 +200,7 @@ void ECProject::encode_azure_lrc(int k, int r, int z, unsigned char **data_ptrs,
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z)* k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_rs_matrix1(encode_matrix, m, k);
-    for(int i = 0; i < k; i++){
-        int row = i / (k / z);
-        encode_matrix[(m + row) * k + i] = 1;
-    }
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
 
     unsigned char *g_tbls = new unsigned char[k * (r + z) * 32];
     ec_init_tables(k, r + z, &encode_matrix[k * k], g_tbls);
@@ -246,12 +217,7 @@ void ECProject::partial_encode_azure_lrc(int k, int r, int z, int data_block_num
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z)* k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_rs_matrix1(encode_matrix, m, k);
-    for(int i = 0; i < k; i++){
-        int row = i / (k / z);
-        encode_matrix[(m + row) * k + i] = 1;
-    }
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
 
     unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
     for (int i = 0; i < r + z; i++) {
@@ -282,28 +248,12 @@ void ECProject::encode_optimal_lrc(int k, int r, int z, unsigned char **data_ptr
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z) * k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_cauchy_matrix1(encode_matrix, m, k);
-
-    unsigned char *local_vector = new unsigned char[k];
-    gf_gen_local_vector(local_vector, k, r);
-    for(int i = 0; i < k; i++){
-        int row = i / (k / z);
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }
-    for(int i = 0; i < z; i++){
-        for(int j = 0; j < k; j++){
-            for(int l = 0; l < r; l++){
-                encode_matrix[(m + i) * k + j] ^= encode_matrix[(k + l) * k + j];
-            }
-        }
-    }
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
 
     unsigned char *g_tbls = new unsigned char[k * (r + z)* 32];
     ec_init_tables(k, r + z, &encode_matrix[k * k], g_tbls);
     ec_encode_data_avx2(block_size, k, r + z, g_tbls, data_ptrs, parity_ptrs);
     delete[] encode_matrix;
-    delete[] local_vector;
     delete[] g_tbls;
 }
 
@@ -314,9 +264,113 @@ void ECProject::partial_encode_optimal_lrc(int k, int r, int z, int data_block_n
     }
     int m = k + r;
     unsigned char *encode_matrix = new unsigned char[(m + z) * k];
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
+
+    unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
+    for (int i = 0; i < r + z; i++) {
+        memcpy(sub_matrix + i * data_block_num, 
+               encode_matrix + (k + i) * k,      
+               data_block_num);                   
+    }
+
+    unsigned char *g_tbls = new unsigned char[data_block_num * (r + z) * 32];
+    ec_init_tables(data_block_num, r + z, sub_matrix, g_tbls);
+
+    ec_encode_data_avx2(block_size, 
+                        data_block_num,  
+                        r + z,           
+                        g_tbls, 
+                        data_ptrs,       
+                        parity_ptrs);
+
+    delete[] encode_matrix;
+    delete[] sub_matrix;
+    delete[] g_tbls;
+}
+
+void ECProject::encode_uniform_lrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size)
+{
+    for(int i = 0; i < r + z; i++){
+        memset(parity_ptrs[i], 0, block_size);
+    }
+    int m = k + r;
+    unsigned char *encode_matrix = new unsigned char[(m + z) * k];
+    gen_uniform_lrc_matrix(encode_matrix, k, r, z);
+
+    unsigned char *g_tbls = new unsigned char[k * (r + z)* 32];
+    ec_init_tables(k, r + z, &encode_matrix[k * k], g_tbls);
+    ec_encode_data_avx2(block_size, k, r + z, g_tbls, data_ptrs, parity_ptrs);
+    delete[] encode_matrix;
+    delete[] g_tbls;
+}
+
+void ECProject::partial_encode_uniform_lrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size)
+{
+    for(int i = 0; i < r + z; i++){
+        memset(parity_ptrs[i], 0, block_size);
+    }
+    int m = k + r;
+    unsigned char *encode_matrix = new unsigned char[(m + z) * k];
+    gen_uniform_lrc_matrix(encode_matrix, k, r, z);
+
+    unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
+    for (int i = 0; i < r + z; i++) {
+        memcpy(sub_matrix + i * data_block_num, 
+               encode_matrix + (k + i) * k,      
+               data_block_num);                   
+    }
+
+    unsigned char *g_tbls = new unsigned char[data_block_num * (r + z) * 32];
+    ec_init_tables(data_block_num, r + z, sub_matrix, g_tbls);
+
+    ec_encode_data_avx2(block_size, 
+                        data_block_num,  
+                        r + z,           
+                        g_tbls, 
+                        data_ptrs,       
+                        parity_ptrs);
+
+    delete[] encode_matrix;
+    delete[] sub_matrix;
+    delete[] g_tbls;
+    
+}
+
+// ===== Matrix generation helpers implementations =====
+void ECProject::gen_unilrc_matrix(unsigned char *encode_matrix, int k, int r, int z)
+{
+    int m = k + r;
+    memset(encode_matrix, 0, (m + z) * k);
+    gf_gen_rs_matrix1(encode_matrix, m, k);
+    for(int i = 0; i < k; i++){
+        int row = i / (k / z);
+        encode_matrix[(m + row) * k + i] = 1;
+    }
+    for(int i = 0; i < z; i++){
+        for(int j = 0; j < k; j++){
+            for(int l = 0; l < r / z; l++){
+                encode_matrix[(m + i) * k + j] ^= encode_matrix[(k + i * r / z + l) * k + j];
+            }
+        }
+    }
+}
+
+void ECProject::gen_azure_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z)
+{
+    int m = k + r;
+    memset(encode_matrix, 0, (m + z) * k);
+    gf_gen_rs_matrix1(encode_matrix, m, k);
+    for(int i = 0; i < k; i++){
+        int row = i / (k / z);
+        encode_matrix[(m + row) * k + i] = 1;
+    }
+}
+
+void ECProject::gen_optimal_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z)
+{
+    int m = k + r;
     memset(encode_matrix, 0, (m + z) * k);
     gf_gen_cauchy_matrix1(encode_matrix, m, k);
-
     unsigned char *local_vector = new unsigned char[k];
     gf_gen_local_vector(local_vector, k, r);
     for(int i = 0; i < k; i++){
@@ -330,40 +384,14 @@ void ECProject::partial_encode_optimal_lrc(int k, int r, int z, int data_block_n
             }
         }
     }
-
-    unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
-    for (int i = 0; i < r + z; i++) {
-        memcpy(sub_matrix + i * data_block_num, 
-               encode_matrix + (k + i) * k,      
-               data_block_num);                   
-    }
-
-    unsigned char *g_tbls = new unsigned char[data_block_num * (r + z) * 32];
-    ec_init_tables(data_block_num, r + z, sub_matrix, g_tbls);
-
-    ec_encode_data_avx2(block_size, 
-                        data_block_num,  
-                        r + z,           
-                        g_tbls, 
-                        data_ptrs,       
-                        parity_ptrs);
-
-    delete[] encode_matrix;
-    delete[] sub_matrix;
-    delete[] g_tbls;
     delete[] local_vector;
 }
 
-void ECProject::encode_uniform_lrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size)
+void ECProject::gen_uniform_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z)
 {
-    for(int i = 0; i < r + z; i++){
-        memset(parity_ptrs[i], 0, block_size);
-    }
     int m = k + r;
-    unsigned char *encode_matrix = new unsigned char[(m + z) * k];
     memset(encode_matrix, 0, (m + z) * k);
     gf_gen_cauchy_matrix1(encode_matrix, m, k);
-
     unsigned char *local_vector = new unsigned char[k];
     gf_gen_local_vector(local_vector, k, r);
     int group_size = (k + r) / z;
@@ -371,83 +399,11 @@ void ECProject::encode_uniform_lrc(int k, int r, int z, unsigned char **data_ptr
         int row = i / group_size;
         encode_matrix[(m + row) * k + i] = local_vector[i];
     }
-    /*int larger_group_num = (k + r) % z;
-    int larger_group_block_start = group_size * (z - larger_group_num);
-    for(int i = 0; i < larger_group_block_start; i++){
-        int row = i / group_size;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }
-    for(int i = larger_group_block_start; i < k; i++){
-        int row = (i - larger_group_block_start) / (group_size + 1) + z - larger_group_num;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }*/
     for(int i = 0; i < r; i++){
         for(int j = 0; j < k; j++){
             encode_matrix[(m + z - 1) * k + j] ^= encode_matrix[(k + i) * k + j];
         }
     }
-
-    unsigned char *g_tbls = new unsigned char[k * (r + z)* 32];
-    ec_init_tables(k, r + z, &encode_matrix[k * k], g_tbls);
-    ec_encode_data_avx2(block_size, k, r + z, g_tbls, data_ptrs, parity_ptrs);
-    delete[] encode_matrix;
-    delete[] local_vector;
-    delete[] g_tbls;
-}
-
-void ECProject::partial_encode_uniform_lrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size)
-{
-    for(int i = 0; i < r + z; i++){
-        memset(parity_ptrs[i], 0, block_size);
-    }
-    int m = k + r;
-    unsigned char *encode_matrix = new unsigned char[(m + z) * k];
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_cauchy_matrix1(encode_matrix, m, k);
-
-    unsigned char *local_vector = new unsigned char[k];
-    gf_gen_local_vector(local_vector, k, r);
-    int group_size = (k + r) / z;
-    for(int i = 0; i < k; i++){
-        int row = i / group_size;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }
-    /*int larger_group_num = (k + r) % z;
-    int larger_group_block_start = group_size * (z - larger_group_num);
-    for(int i = 0; i < larger_group_block_start; i++){
-        int row = i / group_size;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }
-    for(int i = larger_group_block_start; i < k; i++){
-        int row = (i - larger_group_block_start) / (group_size + 1) + z - larger_group_num;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }*/
-    for(int i = 0; i < r; i++){
-        for(int j = 0; j < k; j++){
-            encode_matrix[(m + z - 1) * k + j] ^= encode_matrix[(k + i) * k + j];
-        }
-    }
-
-    unsigned char *sub_matrix = new unsigned char[(r + z) * data_block_num];
-    for (int i = 0; i < r + z; i++) {
-        memcpy(sub_matrix + i * data_block_num, 
-               encode_matrix + (k + i) * k,      
-               data_block_num);                   
-    }
-
-    unsigned char *g_tbls = new unsigned char[data_block_num * (r + z) * 32];
-    ec_init_tables(data_block_num, r + z, sub_matrix, g_tbls);
-
-    ec_encode_data_avx2(block_size, 
-                        data_block_num,  
-                        r + z,           
-                        g_tbls, 
-                        data_ptrs,       
-                        parity_ptrs);
-
-    delete[] encode_matrix;
-    delete[] sub_matrix;
-    delete[] g_tbls;
     delete[] local_vector;
 }
 
@@ -780,4 +736,152 @@ ECProject::gf_mul_vect_matrix(unsigned char* vect, unsigned char* matrix, unsign
             dest[i] ^= gf_mul(vect[j], matrix[j * k + i]);
         }
     }
+}
+
+bool
+ECProject::get_mul_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors)
+{
+    int m = k + r;
+    int nrows = k + r + z;
+    unsigned char gen_matrix[k * (k + r + z)];
+    memset(gen_matrix, 0, k * (k + r + z));
+    if(code_type == "UniLRC"){
+        gen_unilrc_matrix(gen_matrix, k, r, z);
+    }
+    else if(code_type == "AzureLRC"){
+        gen_azure_lrc_matrix(gen_matrix, k, r, z);
+    }
+    else if(code_type == "OptimalLRC"){
+        gen_optimal_lrc_matrix(gen_matrix, k, r, z);
+    }
+    else if(code_type == "UniformLRC"){
+        gen_uniform_lrc_matrix(gen_matrix, k, r, z);
+    }
+    else{
+        std::cerr << "Error: Unsupported code type " << code_type << std::endl;
+        return false;
+    }
+
+    // build failed set
+    std::unordered_map<int, bool> failed_map;
+    for (int idx : failed_block_indexes) failed_map[idx] = true;
+
+    // Prefer first m rows (global rows). Collect candidate rows (non-failed).
+    std::vector<int> candidates;
+    for (int i = 0; i < m; i++) {
+        if (!failed_map.count(i)) candidates.push_back(i);
+    }
+    // If not enough, append remaining non-failed rows (local parity rows)
+    if ((int)candidates.size() < k) {
+        for (int i = m; i < nrows; i++) {
+            if (!failed_map.count(i)) candidates.push_back(i);
+            if ((int)candidates.size() >= k) break;
+        }
+    }
+
+    // If still fewer than k rows, cannot form left-inverse
+    if ((int)candidates.size() < k) {
+        decode_block_indexes.clear();
+        decode_factors.clear();
+        return false;
+    }
+
+    // Find k linearly independent rows among candidates using Gaussian elimination (GF)
+    int M = (int)candidates.size();
+    unsigned char *mat = new unsigned char[M * k];
+    // copy candidate rows into mat (row-major: M x k)
+    for (int i = 0; i < M; i++) {
+        int gro = candidates[i];
+        for (int c = 0; c < k; c++) mat[i * k + c] = gen_matrix[gro * k + c];
+    }
+
+    int cur = 0; // current pivot row index in mat
+    for (int col = 0; col < k && cur < M; col++) {
+        // find row with non-zero in this column
+        int sel = -1;
+        for (int row = cur; row < M; row++) {
+            if (mat[row * k + col] != 0) { sel = row; break; }
+        }
+        if (sel == -1) continue; // no pivot in this column
+
+        // swap sel and cur (both in mat and candidates)
+        if (sel != cur) {
+            for (int c = 0; c < k; c++) {
+                unsigned char tmp = mat[cur * k + c];
+                mat[cur * k + c] = mat[sel * k + c];
+                mat[sel * k + c] = tmp;
+            }
+            int tmpidx = candidates[cur];
+            candidates[cur] = candidates[sel];
+            candidates[sel] = tmpidx;
+        }
+
+        // normalize pivot row: make pivot == 1
+        unsigned char pivot = mat[cur * k + col];
+        unsigned char inv_pivot = gf_inv(pivot);
+        for (int c = col; c < k; c++) mat[cur * k + c] = gf_mul(mat[cur * k + c], inv_pivot);
+
+        // eliminate this column in all other rows
+        for (int row = 0; row < M; row++) {
+            if (row == cur) continue;
+            unsigned char factor = mat[row * k + col];
+            if (factor == 0) continue;
+            for (int c = col; c < k; c++) {
+                mat[row * k + c] ^= gf_mul(factor, mat[cur * k + c]);
+            }
+        }
+
+        cur++;
+    }
+
+    // check if we found k independent rows (need cur >= k)
+    if (cur < k) {
+        delete[] mat;
+        decode_block_indexes.clear();
+        decode_factors.clear();
+        return false;
+    }
+
+    // selected rows are candidates[0..k-1]
+    std::vector<int> chosen(k);
+    for (int i = 0; i < k; i++) chosen[i] = candidates[i];
+
+    // build tempM from chosen rows (k x k) and compute inverse
+    unsigned char *tempM = new unsigned char[k * k];
+    for (int row = 0; row < k; row++) {
+        int global_row = chosen[row];
+        for (int col = 0; col < k; col++) {
+            tempM[row * k + col] = gen_matrix[global_row * k + col];
+        }
+    }
+    unsigned char *invM = new unsigned char[k * k];
+    if (gf_invert_matrix(tempM, invM, k) != 0) {
+        // unexpected: invert failed though rows are independent; return empty
+        delete[] mat;
+        delete[] tempM;
+        delete[] invM;
+        decode_block_indexes.clear();
+        decode_factors.clear();
+        return false;
+    }
+
+    // decode_block_indexes = chosen (sources)
+    decode_block_indexes = chosen;
+
+    // For each failed block, compute coefficients c = G_row_failed * invM
+    decode_factors.clear();
+    for (int fidx : failed_block_indexes) {
+        std::vector<int> factors(k);
+        unsigned char *coeff = new unsigned char[k];
+        gf_mul_vect_matrix(gen_matrix + fidx * k, invM, coeff, k);
+        for (int i = 0; i < k; i++) factors[i] = (int)coeff[i];
+        decode_factors.push_back(std::move(factors));
+        delete[] coeff;
+    }
+
+    delete[] mat;
+    delete[] tempM;
+    delete[] invM;
+    // done
+    return true;
 }

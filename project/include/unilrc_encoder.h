@@ -62,6 +62,14 @@ namespace ECProject
 
     void partial_encode_uniform_lrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
 
+    /* Matrix generation helpers: generate full (m+z) x k encode matrix for each scheme
+     * encode_matrix must point to an allocated buffer of size (k + r + z) * k bytes
+     */
+    void gen_unilrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+    void gen_azure_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+    void gen_optimal_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+    void gen_uniform_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+
     void decode_unilrc(const int k, const int r, const int z, const int block_num,
                        const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size);
 
@@ -113,6 +121,8 @@ namespace ECProject
     gf_mul_vect_matrix(unsigned char* vect, unsigned char* matrix, unsigned char *dest, int k);
 
     int xor_avx(int vects, int len, void **array);
+
+    bool get_mul_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors);
 }
 
 #endif

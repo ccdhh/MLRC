@@ -10,6 +10,7 @@
 #include <chrono>
 #include <algorithm>
 #include <random>
+#include "unilrc_encoder.h"
 
 int main(int argc, char **argv)
 {
@@ -49,7 +50,43 @@ int main(int argc, char **argv)
     }
     double block_size = static_cast<double> (parameters[3]) / 1024 / 1024; //MB
     int n = k + r + z;
-    client.set();
+    std::vector <int> failed_blocks;
+    std::cout << "failed blocks (space separated, end with -1): ";
+    int fb;
+    while(std::cin >> fb){
+        if(fb == -1) break;
+        if(fb < 0 || fb >= n){
+            std::cout << "Invalid block id: " << fb << std::endl;
+            return -1;
+        }
+        failed_blocks.push_back(fb);
+    }
+    if(failed_blocks.size() == 0){
+        std::cout << "No failed blocks provided, exiting..." << std::endl;
+        return 0;
+    }
+    std::vector <std::vector <int>> decode_factors;
+    std::vector <int> decode_blocks;
+    bool recoverable = ECProject::get_mul_decode_plan(k, r, z, code_type, failed_blocks, decode_blocks, decode_factors);
+    std::cout << "Recoverable: " << recoverable << std::endl;
+    std::cout << "k: " << k << ", r: " << r << ", z: " << z << ", n: " << n << ", block size: " << block_size << "MB, code type: " << code_type << std::endl;
+    std::cout << "Failed blocks: ";
+    for(int fb : failed_blocks){
+        std::cout << fb << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "Selected blocks for recovery: ";
+    for(int db : decode_blocks){
+        std::cout << db << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "Decode factors: " << std::endl;
+    for(auto &df : decode_factors){
+        for(int f : df){
+            std::cout << f << " ";
+        }
+        std::cout << std::endl;
+    }
 
     /*
     size_t total_write_size = 40000; //MB
@@ -190,6 +227,7 @@ int main(int argc, char **argv)
     std::cout << std::endl;
     */
     //for single block recovery
+    /*
     std::cout << "Single block recovery test start" << std::endl;
     std::vector<std::chrono::duration<double>> block_recovery_time_spans;
     for(int i = 0; i < n; i++){
@@ -209,6 +247,7 @@ int main(int argc, char **argv)
     std::cout << "Min time: "<< block_recovery_min_time_span.count() << std::endl;
     std::cout << "Single block recovery test end" << std::endl;
     std::cout << std::endl;
+    */
     /*
     //for full node repair
     std::cout << "Full node repair test start" << std::endl;
