@@ -105,6 +105,9 @@ extern RequestProxyIPPortDefaultTypeInternal _RequestProxyIPPort_default_instanc
 class RequestToCoordinator;
 struct RequestToCoordinatorDefaultTypeInternal;
 extern RequestToCoordinatorDefaultTypeInternal _RequestToCoordinator_default_instance_;
+class StripeIdAndBlockIDsFromClient;
+struct StripeIdAndBlockIDsFromClientDefaultTypeInternal;
+extern StripeIdAndBlockIDsFromClientDefaultTypeInternal _StripeIdAndBlockIDsFromClient_default_instance_;
 class StripeIdFromClient;
 struct StripeIdFromClientDefaultTypeInternal;
 extern StripeIdFromClientDefaultTypeInternal _StripeIdFromClient_default_instance_;
@@ -130,6 +133,7 @@ template<> ::coordinator_proto::ReplyProxyIPPort* Arena::CreateMaybeMessage<::co
 template<> ::coordinator_proto::ReplyProxyIPsPorts* Arena::CreateMaybeMessage<::coordinator_proto::ReplyProxyIPsPorts>(Arena*);
 template<> ::coordinator_proto::RequestProxyIPPort* Arena::CreateMaybeMessage<::coordinator_proto::RequestProxyIPPort>(Arena*);
 template<> ::coordinator_proto::RequestToCoordinator* Arena::CreateMaybeMessage<::coordinator_proto::RequestToCoordinator>(Arena*);
+template<> ::coordinator_proto::StripeIdAndBlockIDsFromClient* Arena::CreateMaybeMessage<::coordinator_proto::StripeIdAndBlockIDsFromClient>(Arena*);
 template<> ::coordinator_proto::StripeIdFromClient* Arena::CreateMaybeMessage<::coordinator_proto::StripeIdFromClient>(Arena*);
 PROTOBUF_NAMESPACE_CLOSE
 namespace coordinator_proto {
@@ -2791,6 +2795,179 @@ class StripeIdFromClient final :
 };
 // -------------------------------------------------------------------
 
+class StripeIdAndBlockIDsFromClient final :
+    public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:coordinator_proto.StripeIdAndBlockIDsFromClient) */ {
+ public:
+  inline StripeIdAndBlockIDsFromClient() : StripeIdAndBlockIDsFromClient(nullptr) {}
+  ~StripeIdAndBlockIDsFromClient() override;
+  explicit PROTOBUF_CONSTEXPR StripeIdAndBlockIDsFromClient(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized);
+
+  StripeIdAndBlockIDsFromClient(const StripeIdAndBlockIDsFromClient& from);
+  StripeIdAndBlockIDsFromClient(StripeIdAndBlockIDsFromClient&& from) noexcept
+    : StripeIdAndBlockIDsFromClient() {
+    *this = ::std::move(from);
+  }
+
+  inline StripeIdAndBlockIDsFromClient& operator=(const StripeIdAndBlockIDsFromClient& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline StripeIdAndBlockIDsFromClient& operator=(StripeIdAndBlockIDsFromClient&& from) noexcept {
+    if (this == &from) return *this;
+    if (GetOwningArena() == from.GetOwningArena()
+  #ifdef PROTOBUF_FORCE_COPY_IN_MOVE
+        && GetOwningArena() != nullptr
+  #endif  // !PROTOBUF_FORCE_COPY_IN_MOVE
+    ) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
+    return GetDescriptor();
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::PROTOBUF_NAMESPACE_ID::Reflection* GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const StripeIdAndBlockIDsFromClient& default_instance() {
+    return *internal_default_instance();
+  }
+  static inline const StripeIdAndBlockIDsFromClient* internal_default_instance() {
+    return reinterpret_cast<const StripeIdAndBlockIDsFromClient*>(
+               &_StripeIdAndBlockIDsFromClient_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    15;
+
+  friend void swap(StripeIdAndBlockIDsFromClient& a, StripeIdAndBlockIDsFromClient& b) {
+    a.Swap(&b);
+  }
+  inline void Swap(StripeIdAndBlockIDsFromClient* other) {
+    if (other == this) return;
+  #ifdef PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() != nullptr &&
+        GetOwningArena() == other->GetOwningArena()) {
+   #else  // PROTOBUF_FORCE_COPY_IN_SWAP
+    if (GetOwningArena() == other->GetOwningArena()) {
+  #endif  // !PROTOBUF_FORCE_COPY_IN_SWAP
+      InternalSwap(other);
+    } else {
+      ::PROTOBUF_NAMESPACE_ID::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(StripeIdAndBlockIDsFromClient* other) {
+    if (other == this) return;
+    GOOGLE_DCHECK(GetOwningArena() == other->GetOwningArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  StripeIdAndBlockIDsFromClient* New(::PROTOBUF_NAMESPACE_ID::Arena* arena = nullptr) const final {
+    return CreateMaybeMessage<StripeIdAndBlockIDsFromClient>(arena);
+  }
+  using ::PROTOBUF_NAMESPACE_ID::Message::CopyFrom;
+  void CopyFrom(const StripeIdAndBlockIDsFromClient& from);
+  using ::PROTOBUF_NAMESPACE_ID::Message::MergeFrom;
+  void MergeFrom( const StripeIdAndBlockIDsFromClient& from) {
+    StripeIdAndBlockIDsFromClient::MergeImpl(*this, from);
+  }
+  private:
+  static void MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg);
+  public:
+  PROTOBUF_ATTRIBUTE_REINITIALIZES void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  const char* _InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) final;
+  uint8_t* _InternalSerialize(
+      uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const final;
+  int GetCachedSize() const final { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::PROTOBUF_NAMESPACE_ID::Arena* arena, bool is_message_owned);
+  void SharedDtor();
+  void SetCachedSize(int size) const final;
+  void InternalSwap(StripeIdAndBlockIDsFromClient* other);
+
+  private:
+  friend class ::PROTOBUF_NAMESPACE_ID::internal::AnyMetadata;
+  static ::PROTOBUF_NAMESPACE_ID::StringPiece FullMessageName() {
+    return "coordinator_proto.StripeIdAndBlockIDsFromClient";
+  }
+  protected:
+  explicit StripeIdAndBlockIDsFromClient(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                       bool is_message_owned = false);
+  public:
+
+  static const ClassData _class_data_;
+  const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetClassData() const final;
+
+  ::PROTOBUF_NAMESPACE_ID::Metadata GetMetadata() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  enum : int {
+    kBlockIdsFieldNumber = 2,
+    kStripeIdFieldNumber = 1,
+  };
+  // repeated int32 block_ids = 2;
+  int block_ids_size() const;
+  private:
+  int _internal_block_ids_size() const;
+  public:
+  void clear_block_ids();
+  private:
+  int32_t _internal_block_ids(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      _internal_block_ids() const;
+  void _internal_add_block_ids(int32_t value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      _internal_mutable_block_ids();
+  public:
+  int32_t block_ids(int index) const;
+  void set_block_ids(int index, int32_t value);
+  void add_block_ids(int32_t value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      block_ids() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      mutable_block_ids();
+
+  // int32 stripe_id = 1;
+  void clear_stripe_id();
+  int32_t stripe_id() const;
+  void set_stripe_id(int32_t value);
+  private:
+  int32_t _internal_stripe_id() const;
+  void _internal_set_stripe_id(int32_t value);
+  public:
+
+  // @@protoc_insertion_point(class_scope:coordinator_proto.StripeIdAndBlockIDsFromClient)
+ private:
+  class _Internal;
+
+  template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
+  typedef void InternalArenaConstructable_;
+  typedef void DestructorSkippable_;
+  struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t > block_ids_;
+    mutable std::atomic<int> _block_ids_cached_byte_size_;
+    int32_t stripe_id_;
+    mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_coordinator_2eproto;
+};
+// -------------------------------------------------------------------
+
 class NodeIdFromClient final :
     public ::PROTOBUF_NAMESPACE_ID::Message /* @@protoc_insertion_point(class_definition:coordinator_proto.NodeIdFromClient) */ {
  public:
@@ -2839,7 +3016,7 @@ class NodeIdFromClient final :
                &_NodeIdFromClient_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   friend void swap(NodeIdFromClient& a, NodeIdFromClient& b) {
     a.Swap(&b);
@@ -2987,7 +3164,7 @@ class RepIfDeling final :
                &_RepIfDeling_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    16;
+    17;
 
   friend void swap(RepIfDeling& a, RepIfDeling& b) {
     a.Swap(&b);
@@ -3135,7 +3312,7 @@ class RepStripeIds final :
                &_RepStripeIds_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    17;
+    18;
 
   friend void swap(RepStripeIds& a, RepStripeIds& b) {
     a.Swap(&b);
@@ -3297,7 +3474,7 @@ class RepBlockNum final :
                &_RepBlockNum_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    18;
+    19;
 
   friend void swap(RepBlockNum& a, RepBlockNum& b) {
     a.Swap(&b);
@@ -3445,7 +3622,7 @@ class DegradedReadReply final :
                &_DegradedReadReply_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    19;
+    20;
 
   friend void swap(DegradedReadReply& a, DegradedReadReply& b) {
     a.Swap(&b);
@@ -3626,7 +3803,7 @@ class RecoveryReply final :
                &_RecoveryReply_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    20;
+    21;
 
   friend void swap(RecoveryReply& a, RecoveryReply& b) {
     a.Swap(&b);
@@ -5218,6 +5395,77 @@ inline void StripeIdFromClient::set_stripe_id(int32_t value) {
 
 // -------------------------------------------------------------------
 
+// StripeIdAndBlockIDsFromClient
+
+// int32 stripe_id = 1;
+inline void StripeIdAndBlockIDsFromClient::clear_stripe_id() {
+  _impl_.stripe_id_ = 0;
+}
+inline int32_t StripeIdAndBlockIDsFromClient::_internal_stripe_id() const {
+  return _impl_.stripe_id_;
+}
+inline int32_t StripeIdAndBlockIDsFromClient::stripe_id() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.StripeIdAndBlockIDsFromClient.stripe_id)
+  return _internal_stripe_id();
+}
+inline void StripeIdAndBlockIDsFromClient::_internal_set_stripe_id(int32_t value) {
+  
+  _impl_.stripe_id_ = value;
+}
+inline void StripeIdAndBlockIDsFromClient::set_stripe_id(int32_t value) {
+  _internal_set_stripe_id(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.StripeIdAndBlockIDsFromClient.stripe_id)
+}
+
+// repeated int32 block_ids = 2;
+inline int StripeIdAndBlockIDsFromClient::_internal_block_ids_size() const {
+  return _impl_.block_ids_.size();
+}
+inline int StripeIdAndBlockIDsFromClient::block_ids_size() const {
+  return _internal_block_ids_size();
+}
+inline void StripeIdAndBlockIDsFromClient::clear_block_ids() {
+  _impl_.block_ids_.Clear();
+}
+inline int32_t StripeIdAndBlockIDsFromClient::_internal_block_ids(int index) const {
+  return _impl_.block_ids_.Get(index);
+}
+inline int32_t StripeIdAndBlockIDsFromClient::block_ids(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.StripeIdAndBlockIDsFromClient.block_ids)
+  return _internal_block_ids(index);
+}
+inline void StripeIdAndBlockIDsFromClient::set_block_ids(int index, int32_t value) {
+  _impl_.block_ids_.Set(index, value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.StripeIdAndBlockIDsFromClient.block_ids)
+}
+inline void StripeIdAndBlockIDsFromClient::_internal_add_block_ids(int32_t value) {
+  _impl_.block_ids_.Add(value);
+}
+inline void StripeIdAndBlockIDsFromClient::add_block_ids(int32_t value) {
+  _internal_add_block_ids(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.StripeIdAndBlockIDsFromClient.block_ids)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+StripeIdAndBlockIDsFromClient::_internal_block_ids() const {
+  return _impl_.block_ids_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+StripeIdAndBlockIDsFromClient::block_ids() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.StripeIdAndBlockIDsFromClient.block_ids)
+  return _internal_block_ids();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+StripeIdAndBlockIDsFromClient::_internal_mutable_block_ids() {
+  return &_impl_.block_ids_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+StripeIdAndBlockIDsFromClient::mutable_block_ids() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.StripeIdAndBlockIDsFromClient.block_ids)
+  return _internal_mutable_block_ids();
+}
+
+// -------------------------------------------------------------------
+
 // NodeIdFromClient
 
 // int32 node_id = 1;
@@ -5530,6 +5778,8 @@ inline void RecoveryReply::set_grpc_start_time(double value) {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

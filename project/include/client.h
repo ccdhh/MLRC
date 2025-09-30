@@ -74,6 +74,7 @@ namespace ECProject
     std::shared_ptr<char[]> get_degraded_read_block_breakdown(int stripe_id, int failed_block_id, double &total_time, double &disk_io_time, double &network_time, double &encode_time);
     bool recovery_breakdown(int stripe_id, int failed_block_id, double &disk_read_time, double &network_time, double &decode_time, double &disk_write_time);
     bool recovery(int stripe_id, int failed_block_id);
+    bool multi_block_recovery(int stripe_id, std::vector<int> block_ids);
     int recovery_full_node(int node_id);
     std::vector<int> get_data_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_global_parity_block_num_per_group(int k, int r, int z, std::string code_type);

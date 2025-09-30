@@ -2318,307 +2318,202 @@ namespace ECProject
     return grpc::Status::OK;
   }
 
+  grpc::Status ProxyImpl::partialDecoding(
+    grpc::ServerContext *context,
+    const proxy_proto::PartialDecodingRequest *partial_decoding_request,
+    proxy_proto::DegradedReadReply *response)
+  {
+    int block_size = m_sys_config->BlockSize;
+    int source_num = partial_decoding_request->source_block_ids_size();
+    int decode_num = partial_decoding_request->decode_num();
+    unsigned char *source_buf_ptrs[source_num];
+    unsigned char *decode_buf_ptrs[decode_num];
+    for(int i = 0; i < source_num; i++)
+    {
+      source_buf_ptrs[i] = static_cast<unsigned char*>(std::aligned_alloc(32, block_size));
+    }
+    std::vector<std::thread> get_threads;
+    for(int i = 0; i < source_num; i++)
+    {
+      get_threads.push_back(std::thread([this, i, &partial_decoding_request, &source_buf_ptrs, block_size]() {
+        this->GetFromDatanode(
+            partial_decoding_request->source_block_keys(i), 
+            reinterpret_cast<char*>(source_buf_ptrs[i]),
+            static_cast<size_t>(block_size),
+            partial_decoding_request->source_datanode_ips(i).c_str(),
+            static_cast<int>(partial_decoding_request->source_datanode_ports(i))
+        );
+      }));
+    }
+    for(int i = 0; i < decode_num; i++)
+    {
+      decode_buf_ptrs[i] = static_cast<unsigned char*>(std::aligned_alloc(32, block_size));
+    }
+    unsigned char decode_matrix[source_num * decode_num];
+    for(int i = 0; i < source_num * decode_num; i++)
+    {
+      decode_matrix[i] = partial_decoding_request->decode_factors(i);
+    }
+    for(int i = 0; i < source_num; i++)
+    {
+      get_threads[i].join();
+    }
+    ECProject::encode_data(block_size, source_num, decode_num, decode_matrix, source_buf_ptrs, decode_buf_ptrs);
+    std::string dest_proxy_ip = partial_decoding_request->dest_ip();
+    int dest_proxy_port = partial_decoding_request->dest_port();
+    asio::io_context io_context;
+    asio::ip::tcp::socket socket(io_context);
+    asio::ip::tcp::resolver resolver(io_context);
+    asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(dest_proxy_ip, std::to_string(dest_proxy_port));
+    asio::connect(socket, endpoints);
+    for(int i = 0; i < decode_num; i++)
+    {
+      asio::write(socket, asio::buffer(decode_buf_ptrs[i], block_size));
+      delete decode_buf_ptrs[i];
+    }
+    asio::error_code ignore_ec;
+    socket.shutdown(asio::ip::tcp::socket::shutdown_send, ignore_ec);
+    socket.close(ignore_ec);
+    for(int i = 0; i < source_num; i++)
+    {
+      delete source_buf_ptrs[i];
+    }
+    return grpc::Status::OK;
+  }
 
   grpc::Status ProxyImpl::multipleRecovery(
     grpc::ServerContext *context,
     const proxy_proto::MultipleRecoveryRequest *multiple_recovery_request,
     proxy_proto::GetReply *response)
   {
-    std::string code_type = m_sys_config->CodeType;
-    int failed_block_num = multiple_recovery_request->failed_block_num();
-    std::vector<int> failed_block_ids;
-    std::vector<int> failed_block_stripe_ids;
-    std::vector<std::string> replaced_node_ips;
-    std::vector<int> replaced_node_ports;
-    std::vector<int> datanode_num;
-    std::vector<int> cross_rack_nums;
-    std::vector<std::string> failed_block_keys;
-    for(int i = 0; i < failed_block_num; i++)
+  try
     {
-      failed_block_ids.push_back(multiple_recovery_request->failed_block_id(i));
-      failed_block_stripe_ids.push_back(multiple_recovery_request->failed_block_stripe_id(i));
-      replaced_node_ips.push_back(multiple_recovery_request->replaced_node_ip(i));
-      replaced_node_ports.push_back(multiple_recovery_request->replaced_node_port(i));
-      datanode_num.push_back(multiple_recovery_request->datanode_num(i));
-      cross_rack_nums.push_back(multiple_recovery_request->cross_rack_num(i));
-      failed_block_keys.push_back(multiple_recovery_request->failed_block_key(i));
-    }
-
-    std::unordered_map<int, int> stripe_id_to_idx;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      stripe_id_to_idx[failed_block_stripe_ids[i]] = i;
-    }
-
-    std::vector<std::vector<std::string>> block_keys;
-    std::vector<std::vector<int>> block_ids;
-    std::vector<std::vector<std::string>> datanode_ips;
-    std::vector<std::vector<int>> datanode_ports;
-
-    int total_datanode_num = 0;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::vector<std::string> block_keys_temp;
-      std::vector<int> block_ids_temp;
-      std::vector<std::string> datanode_ips_temp;
-      std::vector<int> datanode_ports_temp;
-      for(int j = 0; j < datanode_num[i]; j++)
+      if (IF_DEBUG)
       {
-        block_keys_temp.push_back(multiple_recovery_request->blockkeys(j + total_datanode_num));
-        block_ids_temp.push_back(multiple_recovery_request->blockids(j + total_datanode_num));
-        datanode_ips_temp.push_back(multiple_recovery_request->datanodeip(j + total_datanode_num)); 
-        datanode_ports_temp.push_back(multiple_recovery_request->datanodeport(j + total_datanode_num));
+        std::cout << "[Proxy" << m_self_cluster_id << "][MultipleRecovery] Handle multiple recovery" << std::endl;
       }
-      total_datanode_num += datanode_num[i];
-      block_ids.push_back(block_ids_temp);
-      block_keys.push_back(block_keys_temp);
-      datanode_ips.push_back(datanode_ips_temp);
-      datanode_ports.push_back(datanode_ports_temp);
-    }
-    std::vector<std::vector<char *>> get_bufs;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::vector<char *> get_bufs_temp;
-      for(int j = 0; j < datanode_num[i]; j++)
-      {
-        char *get_buf = static_cast<char*>(std::aligned_alloc(32, m_sys_config->BlockSize));
-        memset(get_buf, 0, m_sys_config->BlockSize);
-        get_bufs_temp.push_back(get_buf);
-      }
-      get_bufs.push_back(get_bufs_temp);
-    }
-    std::vector<char *> res_bufs;
-    std::vector<char *> real_res_bufs;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      char *res_buf = static_cast<char*>(std::aligned_alloc(32, m_sys_config->BlockSize));
-      memset(res_buf, 0, m_sys_config->BlockSize);
-      res_bufs.push_back(res_buf);
-      char *real_res_buf = static_cast<char*>(std::aligned_alloc(32, m_sys_config->BlockSize));
-      memset(real_res_buf, 0, m_sys_config->BlockSize);
-      real_res_bufs.push_back(real_res_buf);
-    }
-    std::vector<std::unique_ptr<bool[]>> status;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::unique_ptr<bool[]> status_temp(new bool[datanode_num[i]]);
-      std::fill_n(status_temp.get(), datanode_num[i], false);
-      status.push_back(std::move(status_temp));
-    }
 
-    std::vector<std::thread> get_threads;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      for(int j = 0; j < datanode_num[i]; j++)
-      {
-        get_threads.push_back(std::thread(&ProxyImpl::get_from_node, this, block_keys[i][j], get_bufs[i][j], m_sys_config->BlockSize, datanode_ips[i][j].c_str(), datanode_ports[i][j], status[i].get(), j));
-      }
-    }
+      int resource_proxy_num = multiple_recovery_request->cross_rack_num();
+      int block_num = multiple_recovery_request->failed_block_keys_size();
+      int block_size = m_sys_config->BlockSize;
+      std::string replacing_node_ip = multiple_recovery_request->replacing_node_ip();
+      int replacing_node_port = multiple_recovery_request->replacing_node_port();
 
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      for(int j = 0; j < datanode_num[i]; j++)
+      // collect failed block keys (order matters: 横向放置顺序)
+      std::vector<std::string> block_keys;
+      for (int i = 0; i < block_num; ++i)
+        block_keys.push_back(multiple_recovery_request->failed_block_keys(i));
+
+      if (resource_proxy_num <= 0 || block_num <= 0)
       {
-        get_threads[i * datanode_num[i] + j].join();
+        std::cerr << "[MultipleRecovery] invalid parameters: resource_proxy_num=" << resource_proxy_num << " block_num=" << block_num << std::endl;
+        return grpc::Status::OK;
       }
-    }
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      bool all_true = std::all_of(status[i].get(), status[i].get() + datanode_num[i], [](bool val)
-                                  { return val == true; });
-      if (!all_true)
+
+      size_t per_proxy_len = static_cast<size_t>(block_num) * static_cast<size_t>(block_size);
+
+      // allocate buffers to receive contiguous data from each resource proxy
+      char **proxy_bufs = new char *[resource_proxy_num];
+      for (int i = 0; i < resource_proxy_num; ++i)
       {
-        std::cout << "[Proxy" << m_self_cluster_id << "][GET]"
-                  << "read from datanodes failed!" << std::endl;
+        proxy_bufs[i] = static_cast<char *>(std::aligned_alloc(32, per_proxy_len));
+        memset(proxy_bufs[i], 0, per_proxy_len);
       }
-      else
+
+      // accept resource_proxy_num connections and read their contiguous payloads
+      for (int i = 0; i < resource_proxy_num; ++i)
       {
-        std::cout << "[Proxy" << m_self_cluster_id << "][GET]"
-                  << "read from datanodes success!" << std::endl;
-        for(int i = 0; i < failed_block_num; i++)
+        try
         {
-          std::vector<int> block_idxs;
-          for (int j = 0; j < datanode_num[i]; j++)
+          asio::ip::tcp::socket socket(this->io_context);
+          this->acceptor.accept(socket);
+          asio::error_code ec;
+          size_t read_bytes = 0;
+          while (read_bytes < per_proxy_len)
           {
-            block_idxs.push_back(block_ids[i][j]);
+            read_bytes += asio::read(socket, asio::buffer(proxy_bufs[i] + read_bytes, per_proxy_len - read_bytes), ec);
+            if (ec && ec != asio::error::eof)
+            {
+              std::cerr << "[MultipleRecovery] read error from proxy #" << i << " : " << ec.message() << std::endl;
+              break;
+            }
+            if (ec == asio::error::eof) break;
           }
-          std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs[i]);
-          if(code_type == "UniLRC")
-          {
-            decode_unilrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize);
-          }
-          else if(code_type == "AzureLRC")
-          {
-            decode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else if(code_type == "OptimalLRC")
-          {
-            decode_optimal_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else if(code_type == "UniformLRC")
-          {
-            decode_uniform_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else
-          {
-            std::cout << "[Proxy" << m_self_cluster_id << "][Degrade read] code type error!" << std::endl;
-            exit(1);
-          }
+          asio::error_code ignore_ec;
+          socket.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
+          socket.close(ignore_ec);
+          if (IF_DEBUG)
+            std::cout << "[MultipleRecovery] received " << read_bytes << " bytes from proxy #" << i << std::endl;
+        }
+        catch (const std::exception &e)
+        {
+          std::cerr << "[MultipleRecovery] exception while receiving from proxy #" << i << " : " << e.what() << std::endl;
         }
       }
-    }
-    std::cout << "Partial Decode Done" << std::endl;
 
-    /*std::vector<std::thread> get_and_decode_threads;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      get_and_decode_threads.push_back(std::thread([&](){
-        for(int j = 0; j < datanode_num[i]; j++)
-        {
-          get_from_node(block_keys[i][j], get_bufs[i][j], m_sys_config->BlockSize, datanode_ips[i][j].c_str(), datanode_ports[i][j], status[i].get(), j);
-        }
-        bool all_true = std::all_of(status[i].get(), status[i].get() + datanode_num[i], [](bool val)
-                                  { return val == true; });
-        if (!all_true)
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][GET]"
-                    << "read from datanodes failed!" << std::endl;
-        }
-        else
-        {
-          std::cout << "[Proxy" << m_self_cluster_id << "][GET]"
-                    << "read from datanodes success!" << std::endl;
-          std::vector<int> block_idxs;
-          for (int j = 0; j < datanode_num[i]; j++)
-          {
-            block_idxs.push_back(block_ids[i][j]);
-          }
-          std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs[i]);
-          if(code_type == "UniLRC")
-          {
-            decode_unilrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize);
-          }
-          else if(code_type == "AzureLRC")
-          {
-            decode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else if(code_type == "OptimalLRC")
-          {
-            decode_optimal_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else if(code_type == "UniformLRC")
-          {
-            decode_uniform_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, datanode_num[i], &block_idxs, block_ptrs.data(), reinterpret_cast<unsigned char *>(res_bufs[i]), m_sys_config->BlockSize, failed_block_ids[i]);
-          }
-          else
-          {
-            std::cout << "[Proxy" << m_self_cluster_id << "][Degrade read] code type error!" << std::endl;
-            exit(1);
-          }
-        }
-      }));
-    }
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      get_and_decode_threads[i].join();
-    }
-    std::cout << "Partial Decode Done" << std::endl;*/
+      // prepare per-block output buffers and compute XOR across proxies for each block slice
+      char **out_blocks = new char *[block_num];
+      for (int b = 0; b < block_num; ++b)
+      {
+        out_blocks[b] = static_cast<char *>(std::aligned_alloc(32, block_size));
+        // initialize to zero
+        memset(out_blocks[b], 0, block_size);
 
-    std::vector<std::vector<char *>> cross_rack_bufs;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::vector<char *> cross_rack_bufs_temp;
-      cross_rack_bufs.push_back(cross_rack_bufs_temp);
-    }
-    int total_cross_rack_num = 0;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      total_cross_rack_num += cross_rack_nums[i];
-    }
-    std::vector<std::thread> get_from_proxies_threads;
-    for(int i = 0; i < total_cross_rack_num; i++)
-    {
-      get_from_proxies_threads.push_back(std::thread([&]()mutable{
-        asio::ip::tcp::socket socket(this->io_context);
-        this->acceptor.accept(socket);
-        asio::error_code error;
-        int stripe_id;
-        asio::read(socket, asio::buffer(&stripe_id, sizeof(int)), error);
-        char *read_buf = static_cast<char*>(std::aligned_alloc(32, this->m_sys_config->BlockSize));
-        size_t len = asio::read(socket, asio::buffer(read_buf, this->m_sys_config->BlockSize), error);
-        if(len != this->m_sys_config->BlockSize)
+        // XOR all proxy buffers' slice b into out_blocks[b]
+        for (int p = 0; p < resource_proxy_num; ++p)
         {
-          std::cout << "error in read" << std::endl;
+          char *src = proxy_bufs[p] + static_cast<size_t>(b) * block_size;
+          // use 64-bit XOR when possible for speed
+          size_t t = 0;
+          const size_t WORD_SZ = sizeof(uint64_t);
+          for (; t + WORD_SZ <= static_cast<size_t>(block_size); t += WORD_SZ)
+          {
+            uint64_t *dstw = reinterpret_cast<uint64_t *>(out_blocks[b] + t);
+            uint64_t *srcw = reinterpret_cast<uint64_t *>(src + t);
+            *dstw ^= *srcw;
+          }
+          // tail bytes
+          for (; t < static_cast<size_t>(block_size); ++t)
+            out_blocks[b][t] ^= src[t];
         }
-        asio::error_code ignore_ec;
-        socket.shutdown(asio::ip::tcp::socket::shutdown_receive, ignore_ec);
-        socket.close(ignore_ec);
-        int idx = stripe_id_to_idx[stripe_id];
-        cross_rack_bufs[idx].push_back(read_buf);
-      }));
-    }
-    for(int i = 0; i < total_cross_rack_num; i++)
-    {
-      get_from_proxies_threads[i].join();
-    }
-    std::cout << "Cross Rack Read Done" << std::endl;
-    std::vector<std::vector<char *>> buf_ptrs;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::vector<char *> buf_ptrs_temp;
-      for(int j = 0; j < cross_rack_bufs[i].size(); j++)
-      {
-        buf_ptrs_temp.push_back(cross_rack_bufs[i][j]);
       }
-      buf_ptrs_temp.push_back(res_bufs[i]);
-      buf_ptrs_temp.push_back(real_res_bufs[i]);
-      buf_ptrs.push_back(buf_ptrs_temp);
-    }
-    std::vector<std::thread> xor_threads;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      if(cross_rack_nums[i])
+
+      // send each recovered block to the replacing datanode
+      for (int b = 0; b < block_num; ++b)
       {
-        xor_threads.push_back(std::thread(&xor_avx, cross_rack_bufs[i].size() + 2, m_sys_config->BlockSize, (void**)buf_ptrs[i].data()));
+        try
+        {
+          // Use RecoveryToDatanode to notify datanode and push block content.
+          // block id: here we don't have explicit id mapping in the request, use index b.
+          // If your system needs specific block ids, adapt to include them in the request.
+          RecoveryToDatanode(block_keys[b].c_str(), b, out_blocks[b], replacing_node_ip.c_str(), replacing_node_port);
+          if (IF_DEBUG)
+            std::cout << "[MultipleRecovery] sent recovered block " << block_keys[b] << " (index " << b << ") to " << replacing_node_ip << ":" << replacing_node_port << std::endl;
+        }
+        catch (const std::exception &e)
+        {
+          std::cerr << "[MultipleRecovery] exception while sending block " << b << " : " << e.what() << std::endl;
+        }
       }
-    }
-    for(auto &t : xor_threads)
-    {
-      t.join();
-    }
-    std::cout << "XOR Done" << std::endl;
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      std::string replaced_node_ip = replaced_node_ips[i];
-      int replaced_node_port = replaced_node_ports[i];
-      std::cout << "[Proxy" << m_self_cluster_id << "][Recovery] send to the replaced node" << replaced_node_ip << ":" << replaced_node_port << std::endl;
-      // send to the replaced node
-      if(!cross_rack_nums[i])
+
+      // free temp buffers
+      for (int i = 0; i < resource_proxy_num; ++i)
       {
-        RecoveryToDatanode(failed_block_keys[i].c_str(), failed_block_ids[i], real_res_bufs[i], replaced_node_ip.c_str(), replaced_node_port);
+        delete proxy_bufs[i];
       }
-      else
+      delete[] proxy_bufs;
+
+      for (int b = 0; b < block_num; ++b)
       {
-        RecoveryToDatanode(failed_block_keys[i].c_str(), failed_block_ids[i], res_bufs[i], replaced_node_ip.c_str(), replaced_node_port);
+        delete out_blocks[b];
       }
-      //RecoveryToDatanode(failed_block_keys[i].c_str(), failed_block_ids[i], real_res_bufs[i], replaced_node_ip.c_str(), replaced_node_port);
+      delete[] out_blocks;
     }
-    for(int i = 0; i < failed_block_num; i++)
+    catch (const std::exception &e)
     {
-      delete res_bufs[i];
-      delete real_res_bufs[i];
-      for(int j = 0; j < datanode_num[i]; j++)
-      {
-        delete get_bufs[i][j];
-      }
+      std::cerr << "[MultipleRecovery] top-level exception: " << e.what() << std::endl;
     }
-    for(int i = 0; i < failed_block_num; i++)
-    {
-      for(int j = 0; j < cross_rack_bufs[i].size(); j++)
-      {
-        delete cross_rack_bufs[i][j];
-      }
-    }
+
     return grpc::Status::OK;
   }
   // delete

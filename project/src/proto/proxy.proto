@@ -31,6 +31,7 @@ service proxyService {
   rpc degradedReadBreakdown(DegradedReadRequest) returns (DegradedReadReply);
   rpc degradedRead2ClientBreakdown(RecoveryRequest) returns (DegradedReadReply);
   rpc degradedReadWithBlockStripeID(DegradedReadRequest) returns (GetReply);
+  rpc partialDecoding(PartialDecodingRequest) returns (DegradedReadReply);
   // recovery
   rpc recovery(RecoveryRequest) returns (RecoveryReply);
   rpc recoveryBreakdown(RecoveryRequest) returns (RecoveryReply);
@@ -165,6 +166,17 @@ message DegradedReadRequest{
   repeated int32 blockids = 9;
 }
 
+message PartialDecodingRequest{
+  string dest_ip = 1;
+  int32 dest_port = 2;
+  repeated int32 source_block_ids = 3;
+  repeated string source_block_keys = 4;
+  repeated string source_datanode_ips = 5;
+  repeated int32 source_datanode_ports = 6;
+  int32 decode_num = 7;
+  repeated int32 decode_factors = 8;
+}
+
 message DegradedReadReply {
   double disk_io_start_time = 1;
   double disk_io_end_time = 2;
@@ -197,18 +209,11 @@ message RecoveryRequest{
 }
 
 message MultipleRecoveryRequest{
-  repeated string replaced_node_ip = 1;
-  repeated int32 replaced_node_port = 2;
-  repeated int32 failed_block_id = 3;
-  repeated string failed_block_key = 4;
-  repeated int32 failed_block_stripe_id = 5;
-  repeated int32 cross_rack_num = 6;
-  repeated string datanodeip = 7;
-  repeated int32 datanodeport = 8;
-  repeated string blockkeys = 9;
-  repeated int32 blockids = 10;
-  repeated int32 datanode_num = 11;
-  int32 failed_block_num = 12;
+  string replacing_node_ip = 1;
+  int32 replacing_node_port = 2;
+  repeated int32 failed_block_ids = 3;
+  repeated string failed_block_keys = 4;
+  int32 cross_rack_num = 5;
 }
 
 message RecoveryReply {

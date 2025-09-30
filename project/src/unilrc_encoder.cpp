@@ -609,6 +609,17 @@ ECProject::ec_encode_data_base(int len, int srcs, int dests, unsigned char *v, u
 }
 
 void
+ECProject::encode_data(int len, int k, int rows, unsigned char *matrix, unsigned char **data,
+                    unsigned char **coding)
+{
+        unsigned char *g_tbls = new unsigned char[k * rows * 32];
+
+        ec_init_tables(k, rows, matrix, g_tbls);
+        ec_encode_data_avx2(len, k, rows, g_tbls, data, coding);
+        delete[] g_tbls;
+}
+
+void
 ECProject::ec_init_tables(int k, int rows, unsigned char *a, unsigned char *g_tbls)
 {
         int i, j;
@@ -739,7 +750,7 @@ ECProject::gf_mul_vect_matrix(unsigned char* vect, unsigned char* matrix, unsign
 }
 
 bool
-ECProject::get_mul_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors)
+ECProject::get_multi_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors)
 {
     int m = k + r;
     int nrows = k + r + z;

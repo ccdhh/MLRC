@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     }
     std::vector <std::vector <int>> decode_factors;
     std::vector <int> decode_blocks;
-    bool recoverable = ECProject::get_mul_decode_plan(k, r, z, code_type, failed_blocks, decode_blocks, decode_factors);
+    bool recoverable = ECProject::get_multi_decode_plan(k, r, z, code_type, failed_blocks, decode_blocks, decode_factors);
     std::cout << "Recoverable: " << recoverable << std::endl;
     std::cout << "k: " << k << ", r: " << r << ", z: " << z << ", n: " << n << ", block size: " << block_size << "MB, code type: " << code_type << std::endl;
     std::cout << "Failed blocks: ";

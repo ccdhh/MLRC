@@ -110,6 +110,10 @@ namespace ECProject
       grpc::ServerContext *context,
       const coordinator_proto::NodeIdFromClient *request,
       coordinator_proto::RepBlockNum* response) override;
+    grpc::Status multiBlockRecovery(
+      grpc::ServerContext *context,
+      const coordinator_proto::StripeIdAndBlockIDsFromClient *request,
+      coordinator_proto::RecoveryReply *replyClient) override;
     // delete
     grpc::Status delByKey(
         grpc::ServerContext *context,
@@ -157,7 +161,6 @@ namespace ECProject
       std::vector<double> &network_start_time, std::vector<double> &network_end_time, double &cross_rack_network_time, double &cross_rack_xor_time,
       std::vector<double> &grpc_notify_time, std::vector<double> &grpc_start_time, std::vector<double> &data_node_grpc_notify_time, std::vector<double> &data_node_grpc_start_time,
       double &dest_data_node_network_time, double &dest_data_node_disk_io_time);
-    bool recovery_full_node(std::vector<int> stripe_ids, std::vector<int> block_ids);
     bool degraded_read_one_block_breakdown(int stripe_id, int failed_block_id, std::string client_ip, int client_port, 
       std::vector<double> &disk_io_start_time, std::vector<double> &disk_io_end_time, std::vector<double> &decode_start_time, std::vector<double> &decode_end_time,
       std::vector<double> &network_start_time, std::vector<double> &network_end_time, double &cross_rack_network_time, double &cross_rack_xor_time,

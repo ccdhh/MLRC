@@ -74,6 +74,10 @@ namespace ECProject
         grpc::ServerContext *context,
         const proxy_proto::DegradedReadRequest *degraded_read_request,
         proxy_proto::GetReply *response) override;
+    grpc::Status partialDecoding(
+        grpc::ServerContext *context,
+        const proxy_proto::PartialDecodingRequest *partial_decoding_request,
+        proxy_proto::DegradedReadReply *response) override;
     // recovery
     grpc::Status recovery(
         grpc::ServerContext *context,

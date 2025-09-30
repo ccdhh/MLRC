@@ -1314,4 +1314,24 @@ namespace ECProject
     }
     return true;
   }
+
+  bool Client::multi_block_recovery(int stripe_id, std::vector<int> block_ids)
+  {
+    grpc::ClientContext context;
+    coordinator_proto::StripeIdAndBlockIDsFromClient request;
+    request.set_stripe_id(stripe_id);
+    for(int i = 0; i < block_ids.size(); i++)
+    {
+      request.add_block_ids(block_ids[i]);
+    }
+
+    coordinator_proto::RecoveryReply reply;
+    grpc::Status status = m_coordinator_ptr->multiBlockRecovery(&context, request, &reply);
+    if (!status.ok())
+    {
+      std::cout << "[Client] multi block recovery failed!" << std::endl;
+      return false;
+    }
+    return true;
+  }
 } // namespace ECProject

@@ -2405,135 +2405,6 @@ namespace ECProject
     }
   }
 
-  bool CoordinatorImpl::recovery_full_node(std::vector<int> stripe_ids, std::vector<int> block_ids)
-  {
-    std::string code_type = m_sys_config->CodeType;
-    std::vector<Stripe> t_stripes;
-    for(int i = 0; i < stripe_ids.size(); i++){
-      t_stripes.push_back(m_stripe_table[stripe_ids[i]]);
-    }
-    std::vector<int> dest_group_id;
-    for(int i = 0; i < t_stripes.size(); i++){
-      dest_group_id.push_back(t_stripes[i].blocks[block_ids[i]]->map2group);
-    }
-    int dest_cluster_id = get_cluster_id_by_group_id(t_stripes[0], dest_group_id[0]); // one node's blocks are in the same cluster
-    std::string dest_proxy_ip = m_cluster_table[dest_cluster_id].proxy_ip;
-    int dest_proxy_port = m_cluster_table[dest_cluster_id].proxy_port;
-
-    std::vector<std::vector<int>> recovery_group_ids;
-    std::vector<int> cross_rack_nums;
-    for(int i = 0; i < t_stripes.size(); i++){
-      recovery_group_ids.push_back(get_recovery_group_ids(m_sys_config->CodeType, m_sys_config->k, m_sys_config->r, m_sys_config->z, block_ids[i]));
-      cross_rack_nums.push_back(recovery_group_ids[i].size() - 1);
-    }
-    std::vector<std::vector<std::string>> chosen_proxies;
-    for(int i = 0; i < recovery_group_ids.size(); i++){
-      std::vector<std::string> t_chosen_proxies;
-      for(int j = 0; j < recovery_group_ids[i].size(); j++){
-        if(get_cluster_id_by_group_id(t_stripes[i], recovery_group_ids[i][j]) == dest_cluster_id){
-          continue;
-        }
-        t_chosen_proxies.push_back(m_cluster_table[get_cluster_id_by_group_id(t_stripes[i], recovery_group_ids[i][j])].proxy_ip + ":" + std::to_string(m_cluster_table[get_cluster_id_by_group_id(t_stripes[i], recovery_group_ids[i][j])].proxy_port));
-      }
-      chosen_proxies.push_back(t_chosen_proxies);
-    }
-    std::vector<std::thread> threads;
-    for(int i = 0; i < chosen_proxies.size(); i++){
-      if(chosen_proxies[i].size() == 0){
-        continue;
-      }
-      for(int j = 0; j < chosen_proxies[i].size(); j++){
-        threads.push_back(std::thread([&](){
-          grpc::ClientContext degraded_read_context;
-          proxy_proto::DegradedReadRequest degraded_read_request;
-          proxy_proto::GetReply degraded_read_reply;
-          degraded_read_request.set_clientip(dest_proxy_ip);
-          degraded_read_request.set_clientport(dest_proxy_port + ECProject::PROXY_PORT_SHIFT);
-          degraded_read_request.set_failed_block_id(block_ids[i]);
-          degraded_read_request.set_failed_block_stripe_id(stripe_ids[i]);
-          degraded_read_request.set_failed_block_key(t_stripes[i].blocks[block_ids[i]]->block_key);
-          std::vector<int> blockids = t_stripes[i].group_to_blocks[recovery_group_ids[i][j]];
-          for (int k = 0; k < int(blockids.size()); k++)
-          {
-            if(m_sys_config->CodeType == "AzureLRC" && degraded_read_request.blockids_size() == (m_sys_config->k / m_sys_config->z))
-              break;
-
-            if ((m_sys_config->CodeType == "AzureLRC" && blockids[k] >= m_sys_config->k + m_sys_config->r) || blockids[k] == block_ids[i])
-              continue;
-
-            Block *t_block = t_stripes[i].blocks[blockids[k]];
-            degraded_read_request.add_datanodeip(m_node_table[t_block->map2node].node_ip);
-            degraded_read_request.add_datanodeport(m_node_table[t_block->map2node].node_port);
-            degraded_read_request.add_blockkeys(t_block->block_key);
-            degraded_read_request.add_blockids(t_block->block_id);
-          }
-          std::cout << "[Coordinator] start partial degraded read of " << block_ids[i] << std::endl;
-          grpc::Status status = m_proxy_ptrs[chosen_proxies[i][j]]->degradedReadWithBlockStripeID(&degraded_read_context, degraded_read_request, &degraded_read_reply);
-          if (status.ok())
-          {
-            std::cout << "[Coordinator] partial degraded read of " << block_ids[i] << " success!" << std::endl;
-          }
-          else
-          {
-            std::cout << "[Coordinator] partial degraded read of " << block_ids[i] << " failed!" << std::endl;
-          }
-        }));
-      }
-    }
-
-    std::vector<int> selected_node_ids;
-    for(int i = 0; i < t_stripes.size(); i++){
-      selected_node_ids.push_back(randomly_select_a_node(dest_cluster_id, t_stripes[i].stripe_id));
-    }
-
-    threads.push_back(std::thread([&](){
-      grpc::ClientContext recovery_context;
-      proxy_proto::MultipleRecoveryRequest multiple_recovery_request;
-      proxy_proto::GetReply recovery_reply;
-      multiple_recovery_request.set_failed_block_num(block_ids.size());
-      for(int i = 0; i < block_ids.size(); i++){
-        multiple_recovery_request.add_failed_block_id(block_ids[i]);
-        multiple_recovery_request.add_failed_block_stripe_id(stripe_ids[i]);
-        multiple_recovery_request.add_failed_block_key(t_stripes[i].blocks[block_ids[i]]->block_key);
-        multiple_recovery_request.add_replaced_node_ip(m_node_table[selected_node_ids[i]].node_ip);
-        multiple_recovery_request.add_replaced_node_port(m_node_table[selected_node_ids[i]].node_port);
-        multiple_recovery_request.add_cross_rack_num(cross_rack_nums[i]);
-        std::vector<int> blockids = t_stripes[i].group_to_blocks[dest_group_id[i]];
-        int datanode_num = 0;
-        for (int j = 0; j < int(blockids.size()); j++)
-        {
-          if(m_sys_config->CodeType == "AzureLRC" && multiple_recovery_request.blockids_size() == (m_sys_config->k / m_sys_config->z))
-            break;
-
-          if (blockids[j] == block_ids[i])
-            continue;
-
-          Block *t_block = t_stripes[i].blocks[blockids[j]];
-          multiple_recovery_request.add_datanodeip(this->m_node_table[t_block->map2node].node_ip);
-          multiple_recovery_request.add_datanodeport(this->m_node_table[t_block->map2node].node_port);
-          multiple_recovery_request.add_blockkeys(t_block->block_key);
-          multiple_recovery_request.add_blockids(t_block->block_id);
-          datanode_num++;
-        }
-        multiple_recovery_request.add_datanode_num(datanode_num);
-      }
-
-      grpc::Status status = this->m_proxy_ptrs[dest_proxy_ip + ":" + std::to_string(dest_proxy_port)]->multipleRecovery(&recovery_context, multiple_recovery_request, &recovery_reply);
-      if (status.ok())
-      {
-        std::cout << "[Coordinator] recovery of " << block_ids[0] << " success!" << std::endl;
-      }
-      else
-      {
-        std::cout << "[Coordinator] recovery of " << block_ids[0] << " failed!" << std::endl;
-      }
-    }));
-    for(int i = 0; i < threads.size(); i++){
-      threads[i].join();
-    }
-    return true;
-  };
-
   grpc::Status CoordinatorImpl::fullNodeRecovery(
     grpc::ServerContext *context,
     const coordinator_proto::NodeIdFromClient *request,
@@ -2590,6 +2461,61 @@ namespace ECProject
     }*/
     return grpc::Status::OK;
   } 
+
+  grpc::Status CoordinatorImpl::multiBlockRecovery(
+    grpc::ServerContext *context,
+    const coordinator_proto::StripeIdAndBlockIDsFromClient *request,
+    coordinator_proto::RecoveryReply *replyClient)
+  {
+    int stripe_id = request->stripe_id();
+    int block_num = request->block_ids_size();
+    std::vector<int> block_ids;
+    for(int i = 0; i < block_num; i++){
+      block_ids.push_back(request->block_ids(i));
+    }
+    std::vector<int> node_ids;
+    for(int i = 0; i < block_ids.size(); i++){
+      node_ids.push_back(m_stripe_table[stripe_id].blocks[block_ids[i]]->map2node);
+    }
+    int chosen_cluster_id = randomly_select_a_cluster(stripe_id);
+    int chosen_node_id = randomly_select_a_node(chosen_cluster_id, stripe_id);
+    std::vector<int> decode_block_ids;
+    std::vector<std::vector<int>> decode_factors;
+    bool ifGetDecodePlanSuccess = ECProject::get_multi_decode_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType, block_ids, decode_block_ids, decode_factors);
+    if(!ifGetDecodePlanSuccess){
+      std::cout << "[Coordinator] get multi decode plan failed!" << std::endl;
+      return grpc::Status(grpc::StatusCode::INTERNAL, "Get multi decode plan failed!");
+    }
+    std::cout << "[Coordinator] get multi decode plan success!" << std::endl;
+    // TODO: notify source proxies and dest proxy, including partial decoding...
+    std::vector<int> source_proxies;
+    std::vector<std::vector<int>> source_datanodes;
+    std::vector<std::vector<int>> decode_blocks_split_for_proxies;
+    std::vector<std::vector<int>> decode_factors_split_for_proxies;
+    for(int i = 0; i < decode_block_ids.size(); i++){
+      int source_proxy = m_stripe_table[stripe_id].blocks[decode_block_ids[i]]->map2cluster;
+      auto it = std::find(source_proxies.begin(), source_proxies.end(), source_proxy);
+      if(it == source_proxies.end()){
+        source_proxies.push_back(source_proxy);
+        std::vector<int> t_source_datanodes;
+        t_source_datanodes.push_back(m_stripe_table[stripe_id].blocks[decode_block_ids[i]]->map2node);
+        source_datanodes.push_back(t_source_datanodes);
+        std::vector<int> t_decode_blocks;
+        t_decode_blocks.push_back(decode_block_ids[i]);
+        decode_blocks_split_for_proxies.push_back(t_decode_blocks);
+        std::vector<int> t_decode_factors;
+        t_decode_factors.push_back(decode_factors[i][0]);
+        decode_factors_split_for_proxies.push_back(t_decode_factors);
+      }
+      else{
+        int index = std::distance(source_proxies.begin(), it);
+        source_datanodes[index].push_back(m_stripe_table[stripe_id].blocks[decode_block_ids[i]]->map2node);
+        decode_blocks_split_for_proxies[index].push_back(decode_block_ids[i]);
+        decode_factors_split_for_proxies[index].push_back(decode_factors[i][0]);
+      }
+    }
+
+  }
 
   grpc::Status CoordinatorImpl::delByKey(
       grpc::ServerContext *context,

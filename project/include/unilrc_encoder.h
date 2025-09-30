@@ -109,6 +109,9 @@ namespace ECProject
     ec_init_tables(int k, int rows, unsigned char *a, unsigned char *g_tbls);
 
     void
+    encode_data(int len, int k, int rows, unsigned char *matrix, unsigned char **data, unsigned char **coding);
+
+    void
     gf_vect_mul_init(unsigned char c, unsigned char *tbl);
 
     unsigned char
@@ -122,7 +125,7 @@ namespace ECProject
 
     int xor_avx(int vects, int len, void **array);
 
-    bool get_mul_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors);
+    bool get_multi_decode_plan(int k, int r, int z, std::string code_type, const std::vector<int> failed_block_indexes, std::vector<int> &decode_block_indexes, std::vector<std::vector<int>> &decode_factors);
 }
 
 #endif
