@@ -50,46 +50,10 @@ int main(int argc, char **argv)
     }
     double block_size = static_cast<double> (parameters[3]) / 1024 / 1024; //MB
     int n = k + r + z;
-    std::vector <int> failed_blocks;
-    std::cout << "failed blocks (space separated, end with -1): ";
-    int fb;
-    while(std::cin >> fb){
-        if(fb == -1) break;
-        if(fb < 0 || fb >= n){
-            std::cout << "Invalid block id: " << fb << std::endl;
-            return -1;
-        }
-        failed_blocks.push_back(fb);
-    }
-    if(failed_blocks.size() == 0){
-        std::cout << "No failed blocks provided, exiting..." << std::endl;
-        return 0;
-    }
-    std::vector <std::vector <int>> decode_factors;
-    std::vector <int> decode_blocks;
-    bool recoverable = ECProject::get_multi_decode_plan(k, r, z, code_type, failed_blocks, decode_blocks, decode_factors);
-    std::cout << "Recoverable: " << recoverable << std::endl;
-    std::cout << "k: " << k << ", r: " << r << ", z: " << z << ", n: " << n << ", block size: " << block_size << "MB, code type: " << code_type << std::endl;
-    std::cout << "Failed blocks: ";
-    for(int fb : failed_blocks){
-        std::cout << fb << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "Selected blocks for recovery: ";
-    for(int db : decode_blocks){
-        std::cout << db << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "Decode factors: " << std::endl;
-    for(auto &df : decode_factors){
-        for(int f : df){
-            std::cout << f << " ";
-        }
-        std::cout << std::endl;
-    }
 
-    /*
-    size_t total_write_size = 40000; //MB
+
+    
+    size_t total_write_size = 4000; //MB
     int stripe_num = total_write_size / (block_size * n);
     std::cout << "Starting set stripe operation" << std::endl;
     std::chrono::high_resolution_clock::time_point set_start = std::chrono::high_resolution_clock::now();
@@ -101,6 +65,7 @@ int main(int argc, char **argv)
     std::cout << "Conducting experiments, please wait..." << std::endl;
     std::chrono::duration<double> set_time = std::chrono::duration_cast<std::chrono::duration<double>>(set_end - set_start);
     std::cout << "write throughput: " << (static_cast<double> (total_write_size) / set_time.count() / 1024) << "MB/s" << std::endl;
+    
     std::string output_file_name = "test_"  + code_type + + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
     std::ofstream output_file(output_file_name);
     if (!output_file.is_open())
@@ -113,7 +78,7 @@ int main(int argc, char **argv)
 
     std::uniform_int_distribution<int> dist_500(0, k*stripe_num - 500);
     std::uniform_real_distribution<double> dist_double(0.0, 1.0);
-    */
+    
     /*std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ibm_test_trace.csv";
     std::fstream trace_file(trace_file_path);
     std::string trace_line;
@@ -165,7 +130,7 @@ int main(int argc, char **argv)
         std::cout << operation << " operation time: " << time_span.count() << " seconds" << std::endl;
     }*/
 
-    /*
+    
     //for read test
     std::cout << "Normal read test start" << std::endl;
     std::vector<std::chrono::duration<double>> read_time_spans;
@@ -195,6 +160,7 @@ int main(int argc, char **argv)
     std::cout << "Min speed: " << static_cast<size_t>(block_size) * k / read_max_time_span.count() << "MB/s" << std::endl;
     std::cout << "Normal read test end" << std::endl;
     std::cout << std::endl;
+    
     //for degraded read test
     std::vector<std::chrono::duration<double>> degraded_read_time_spans;
     std::cout << "Degraded read test start" << std::endl;
@@ -225,7 +191,7 @@ int main(int argc, char **argv)
     std::cout << "Min speed: " << static_cast<size_t>(block_size)  / degraded_read_max_time_span.count() << "MB/s" << std::endl;
     std::cout << "Degraded read test end" << std::endl;
     std::cout << std::endl;
-    */
+    
     //for single block recovery
     /*
     std::cout << "Single block recovery test start" << std::endl;

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-HOSTS_FILE="datanodes"
+HOSTS_FILE="proxy_hosts"
 
 USER="root"
 
-REMOTE_COMMAND="cd /users/qiliang/UniLRC/small_tools && python generator_sh.py"
+REMOTE_COMMAND="cd /users/qiliang/UniLRC/small_tools && python3 generator_sh.py"
 
 PARALLEL=100
 

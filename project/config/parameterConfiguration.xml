@@ -7,17 +7,17 @@
     <!--8388608-->
     <!--67108864-->
     <DatanodeNumPerCluster>30</DatanodeNumPerCluster>
-    <ClusterNum>19</ClusterNum>
+    <ClusterNum>4</ClusterNum>
     <CoordinatorIP>10.10.1.2</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
     <!-- AppendMode: REP_MODE; UNILRC_MODE; CACHED_MODE -->
     <AppendMode>UNILRC_MODE</AppendMode>
     <alpha>2</alpha>
     <!-- LRC: UniLRC; AzureLRC; OptimalLRC; UniformLRC -->
-    <CodeType>OptimalLRC</CodeType>
-    <k>180</k>
-    <r>20</r>
-    <z>10</z>
+    <CodeType>AzureLRC</CodeType>
+    <k>12</k>
+    <r>2</r>
+    <z>2</z>
     <!-- <CodeType>UniformLRC</CodeType>
     <k>30</k>
     <r>6</r>

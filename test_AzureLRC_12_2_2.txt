@@ -1,0 +1,19 @@
+Normal read test start
+Total time: 0.547512
+Average time: 0.109502
+Throughput: 9.13222
+Speed109.587MB/s
+Max speed: 109.889MB/s
+Min speed: 109.314MB/s
+Normal read test end
+
+Degraded read test start
+Average time: 0.0173599
+Max time: 0.0195506
+Min time: 0.0159521
+Throughput: 57.6041
+Speed57.6041MB/s
+Max speed: 62.6877MB/s
+Min speed: 51.1494MB/s
+Degraded read test end
+

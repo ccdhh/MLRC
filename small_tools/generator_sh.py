@@ -4,7 +4,7 @@ import netifaces
 
 current_path = os.getcwd()
 parent_path = os.path.dirname(current_path)
-cluster_number = 19
+cluster_number = 4
 datanode_number_per_cluster = 30
 datanode_port_start = 17600
 cluster_id_start = 0
@@ -14,24 +14,9 @@ proxy_ip_list = [
     ["10.10.1.3",50405],
     ["10.10.1.4",50405],
     ["10.10.1.5",50405],
-    ["10.10.1.6",50405],
-    ["10.10.1.7",50405],
-    ["10.10.1.8",50405],
-    ["10.10.1.9",50405],
-    ["10.10.1.10",50405],
-    ["10.10.1.11",50405],
-    ["10.10.1.12",50405],
-    ["10.10.1.13",50405],
-    ["10.10.1.14",50405],
-    ["10.10.1.15",50405],
-    ["10.10.1.16",50405],
-    ["10.10.1.17",50405],
-    ["10.10.1.18",50405],
-    ["10.10.1.19",50405],
-    ["10.10.1.20",50405],
-    ["10.10.1.21",50405]
+    ["10.10.1.6",50405]
 ]
-coordinator_ip = "0.0.0.0"
+coordinator_ip = "10.10.1.2"
 
 proxy_num = len(proxy_ip_list)
 
@@ -118,19 +103,6 @@ def generater_cluster_information_xml():
     #root.tail = '\n'
     tree = ET.ElementTree(root)
     tree.write(file_name, encoding="utf-8", xml_declaration=True)
-
-def test_chat_gpt():
-    import xml.etree.ElementTree as ET
-    root = ET.Element('clusters')
-    cluster = ET.SubElement(root, 'cluster', {'id': '0', 'proxy': '0.0.0.0:50005'})
-    datanodes = ET.SubElement(cluster, 'datanodes')
-    for i in range(9000, 9020):
-        datanode = ET.SubElement(datanodes, 'datanode', {'uri': '0.0.0.0:{}'.format(i)})
-        datanode.tail = '\n\t\t'
-    datanodes.tail = '\n\t'
-    cluster.tail = '\n'
-    tree = ET.ElementTree(root)
-    tree.write('clusters1.xml', encoding='utf-8', xml_declaration=True)
             
 def cluster_generate_run_proxy_datanode_file(ip, port, i):
     file_name = parent_path + '/run_cluster_sh/' + str(i) +'/cluster_run_proxy_datanode.sh'
