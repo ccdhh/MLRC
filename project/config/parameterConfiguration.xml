@@ -6,8 +6,8 @@
     <!--1048576-->
     <!--8388608-->
     <!--67108864-->
-    <DatanodeNumPerCluster>30</DatanodeNumPerCluster>
-    <ClusterNum>4</ClusterNum>
+    <DatanodeNumPerCluster>6</DatanodeNumPerCluster>
+    <ClusterNum>6</ClusterNum>
     <CoordinatorIP>10.10.1.2</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
     <!-- AppendMode: REP_MODE; UNILRC_MODE; CACHED_MODE -->
@@ -17,7 +17,7 @@
     <CodeType>AzureLRC</CodeType>
     <k>12</k>
     <r>2</r>
-    <z>2</z>
+    <z>0</z>
     <!-- <CodeType>UniformLRC</CodeType>
     <k>30</k>
     <r>6</r>

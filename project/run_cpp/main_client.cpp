@@ -44,6 +44,9 @@ int main(int argc, char **argv)
     else if(parameters[4] == 3){
         code_type = "UniLRC";
     }
+    else if(parameters[4] == 4){
+        code_type = "RS";
+    }
     else{
         std::cout << "Code type error" << std::endl;
         return -1;

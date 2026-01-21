@@ -34,7 +34,7 @@ namespace ECProject
     std::string CoordinatorIP = "0.0.0.0";
     int CoordinatorPort = 55555;
     std::string AppendMode = "UNILRC_MODE";
-    std::string CodeType = "UniLRC";
+    std::string CodeType = "RS";
   };
 }
 

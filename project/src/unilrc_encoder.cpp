@@ -144,6 +144,54 @@ ECProject::gf_invert_matrix(unsigned char *in_mat, unsigned char *out_mat, const
         return 0;
 }
 
+void ECProject::encode_rs(int k,int r,int z,unsigned char **data_ptrs,unsigned char **parity_ptrs,int block_size)
+{
+    for (int i = 0; i < r; i++) {
+        memset(parity_ptrs[i], 0, block_size);
+    }
+
+    int m = k + r; 
+    unsigned char *encode_matrix = new unsigned char[m * k];
+    gf_gen_rs_matrix1(encode_matrix, m, k); 
+
+    unsigned char *g_tbls = new unsigned char[k * r * 32];
+    ec_init_tables(k, r, &encode_matrix[k * k], g_tbls); 
+
+    ec_encode_data_avx2(block_size, k, r, g_tbls, data_ptrs, parity_ptrs);
+
+    delete[] encode_matrix;
+    delete[] g_tbls;
+}
+void ECProject::partial_encode_rs(int k,int r,int z,int data_block_num,unsigned char **data_ptrs,unsigned char **parity_ptrs,int block_size)
+{
+    for (int i = 0; i < r; i++) {
+        memset(parity_ptrs[i], 0, block_size);
+    }
+    int m = k + r; 
+    unsigned char *encode_matrix = new unsigned char[m * k];
+    gf_gen_rs_matrix1(encode_matrix, m, k);
+
+    unsigned char *sub_matrix = new unsigned char[r * data_block_num];
+    for (int i = 0; i < r; i++) {
+        memcpy(sub_matrix + i * data_block_num,       
+               encode_matrix + (k + i) * k,        
+               data_block_num);                     
+    }
+
+    unsigned char *g_tbls = new unsigned char[data_block_num * r * 32];
+    ec_init_tables(data_block_num, r, sub_matrix, g_tbls);
+
+    ec_encode_data_avx2(block_size,
+                        data_block_num,  
+                        r,              
+                        g_tbls,
+                        data_ptrs,
+                        parity_ptrs);
+
+    delete[] encode_matrix;
+    delete[] sub_matrix;
+    delete[] g_tbls;
+}
 
 void ECProject::encode_unilrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size)
 {
