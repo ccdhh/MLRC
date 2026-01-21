@@ -747,7 +747,7 @@ namespace ECProject
     size_t setSizeBytes = keyValueSize->valuesizebytes();
     std::string code_type = m_sys_config->CodeType;
     assert(setSizeBytes == static_cast<size_t>(m_sys_config->BlockSize) * static_cast<size_t>(m_sys_config->k) && "set size is not equal to the block stripe size!");
-    assert((code_type == "UniLRC" || code_type == "AzureLRC" || code_type == "OptimalLRC" || code_type == "UniformLRC") && "Error: code type must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC!");
+    assert((code_type == "UniLRC" || code_type == "AzureLRC" || code_type == "OptimalLRC" || code_type == "UniformLRC"|| code_type=="RS") && "Error: code type must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC!");
 
     Stripe t_stripe;
     t_stripe.stripe_id = m_cur_stripe_id++;
@@ -767,6 +767,10 @@ namespace ECProject
     else if (code_type == "UniformLRC")
     {
       initialize_uniform_lrc_stripe_placement(&t_stripe);
+    }
+    else if(code_type=="RS")
+    {
+      nitialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);;
     }
 
     print_stripe_data_placement(t_stripe);
