@@ -614,7 +614,7 @@ namespace ECProject
     coordinator_proto::ReplyProxyIPsPorts reply;
     request.set_key(m_clientID);
     request.set_valuesizebytes(static_cast<size_t>(m_sys_config->BlockSize) *static_cast<size_t>(m_sys_config->k));
-    request.set_append_mode("UNILRC_MODE");
+    request.set_append_mode("EQUIOX_MODE");
     grpc::Status status = m_coordinator_ptr->uploadSetValue(&get_proxy_ip_port, request, &reply);
 
     if (!status.ok())

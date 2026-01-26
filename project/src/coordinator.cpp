@@ -5,7 +5,11 @@
 #include "lrc.h"
 #include <sys/time.h>
 #include <chrono>
-
+#include<vector>
+#include<fstream>
+#include<sstream>
+#include<string>
+#include<cmath>
 template <typename T>
 inline T ceil(T const &A, T const &B)
 {
@@ -259,7 +263,7 @@ namespace ECProject
     {
       blocks_info[i].block_size = m_sys_config->BlockSize;
       blocks_info[i].map2stripe = stripe->stripe_id;
-      blocks_info[i].map2key = stripe->object_keys[0];
+      blocks_info[i].map2key = stripe->object_keys[0];  
       if (i < stripe->k)
       {
         std::string tmp = "_D";
@@ -301,6 +305,96 @@ namespace ECProject
     stripe->num_groups = stripe->group_to_blocks.size();
   }
 
+  void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe)
+{
+    std::string code_type = m_sys_config->CodeType;
+    std::vector<std::vector<int>> OA_1_Information = Get_OA_Information("OA_1.txt");
+    std::vector<std::vector<int>> OA_2_Information = Get_OA_Information("OA_2.txt");
+    Block *blocks_info = new Block[stripe->n];
+    assert(stripe->object_keys.size() == 1);
+    int OA_row = (static_cast<int>(floor(stripe->stripe_id))) % 240 + 1;
+    int cluster_num = ceil(static_cast<double>(stripe->n) / static_cast<double>(stripe->r));
+    int b = (stripe->n - 1) % stripe->r + 1;
+    std::vector<int> use_OA1_list;
+    int initial_list = ((stripe->stripe_id) % 4) * (cluster_num - 1) + 2;
+    for(int i = 0; i < cluster_num - 1; i++)
+        use_OA1_list.push_back(OA_1_Information[OA_row - 1][initial_list + i - 1]);
+    int temp_num = 0;
+    int temp_num1 = 0;
+    for(int i = 0; i < stripe->n; i++)
+    {
+        blocks_info[i].block_size = m_sys_config->BlockSize;
+        blocks_info[i].map2stripe = stripe->stripe_id;
+        blocks_info[i].map2key = stripe->object_keys[0];
+        if(i < stripe->k)
+        {
+            std::string tmp = "_D";
+            if(i < 10)
+                tmp = "_D0";
+            blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
+            blocks_info[i].block_id = i;
+            blocks_info[i].block_type = 'D';
+            blocks_info[i].map2group = [stripe,b,cluster_num,i]() -> int
+            {
+                int small_group_num = stripe->r - b;
+                int small_group_total = small_group_num * (stripe->r - 1);
+                if(i < small_group_total)
+                    return i / (stripe->r - 1);
+                else
+                    return small_group_num + (i - small_group_total) / stripe->r;
+            }();
+            blocks_info[i].map2cluster = (((stripe->stripe_id) % 4) * (cluster_num - 1) + 1 + blocks_info[i].map2group) % m_sys_config->ClusterNum;
+        }
+        else if(i >= stripe->k && i < stripe->k + stripe->r)
+        {
+            std::string tmp = "_G";
+            if(i - stripe->k < 10)
+                tmp = "_G0";
+            blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - stripe->k);
+            blocks_info[i].block_id = i;
+            blocks_info[i].block_type = 'G';
+            if(code_type == "UniLRC")
+                blocks_info[i].map2group = int((i - stripe->k) / (stripe->r / stripe->z));
+            else if(code_type == "AzureLRC")
+                blocks_info[i].map2group = int(stripe->z);
+            else if(code_type == "RS")
+            {
+                int idx = i - stripe->k;
+                blocks_info[i].map2group = [stripe,b,cluster_num,idx]() -> int
+                {
+                    int small_group_num = stripe->r - b;
+                    int small_group_total = small_group_num * (stripe->r - 1);
+                    if(idx < small_group_total)
+                        return idx / (stripe->r - 1);
+                    else
+                        return small_group_num + (idx - small_group_total) / stripe->r;
+                }();
+            }
+            blocks_info[i].map2cluster = (use_OA1_list[0] - 1) % m_sys_config->ClusterNum;
+        }
+        int OA2_row = floor(stripe->stripe_id / 4);
+        if(blocks_info[i].map2group < stripe->r - b)
+        {
+            blocks_info[i].map2node = OA_2_Information[OA2_row - 1][temp_num];
+            temp_num = (temp_num + 1) % (stripe->r - 1);
+        }
+        else
+        {
+            blocks_info[i].map2node = OA_2_Information[OA2_row - 1][temp_num1];
+            temp_num1 = (temp_num1 + 1) % stripe->r;
+        }
+        update_stripe_info_in_node(blocks_info[i].map2node, stripe->stripe_id, i);
+        m_cluster_table[blocks_info[i].map2cluster].blocks.push_back(&blocks_info[i]);
+      m_cluster_table[blocks_info[i].map2cluster].stripes.insert(stripe->stripe_id);
+      stripe->blocks.push_back(&blocks_info[i]);
+      stripe->place2clusters.insert(blocks_info[i].map2cluster);
+      add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
+  }
+      stripe->num_groups = stripe->group_to_blocks.size();
+}
+
+
+
   void CoordinatorImpl::initialize_unilrc_and_azurelrc_stripe_placement(Stripe *stripe)
   {
     std::string code_type = m_sys_config->CodeType;
@@ -338,7 +432,7 @@ namespace ECProject
         blocks_info[i].block_type = 'G';
         if (code_type == "UniLRC")
         {
-          blocks_info[i].map2group = int((i - stripe->k) / (stripe->r / stripe->z));
+          blocks_info[i].map2group = int((i - stripe->k) / (stripe->r / stripe->z));//放置方式
         }
         else if (code_type == "AzureLRC")
         {
@@ -770,7 +864,7 @@ namespace ECProject
     }
     else if(code_type=="RS")
     {
-      nitialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);;
+      initialize_equiox_stripe_placement(&t_stripe);
     }
 
     print_stripe_data_placement(t_stripe);
@@ -3572,5 +3666,30 @@ namespace ECProject
       }
     }
     return false;
+  }
+   std::vector<std::vector<int>> CoordinatorImpl::Get_OA_Information(const std::string& filename)
+  {
+    std::vector<std::vector<int>> matrix;
+    std::ifstream infile(filename);
+    if (!infile.is_open())
+    {
+        throw std::runtime_error("Cannot open file: " + filename);
+    }
+
+    std::string line;
+    while (std::getline(infile, line))
+    {
+        std::istringstream iss(line);
+        std::vector<int> row;
+        int value;
+        while (iss >> value)
+        {
+            row.push_back(value);
+        }
+        if (!row.empty())
+            matrix.push_back(row);
+    }
+
+    return matrix;
   }
 } // namespace ECProject

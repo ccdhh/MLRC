@@ -16,7 +16,7 @@ namespace ECProject
   void Config::validateConfig() const
   {
     assert(BlockSize % UnitSize == 0 && "Error: BlockSize must be divisible by UnitSize");
-    assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
+    assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE"||AppendMode=="EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
     assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC"||CodeType=="RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC");
     assert(DatanodeNumPerCluster > 0 && "Error: DatanodeNumPerCluster must be greater than 0");
     assert(ClusterNum > 0 && "Error: ClusterNum must be greater than 0");
@@ -44,11 +44,9 @@ namespace ECProject
     {
        int n = k + r;
 
-    assert(DatanodeNumPerCluster >= 1 &&
-           "Error: DatanodeNumPerCluster must be >= 1 for RS code");
+    assert(DatanodeNumPerCluster >= 1 &&"Error: DatanodeNumPerCluster must be >= 1 for RS code");
 
-    assert(ClusterNum * DatanodeNumPerCluster >= n &&
-           "Error: ClusterNum * DatanodeNumPerCluster must be >= (k + r) for RS code");
+    assert(ClusterNum * DatanodeNumPerCluster >= n &&"Error: ClusterNum * DatanodeNumPerCluster must be >= (k + r) for RS code");
     }
 
   }

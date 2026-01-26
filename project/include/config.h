@@ -33,7 +33,7 @@ namespace ECProject
     int ClusterNum = 0;
     std::string CoordinatorIP = "0.0.0.0";
     int CoordinatorPort = 55555;
-    std::string AppendMode = "UNILRC_MODE";
+    std::string AppendMode = "EQUIOX_MODE";
     std::string CodeType = "RS";
   };
 }

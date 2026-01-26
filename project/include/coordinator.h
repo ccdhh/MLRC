@@ -140,6 +140,7 @@ namespace ECProject
     int count_block_num(char type, int cluster_id, int stripe_id, int group_id);
     bool find_block(char type, int cluster_id, int stripe_id);
 
+    void initialize_equiox_stripe_placement(Stripe *stripe);
     void initialize_unilrc_and_azurelrc_stripe_placement(Stripe *stripe);
     void initialize_optimal_lrc_stripe_placement(Stripe *stripe);
     void initialize_uniform_lrc_stripe_placement(Stripe *stripe);
@@ -183,6 +184,7 @@ namespace ECProject
 
   private:
     std::mutex m_mutex;
+    std::vector<std::vector<int>> Get_OA_Information(const std::string& filename);
     std::condition_variable cv;
     std::map<std::string, std::unique_ptr<proxy_proto::proxyService::Stub>>
         m_proxy_ptrs;
