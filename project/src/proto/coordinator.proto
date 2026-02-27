@@ -39,6 +39,8 @@ service coordinatorService {
   rpc getStripe(KeyAndClientIP) returns (ReplyProxyIPsPorts) {};
 
   rpc getBlocks(BlockIDsAndClientIP) returns (ReplyProxyIPsPorts) {};
+  
+  rpc getBlocksByStripePos(StripePosListAndClient) returns (ReplyProxyIPsPorts) {};
 
   rpc getDegradedReadBlocks(BlockIDsAndClientIP) returns (ReplyProxyIPsPorts) {};
 
@@ -186,4 +188,15 @@ message RecoveryReply {
   double decode_time = 3;
   double disk_write_time = 4;
   double grpc_start_time = 5;
+}
+
+message StripePos {
+  int32 stripe_id = 1;
+  int32 pos = 2;   
+}
+
+message StripePosListAndClient {
+  repeated StripePos items = 1;
+  string clientip = 2;
+  int32 clientport = 3;
 }

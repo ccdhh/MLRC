@@ -697,9 +697,9 @@ namespace ECProject
     grpc::ClientContext get_proxy_ip_port;
     coordinator_proto::RequestProxyIPPort request;
     coordinator_proto::ReplyProxyIPsPorts reply;
-    request.set_key(m_clientID);
-    request.set_valuesizebytes(static_cast<size_t>(m_sys_config->BlockSize) *static_cast<size_t>(block_num));
-    request.set_append_mode("UNILRC_MODE");
+    request.set_key(m_clientID);//获得了client端的id
+    request.set_valuesizebytes(static_cast<size_t>(m_sys_config->BlockSize) *static_cast<size_t>(block_num));//这个是整个放置数据的多少
+    request.set_append_mode("UNILRC_MODE");//这个是放置方式
     grpc::Status status = m_coordinator_ptr->uploadSubsetValue(&get_proxy_ip_port, request, &reply);
 
     if (!status.ok())
@@ -983,8 +983,8 @@ namespace ECProject
     coordinator_proto::BlockIDsAndClientIP request;
     request.set_start_block_id(start_block_id);
     request.set_end_block_id(end_block_id);
-    request.set_clientip(m_clientIPForGet);
-    request.set_clientport(m_clientPortForGet);
+    request.set_clientip(m_clientIPForGet);//这里是一client的端口和ip的信息
+    request.set_clientport(m_clientPortForGet);//这里是端口
 
     coordinator_proto::ReplyProxyIPsPorts reply;
     bool is_get_blocks = false;
@@ -1005,7 +1005,7 @@ namespace ECProject
     int block_size = m_sys_config->BlockSize;
     //char * data_ptr_array = new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)];
     std::shared_ptr<char[]> data_ptr_array(new char[static_cast<size_t>(block_num) * static_cast<size_t>(block_size)]);
-    char * data_ptr_array_raw = data_ptr_array.get();
+    char * data_ptr_array_raw = data_ptr_array.get();//这个是分配了接受任务的缓存区
     std::vector<std::thread> threads;
     for(int i = 0; i < block_num; i++)
     {
@@ -1342,5 +1342,13 @@ namespace ECProject
       return false;
     }
     return true;
+  }
+  void Client::start_merge()
+  {
+
+  }
+  void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list)
+  {
+    this->
   }
 } // namespace ECProject

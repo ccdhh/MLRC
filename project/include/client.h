@@ -63,7 +63,6 @@ namespace ECProject
         delete[] m_cached_buffer;
       }
     }
-
     std::string sayHelloToCoordinatorByGrpc(std::string hello);
     bool append(int append_size);
     bool sub_append(int append_size);
@@ -96,7 +95,8 @@ namespace ECProject
     void cache_latest_parity_slices(std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array, const int parity_slice_size, const int parity_slice_offset);
     std::vector<int> get_parameters();
     bool decode_test(int stripe_id, int failed_block_id, std::string client_ip, int client_port, double &decode_time);
-
+    void start_merge();
+    void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list);
   private:
     std::unique_ptr<coordinator_proto::coordinatorService::Stub> m_coordinator_ptr;
     std::string m_coordinatorIpPort;

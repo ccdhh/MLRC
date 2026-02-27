@@ -68,6 +68,28 @@ int main(int argc, char **argv)
     std::cout << "Conducting experiments, please wait..." << std::endl;
     std::chrono::duration<double> set_time = std::chrono::duration_cast<std::chrono::duration<double>>(set_end - set_start);
     std::cout << "write throughput: " << (static_cast<double> (total_write_size) / set_time.count() / 1024) << "MB/s" << std::endl;
+
+    std::cout<<"start L1 merge?(Y/N)"<<std::endl;
+    char choose;
+    std::cin>>choose;
+    switch choose
+    {
+        case 'Y':
+        {
+            start_merge();
+            break;
+        }
+        case 'N':
+        {
+            break;
+        }
+        default:
+        {
+        }
+
+    }
+    
+    
     
     std::string output_file_name = "test_"  + code_type + + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
     std::ofstream output_file(output_file_name);
@@ -82,7 +104,7 @@ int main(int argc, char **argv)
     std::uniform_int_distribution<int> dist_500(0, k*stripe_num - 500);
     std::uniform_real_distribution<double> dist_double(0.0, 1.0);
     
-    /*std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ibm_test_trace.csv";
+    std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ibm_test_trace.csv";
     std::fstream trace_file(trace_file_path);
     std::string trace_line;
     while(std::getline(trace_file, trace_line)){
@@ -99,6 +121,20 @@ int main(int argc, char **argv)
         else if(operation == "PUT"){
             client.sub_set(operation_size);
         }
+        else if(operation=="MERGE")
+        {
+             // 1) 选择要读的“部分块”（数据块+校验块）
+            auto ids = pick_some_data_and_parity_blocks(...);
+
+             // 2) 读取这些块的数据
+            auto blocks = client.get_blocks_by_ids(ids);   // 需要你在 Client 新增这个接口
+
+             // 3) 合并算法
+            auto merged = merge_algorithm(blocks);
+
+             // 4) 写回（覆盖写 or 写到新块再切元数据）
+            client.put_blocks_by_ids(target_ids, merged);  // 需要你在 Client 新增写接口
+        }
         else{
             std::cerr << "Unknown operation: " << operation << std::endl;
             return -1;
@@ -106,7 +142,7 @@ int main(int argc, char **argv)
         std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
         std::cout << operation << " operation time: " << time_span.count() << " seconds" << std::endl;
-    }*/
+    }
 
     /*std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ycsb_final.txt";
     std::fstream trace_file(trace_file_path);

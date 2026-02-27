@@ -348,8 +348,37 @@ struct RecoveryReplyDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 RecoveryReplyDefaultTypeInternal _RecoveryReply_default_instance_;
+PROTOBUF_CONSTEXPR StripePos::StripePos(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.stripe_id_)*/0
+  , /*decltype(_impl_.pos_)*/0
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct StripePosDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR StripePosDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~StripePosDefaultTypeInternal() {}
+  union {
+    StripePos _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 StripePosDefaultTypeInternal _StripePos_default_instance_;
+PROTOBUF_CONSTEXPR StripePosListAndClient::StripePosListAndClient(
+    ::_pbi::ConstantInitialized): _impl_{
+    /*decltype(_impl_.items_)*/{}
+  , /*decltype(_impl_.clientip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.clientport_)*/0
+  , /*decltype(_impl_._cached_size_)*/{}} {}
+struct StripePosListAndClientDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR StripePosListAndClientDefaultTypeInternal()
+      : _instance(::_pbi::ConstantInitialized{}) {}
+  ~StripePosListAndClientDefaultTypeInternal() {}
+  union {
+    StripePosListAndClient _instance;
+  };
+};
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 StripePosListAndClientDefaultTypeInternal _StripePosListAndClient_default_instance_;
 }  // namespace coordinator_proto
-static ::_pb::Metadata file_level_metadata_coordinator_2eproto[22];
+static ::_pb::Metadata file_level_metadata_coordinator_2eproto[24];
 static constexpr ::_pb::EnumDescriptor const** file_level_enum_descriptors_coordinator_2eproto = nullptr;
 static constexpr ::_pb::ServiceDescriptor const** file_level_service_descriptors_coordinator_2eproto = nullptr;
 
@@ -544,6 +573,23 @@ const uint32_t TableStruct_coordinator_2eproto::offsets[] PROTOBUF_SECTION_VARIA
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.decode_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.disk_write_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.grpc_start_time_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePos, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePos, _impl_.stripe_id_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePos, _impl_.pos_),
+  ~0u,  // no _has_bits_
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePosListAndClient, _internal_metadata_),
+  ~0u,  // no _extensions_
+  ~0u,  // no _oneof_case_
+  ~0u,  // no _weak_field_map_
+  ~0u,  // no _inlined_string_donated_
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePosListAndClient, _impl_.items_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePosListAndClient, _impl_.clientip_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePosListAndClient, _impl_.clientport_),
 };
 static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::coordinator_proto::Parameter)},
@@ -568,6 +614,8 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 162, -1, -1, sizeof(::coordinator_proto::RepBlockNum)},
   { 169, -1, -1, sizeof(::coordinator_proto::DegradedReadReply)},
   { 179, -1, -1, sizeof(::coordinator_proto::RecoveryReply)},
+  { 190, -1, -1, sizeof(::coordinator_proto::StripePos)},
+  { 198, -1, -1, sizeof(::coordinator_proto::StripePosListAndClient)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -593,6 +641,8 @@ static const ::_pb::Message* const file_default_instances[] = {
   &::coordinator_proto::_RepBlockNum_default_instance_._instance,
   &::coordinator_proto::_DegradedReadReply_default_instance_._instance,
   &::coordinator_proto::_RecoveryReply_default_instance_._instance,
+  &::coordinator_proto::_StripePos_default_instance_._instance,
+  &::coordinator_proto::_StripePosListAndClient_default_instance_._instance,
 };
 
 const char descriptor_table_protodef_coordinator_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -638,68 +688,75 @@ const char descriptor_table_protodef_coordinator_2eproto[] PROTOBUF_SECTION_VARI
   "\001\n\rRecoveryReply\022\026\n\016disk_read_time\030\001 \001(\001"
   "\022\024\n\014network_time\030\002 \001(\001\022\023\n\013decode_time\030\003 "
   "\001(\001\022\027\n\017disk_write_time\030\004 \001(\001\022\027\n\017grpc_sta"
-  "rt_time\030\005 \001(\0012\245\021\n\022coordinatorService\022k\n\025"
-  "sayHelloToCoordinator\022\'.coordinator_prot"
-  "o.RequestToCoordinator\032\'.coordinator_pro"
-  "to.ReplyFromCoordinator\"\000\022`\n\ncheckalive\022"
-  "\'.coordinator_proto.RequestToCoordinator"
-  "\032\'.coordinator_proto.ReplyFromCoordinato"
-  "r\"\000\022V\n\014setParameter\022\034.coordinator_proto."
-  "Parameter\032&.coordinator_proto.RepIfSetPa"
-  "raSuccess\"\000\022d\n\024uploadOriginKeyValue\022%.co"
-  "ordinator_proto.RequestProxyIPPort\032#.coo"
-  "rdinator_proto.ReplyProxyIPPort\"\000\022a\n\021rep"
-  "ortCommitAbort\022!.coordinator_proto.Commi"
-  "tAbortKey\032\'.coordinator_proto.ReplyFromC"
-  "oordinator\"\000\022V\n\020checkCommitAbort\022\037.coord"
-  "inator_proto.AskIfSuccess\032\037.coordinator_"
-  "proto.RepIfSuccess\"\000\022`\n\016uploadSetValue\022%"
-  ".coordinator_proto.RequestProxyIPPort\032%."
-  "coordinator_proto.ReplyProxyIPsPorts\"\000\022c"
-  "\n\021uploadSubsetValue\022%.coordinator_proto."
-  "RequestProxyIPPort\032%.coordinator_proto.R"
-  "eplyProxyIPsPorts\"\000\022c\n\021uploadAppendValue"
-  "\022%.coordinator_proto.RequestProxyIPPort\032"
-  "%.coordinator_proto.ReplyProxyIPsPorts\"\000"
-  "\022S\n\010getValue\022!.coordinator_proto.KeyAndC"
-  "lientIP\032\".coordinator_proto.RepIfGetSucc"
-  "ess\"\000\022W\n\tgetStripe\022!.coordinator_proto.K"
-  "eyAndClientIP\032%.coordinator_proto.ReplyP"
-  "roxyIPsPorts\"\000\022\\\n\tgetBlocks\022&.coordinato"
-  "r_proto.BlockIDsAndClientIP\032%.coordinato"
-  "r_proto.ReplyProxyIPsPorts\"\000\022h\n\025getDegra"
-  "dedReadBlocks\022&.coordinator_proto.BlockI"
-  "DsAndClientIP\032%.coordinator_proto.ReplyP"
-  "roxyIPsPorts\"\000\022a\n\024getDegradedReadBlock\022!"
-  ".coordinator_proto.KeyAndClientIP\032$.coor"
-  "dinator_proto.DegradedReadReply\"\000\022j\n\035get"
-  "DegradedReadBlockBreakdown\022!.coordinator"
-  "_proto.KeyAndClientIP\032$.coordinator_prot"
-  "o.DegradedReadReply\"\000\022T\n\013getRecovery\022!.c"
-  "oordinator_proto.KeyAndClientIP\032 .coordi"
-  "nator_proto.RecoveryReply\"\000\022]\n\024getRecove"
-  "ryBreakdown\022!.coordinator_proto.KeyAndCl"
-  "ientIP\032 .coordinator_proto.RecoveryReply"
-  "\"\000\022Y\n\020fullNodeRecovery\022#.coordinator_pro"
-  "to.NodeIdFromClient\032\036.coordinator_proto."
-  "RepBlockNum\"\000\022j\n\022multiBlockRecovery\0220.co"
-  "ordinator_proto.StripeIdAndBlockIDsFromC"
-  "lient\032 .coordinator_proto.RecoveryReply\""
-  "\000\022N\n\010delByKey\022 .coordinator_proto.KeyFro"
-  "mClient\032\036.coordinator_proto.RepIfDeling\""
-  "\000\022V\n\013delByStripe\022%.coordinator_proto.Str"
-  "ipeIdFromClient\032\036.coordinator_proto.RepI"
-  "fDeling\"\000\022Y\n\013listStripes\022\'.coordinator_p"
-  "roto.RequestToCoordinator\032\037.coordinator_"
-  "proto.RepStripeIds\"\000\022W\n\ndecodeTest\022!.coo"
-  "rdinator_proto.KeyAndClientIP\032$.coordina"
-  "tor_proto.DegradedReadReply\"\000b\006proto3"
+  "rt_time\030\005 \001(\001\"+\n\tStripePos\022\021\n\tstripe_id\030"
+  "\001 \001(\005\022\013\n\003pos\030\002 \001(\005\"k\n\026StripePosListAndCl"
+  "ient\022+\n\005items\030\001 \003(\0132\034.coordinator_proto."
+  "StripePos\022\020\n\010clientip\030\002 \001(\t\022\022\n\nclientpor"
+  "t\030\003 \001(\0052\221\022\n\022coordinatorService\022k\n\025sayHel"
+  "loToCoordinator\022\'.coordinator_proto.Requ"
+  "estToCoordinator\032\'.coordinator_proto.Rep"
+  "lyFromCoordinator\"\000\022`\n\ncheckalive\022\'.coor"
+  "dinator_proto.RequestToCoordinator\032\'.coo"
+  "rdinator_proto.ReplyFromCoordinator\"\000\022V\n"
+  "\014setParameter\022\034.coordinator_proto.Parame"
+  "ter\032&.coordinator_proto.RepIfSetParaSucc"
+  "ess\"\000\022d\n\024uploadOriginKeyValue\022%.coordina"
+  "tor_proto.RequestProxyIPPort\032#.coordinat"
+  "or_proto.ReplyProxyIPPort\"\000\022a\n\021reportCom"
+  "mitAbort\022!.coordinator_proto.CommitAbort"
+  "Key\032\'.coordinator_proto.ReplyFromCoordin"
+  "ator\"\000\022V\n\020checkCommitAbort\022\037.coordinator"
+  "_proto.AskIfSuccess\032\037.coordinator_proto."
+  "RepIfSuccess\"\000\022`\n\016uploadSetValue\022%.coord"
+  "inator_proto.RequestProxyIPPort\032%.coordi"
+  "nator_proto.ReplyProxyIPsPorts\"\000\022c\n\021uplo"
+  "adSubsetValue\022%.coordinator_proto.Reques"
+  "tProxyIPPort\032%.coordinator_proto.ReplyPr"
+  "oxyIPsPorts\"\000\022c\n\021uploadAppendValue\022%.coo"
+  "rdinator_proto.RequestProxyIPPort\032%.coor"
+  "dinator_proto.ReplyProxyIPsPorts\"\000\022S\n\010ge"
+  "tValue\022!.coordinator_proto.KeyAndClientI"
+  "P\032\".coordinator_proto.RepIfGetSuccess\"\000\022"
+  "W\n\tgetStripe\022!.coordinator_proto.KeyAndC"
+  "lientIP\032%.coordinator_proto.ReplyProxyIP"
+  "sPorts\"\000\022\\\n\tgetBlocks\022&.coordinator_prot"
+  "o.BlockIDsAndClientIP\032%.coordinator_prot"
+  "o.ReplyProxyIPsPorts\"\000\022j\n\024getBlocksByStr"
+  "ipePos\022).coordinator_proto.StripePosList"
+  "AndClient\032%.coordinator_proto.ReplyProxy"
+  "IPsPorts\"\000\022h\n\025getDegradedReadBlocks\022&.co"
+  "ordinator_proto.BlockIDsAndClientIP\032%.co"
+  "ordinator_proto.ReplyProxyIPsPorts\"\000\022a\n\024"
+  "getDegradedReadBlock\022!.coordinator_proto"
+  ".KeyAndClientIP\032$.coordinator_proto.Degr"
+  "adedReadReply\"\000\022j\n\035getDegradedReadBlockB"
+  "reakdown\022!.coordinator_proto.KeyAndClien"
+  "tIP\032$.coordinator_proto.DegradedReadRepl"
+  "y\"\000\022T\n\013getRecovery\022!.coordinator_proto.K"
+  "eyAndClientIP\032 .coordinator_proto.Recove"
+  "ryReply\"\000\022]\n\024getRecoveryBreakdown\022!.coor"
+  "dinator_proto.KeyAndClientIP\032 .coordinat"
+  "or_proto.RecoveryReply\"\000\022Y\n\020fullNodeReco"
+  "very\022#.coordinator_proto.NodeIdFromClien"
+  "t\032\036.coordinator_proto.RepBlockNum\"\000\022j\n\022m"
+  "ultiBlockRecovery\0220.coordinator_proto.St"
+  "ripeIdAndBlockIDsFromClient\032 .coordinato"
+  "r_proto.RecoveryReply\"\000\022N\n\010delByKey\022 .co"
+  "ordinator_proto.KeyFromClient\032\036.coordina"
+  "tor_proto.RepIfDeling\"\000\022V\n\013delByStripe\022%"
+  ".coordinator_proto.StripeIdFromClient\032\036."
+  "coordinator_proto.RepIfDeling\"\000\022Y\n\013listS"
+  "tripes\022\'.coordinator_proto.RequestToCoor"
+  "dinator\032\037.coordinator_proto.RepStripeIds"
+  "\"\000\022W\n\ndecodeTest\022!.coordinator_proto.Key"
+  "AndClientIP\032$.coordinator_proto.Degraded"
+  "ReadReply\"\000b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_coordinator_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_coordinator_2eproto = {
-    false, false, 3917, descriptor_table_protodef_coordinator_2eproto,
+    false, false, 4179, descriptor_table_protodef_coordinator_2eproto,
     "coordinator.proto",
-    &descriptor_table_coordinator_2eproto_once, nullptr, 0, 22,
+    &descriptor_table_coordinator_2eproto_once, nullptr, 0, 24,
     schemas, file_default_instances, TableStruct_coordinator_2eproto::offsets,
     file_level_metadata_coordinator_2eproto, file_level_enum_descriptors_coordinator_2eproto,
     file_level_service_descriptors_coordinator_2eproto,
@@ -6075,6 +6132,481 @@ void RecoveryReply::InternalSwap(RecoveryReply* other) {
       file_level_metadata_coordinator_2eproto[21]);
 }
 
+// ===================================================================
+
+class StripePos::_Internal {
+ public:
+};
+
+StripePos::StripePos(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:coordinator_proto.StripePos)
+}
+StripePos::StripePos(const StripePos& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  StripePos* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.stripe_id_){}
+    , decltype(_impl_.pos_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  ::memcpy(&_impl_.stripe_id_, &from._impl_.stripe_id_,
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.pos_) -
+    reinterpret_cast<char*>(&_impl_.stripe_id_)) + sizeof(_impl_.pos_));
+  // @@protoc_insertion_point(copy_constructor:coordinator_proto.StripePos)
+}
+
+inline void StripePos::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.stripe_id_){0}
+    , decltype(_impl_.pos_){0}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+}
+
+StripePos::~StripePos() {
+  // @@protoc_insertion_point(destructor:coordinator_proto.StripePos)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void StripePos::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+}
+
+void StripePos::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void StripePos::Clear() {
+// @@protoc_insertion_point(message_clear_start:coordinator_proto.StripePos)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  ::memset(&_impl_.stripe_id_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&_impl_.pos_) -
+      reinterpret_cast<char*>(&_impl_.stripe_id_)) + sizeof(_impl_.pos_));
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* StripePos::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // int32 stripe_id = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
+          _impl_.stripe_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pos = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
+          _impl_.pos_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* StripePos::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:coordinator_proto.StripePos)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // int32 stripe_id = 1;
+  if (this->_internal_stripe_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(1, this->_internal_stripe_id(), target);
+  }
+
+  // int32 pos = 2;
+  if (this->_internal_pos() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(2, this->_internal_pos(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:coordinator_proto.StripePos)
+  return target;
+}
+
+size_t StripePos::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:coordinator_proto.StripePos)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // int32 stripe_id = 1;
+  if (this->_internal_stripe_id() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_stripe_id());
+  }
+
+  // int32 pos = 2;
+  if (this->_internal_pos() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_pos());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData StripePos::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    StripePos::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*StripePos::GetClassData() const { return &_class_data_; }
+
+
+void StripePos::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<StripePos*>(&to_msg);
+  auto& from = static_cast<const StripePos&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:coordinator_proto.StripePos)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from._internal_stripe_id() != 0) {
+    _this->_internal_set_stripe_id(from._internal_stripe_id());
+  }
+  if (from._internal_pos() != 0) {
+    _this->_internal_set_pos(from._internal_pos());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void StripePos::CopyFrom(const StripePos& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:coordinator_proto.StripePos)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool StripePos::IsInitialized() const {
+  return true;
+}
+
+void StripePos::InternalSwap(StripePos* other) {
+  using std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  ::PROTOBUF_NAMESPACE_ID::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(StripePos, _impl_.pos_)
+      + sizeof(StripePos::_impl_.pos_)
+      - PROTOBUF_FIELD_OFFSET(StripePos, _impl_.stripe_id_)>(
+          reinterpret_cast<char*>(&_impl_.stripe_id_),
+          reinterpret_cast<char*>(&other->_impl_.stripe_id_));
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata StripePos::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_coordinator_2eproto_getter, &descriptor_table_coordinator_2eproto_once,
+      file_level_metadata_coordinator_2eproto[22]);
+}
+
+// ===================================================================
+
+class StripePosListAndClient::_Internal {
+ public:
+};
+
+StripePosListAndClient::StripePosListAndClient(::PROTOBUF_NAMESPACE_ID::Arena* arena,
+                         bool is_message_owned)
+  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
+  SharedCtor(arena, is_message_owned);
+  // @@protoc_insertion_point(arena_constructor:coordinator_proto.StripePosListAndClient)
+}
+StripePosListAndClient::StripePosListAndClient(const StripePosListAndClient& from)
+  : ::PROTOBUF_NAMESPACE_ID::Message() {
+  StripePosListAndClient* const _this = this; (void)_this;
+  new (&_impl_) Impl_{
+      decltype(_impl_.items_){from._impl_.items_}
+    , decltype(_impl_.clientip_){}
+    , decltype(_impl_.clientport_){}
+    , /*decltype(_impl_._cached_size_)*/{}};
+
+  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  _impl_.clientip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.clientip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_clientip().empty()) {
+    _this->_impl_.clientip_.Set(from._internal_clientip(), 
+      _this->GetArenaForAllocation());
+  }
+  _this->_impl_.clientport_ = from._impl_.clientport_;
+  // @@protoc_insertion_point(copy_constructor:coordinator_proto.StripePosListAndClient)
+}
+
+inline void StripePosListAndClient::SharedCtor(
+    ::_pb::Arena* arena, bool is_message_owned) {
+  (void)arena;
+  (void)is_message_owned;
+  new (&_impl_) Impl_{
+      decltype(_impl_.items_){arena}
+    , decltype(_impl_.clientip_){}
+    , decltype(_impl_.clientport_){0}
+    , /*decltype(_impl_._cached_size_)*/{}
+  };
+  _impl_.clientip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.clientip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+}
+
+StripePosListAndClient::~StripePosListAndClient() {
+  // @@protoc_insertion_point(destructor:coordinator_proto.StripePosListAndClient)
+  if (auto *arena = _internal_metadata_.DeleteReturnArena<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>()) {
+  (void)arena;
+    return;
+  }
+  SharedDtor();
+}
+
+inline void StripePosListAndClient::SharedDtor() {
+  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.items_.~RepeatedPtrField();
+  _impl_.clientip_.Destroy();
+}
+
+void StripePosListAndClient::SetCachedSize(int size) const {
+  _impl_._cached_size_.Set(size);
+}
+
+void StripePosListAndClient::Clear() {
+// @@protoc_insertion_point(message_clear_start:coordinator_proto.StripePosListAndClient)
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  _impl_.items_.Clear();
+  _impl_.clientip_.ClearToEmpty();
+  _impl_.clientport_ = 0;
+  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
+}
+
+const char* StripePosListAndClient::_InternalParse(const char* ptr, ::_pbi::ParseContext* ctx) {
+#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
+  while (!ctx->Done(&ptr)) {
+    uint32_t tag;
+    ptr = ::_pbi::ReadTag(ptr, &tag);
+    switch (tag >> 3) {
+      // repeated .coordinator_proto.StripePos items = 1;
+      case 1:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          ptr -= 1;
+          do {
+            ptr += 1;
+            ptr = ctx->ParseMessage(_internal_add_items(), ptr);
+            CHK_(ptr);
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<10>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // string clientip = 2;
+      case 2:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 18)) {
+          auto str = _internal_mutable_clientip();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "coordinator_proto.StripePosListAndClient.clientip"));
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 clientport = 3;
+      case 3:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 24)) {
+          _impl_.clientport_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      default:
+        goto handle_unusual;
+    }  // switch
+  handle_unusual:
+    if ((tag == 0) || ((tag & 7) == 4)) {
+      CHK_(ptr);
+      ctx->SetLastTag(tag);
+      goto message_done;
+    }
+    ptr = UnknownFieldParse(
+        tag,
+        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
+        ptr, ctx);
+    CHK_(ptr != nullptr);
+  }  // while
+message_done:
+  return ptr;
+failure:
+  ptr = nullptr;
+  goto message_done;
+#undef CHK_
+}
+
+uint8_t* StripePosListAndClient::_InternalSerialize(
+    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
+  // @@protoc_insertion_point(serialize_to_array_start:coordinator_proto.StripePosListAndClient)
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // repeated .coordinator_proto.StripePos items = 1;
+  for (unsigned i = 0,
+      n = static_cast<unsigned>(this->_internal_items_size()); i < n; i++) {
+    const auto& repfield = this->_internal_items(i);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::
+        InternalWriteMessage(1, repfield, repfield.GetCachedSize(), target, stream);
+  }
+
+  // string clientip = 2;
+  if (!this->_internal_clientip().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_clientip().data(), static_cast<int>(this->_internal_clientip().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "coordinator_proto.StripePosListAndClient.clientip");
+    target = stream->WriteStringMaybeAliased(
+        2, this->_internal_clientip(), target);
+  }
+
+  // int32 clientport = 3;
+  if (this->_internal_clientport() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(3, this->_internal_clientport(), target);
+  }
+
+  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
+    target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:coordinator_proto.StripePosListAndClient)
+  return target;
+}
+
+size_t StripePosListAndClient::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:coordinator_proto.StripePosListAndClient)
+  size_t total_size = 0;
+
+  uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  // repeated .coordinator_proto.StripePos items = 1;
+  total_size += 1UL * this->_internal_items_size();
+  for (const auto& msg : this->_impl_.items_) {
+    total_size +=
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::MessageSize(msg);
+  }
+
+  // string clientip = 2;
+  if (!this->_internal_clientip().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_clientip());
+  }
+
+  // int32 clientport = 3;
+  if (this->_internal_clientport() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_clientport());
+  }
+
+  return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
+}
+
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData StripePosListAndClient::_class_data_ = {
+    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSourceCheck,
+    StripePosListAndClient::MergeImpl
+};
+const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*StripePosListAndClient::GetClassData() const { return &_class_data_; }
+
+
+void StripePosListAndClient::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::PROTOBUF_NAMESPACE_ID::Message& from_msg) {
+  auto* const _this = static_cast<StripePosListAndClient*>(&to_msg);
+  auto& from = static_cast<const StripePosListAndClient&>(from_msg);
+  // @@protoc_insertion_point(class_specific_merge_from_start:coordinator_proto.StripePosListAndClient)
+  GOOGLE_DCHECK_NE(&from, _this);
+  uint32_t cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  _this->_impl_.items_.MergeFrom(from._impl_.items_);
+  if (!from._internal_clientip().empty()) {
+    _this->_internal_set_clientip(from._internal_clientip());
+  }
+  if (from._internal_clientport() != 0) {
+    _this->_internal_set_clientport(from._internal_clientport());
+  }
+  _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+}
+
+void StripePosListAndClient::CopyFrom(const StripePosListAndClient& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:coordinator_proto.StripePosListAndClient)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool StripePosListAndClient::IsInitialized() const {
+  return true;
+}
+
+void StripePosListAndClient::InternalSwap(StripePosListAndClient* other) {
+  using std::swap;
+  auto* lhs_arena = GetArenaForAllocation();
+  auto* rhs_arena = other->GetArenaForAllocation();
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.items_.InternalSwap(&other->_impl_.items_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.clientip_, lhs_arena,
+      &other->_impl_.clientip_, rhs_arena
+  );
+  swap(_impl_.clientport_, other->_impl_.clientport_);
+}
+
+::PROTOBUF_NAMESPACE_ID::Metadata StripePosListAndClient::GetMetadata() const {
+  return ::_pbi::AssignDescriptors(
+      &descriptor_table_coordinator_2eproto_getter, &descriptor_table_coordinator_2eproto_once,
+      file_level_metadata_coordinator_2eproto[23]);
+}
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace coordinator_proto
 PROTOBUF_NAMESPACE_OPEN
@@ -6165,6 +6697,14 @@ Arena::CreateMaybeMessage< ::coordinator_proto::DegradedReadReply >(Arena* arena
 template<> PROTOBUF_NOINLINE ::coordinator_proto::RecoveryReply*
 Arena::CreateMaybeMessage< ::coordinator_proto::RecoveryReply >(Arena* arena) {
   return Arena::CreateMessageInternal< ::coordinator_proto::RecoveryReply >(arena);
+}
+template<> PROTOBUF_NOINLINE ::coordinator_proto::StripePos*
+Arena::CreateMaybeMessage< ::coordinator_proto::StripePos >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::coordinator_proto::StripePos >(arena);
+}
+template<> PROTOBUF_NOINLINE ::coordinator_proto::StripePosListAndClient*
+Arena::CreateMaybeMessage< ::coordinator_proto::StripePosListAndClient >(Arena* arena) {
+  return Arena::CreateMessageInternal< ::coordinator_proto::StripePosListAndClient >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

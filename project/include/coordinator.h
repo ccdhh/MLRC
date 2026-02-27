@@ -80,10 +80,15 @@ namespace ECProject
         grpc::ServerContext *context,
         const coordinator_proto::BlockIDsAndClientIP *blockIDsClient,
         coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) override;
+    grpc::Status CoordinatorImpl::getBlocksByStripePos(
+    grpc::ServerContext* context,
+    const coordinator_proto::StripePosListAndClient* req,
+    coordinator_proto::ReplyProxyIPsPorts* proxyIPPort) override;
     grpc::Status getDegradedReadBlocks(
         grpc::ServerContext *context,
         const coordinator_proto::BlockIDsAndClientIP *blockIDsClient,
         coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) override;
+
     // degraded read
     grpc::Status getDegradedReadBlock(
       grpc::ServerContext *context,
