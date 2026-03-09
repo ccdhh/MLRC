@@ -177,6 +177,7 @@ namespace ECProject
     ECProject::ToolBox *m_toolbox;
     int m_cur_cluster_id = 0;
     int m_cur_stripe_id = 0;
+
     std::unordered_map<std::string, ObjectInfo> m_object_commit_table;
     std::unordered_map<std::string, ObjectInfo> m_object_updating_table;
     std::map<int, Cluster> m_cluster_table;
@@ -246,6 +247,7 @@ namespace ECProject
     };
     // Coordinator
     void Run()
+    
     {
       grpc::EnableDefaultHealthCheckService(true);
       grpc::reflection::InitProtoReflectionServerBuilderPlugin();

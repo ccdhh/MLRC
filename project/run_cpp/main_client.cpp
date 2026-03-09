@@ -12,6 +12,7 @@
 #include <random>
 #include "unilrc_encoder.h"
 
+
 int main(int argc, char **argv)
 {
     char buff[256];
@@ -22,6 +23,7 @@ int main(int argc, char **argv)
     std::cout << "Current working directory: " << sys_config_path << std::endl;
 
     const ECProject::Config *config = ECProject::Config::getInstance(sys_config_path);
+
     std::string client_ip = "10.10.1.1";
     int client_port = 44444;
     ECProject::Client client(client_ip, client_port, config->CoordinatorIP + ":" + std::to_string(config->CoordinatorPort), sys_config_path);

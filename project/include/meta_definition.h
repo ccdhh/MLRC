@@ -1,6 +1,7 @@
 #ifndef META_DEFINITION
 #define META_DEFINITION
 #include "devcommon.h"
+#include<vector>
 namespace ECProject
 {
   enum OpperateType
@@ -77,7 +78,8 @@ namespace ECProject
     std::vector<int> object_sizes;
     std::vector<Block *> blocks;
     std::unordered_set<int> place2clusters;
-
+    int N;//L1的放置参数
+    std::vector<int> num_arry;
     int n, r, z;
     int num_groups;
     std::map<int, std::vector<int>> group_to_blocks;

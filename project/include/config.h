@@ -9,13 +9,15 @@ namespace ECProject
   const int PROXY_PORT_SHIFT = 1;
 
   class Config
-  {
+  {  
   private:
     static Config *instance;
     Config(const std::string &configPath);
-
+    int get_N();
+    void get_num_arry();
   public:
     static Config *getInstance(const std::string &configPath);
+
     void loadConfig(const std::string &configPath);
     void printConfigs() const;
     void validateConfig() const;
@@ -31,6 +33,8 @@ namespace ECProject
     int r = alpha * z;
     int DatanodeNumPerCluster = 0;
     int ClusterNum = 0;
+    int N=0;
+    std::vector<int> num_arry;
     std::string CoordinatorIP = "0.0.0.0";
     int CoordinatorPort = 55555;
     std::string AppendMode = "EQUIOX_MODE";

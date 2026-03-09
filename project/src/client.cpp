@@ -1,6 +1,5 @@
 #include "client.h"
 #include "coordinator.grpc.pb.h"
-
 #include <asio.hpp>
 #include <thread>
 #include <assert.h>

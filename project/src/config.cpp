@@ -16,8 +16,8 @@ namespace ECProject
   void Config::validateConfig() const
   {
     assert(BlockSize % UnitSize == 0 && "Error: BlockSize must be divisible by UnitSize");
-    assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE"||AppendMode=="EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
-    assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC"||CodeType=="RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC");
+    assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE" || AppendMode == "EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
+    assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC" || CodeType == "RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC");
     assert(DatanodeNumPerCluster > 0 && "Error: DatanodeNumPerCluster must be greater than 0");
     assert(ClusterNum > 0 && "Error: ClusterNum must be greater than 0");
     if (CodeType == "UniLRC")
@@ -42,13 +42,12 @@ namespace ECProject
     }
     if (CodeType == "RS")
     {
-       int n = k + r;
+      int n = k + r;
 
-    assert(DatanodeNumPerCluster >= 1 &&"Error: DatanodeNumPerCluster must be >= 1 for RS code");
+      assert(DatanodeNumPerCluster >= 1 && "Error: DatanodeNumPerCluster must be >= 1 for RS code");
 
-    assert(ClusterNum * DatanodeNumPerCluster >= n &&"Error: ClusterNum * DatanodeNumPerCluster must be >= (k + r) for RS code");
+      assert(ClusterNum * DatanodeNumPerCluster >= n && "Error: ClusterNum * DatanodeNumPerCluster must be >= (k + r) for RS code");
     }
-
   }
 
   Config *Config::getInstance(const std::string &configPath)
@@ -93,9 +92,9 @@ namespace ECProject
       k = alpha * z * z - alpha * z;
       r = alpha * z;
     }
-    else if(CodeType=="RS")
+    else if (CodeType == "RS")
     {
-      this->z=0;
+      this->z = 0;
       if (auto elem = root->FirstChildElement("k"))
         k = std::stoi(elem->GetText());
       if (auto elem = root->FirstChildElement("r"))
@@ -120,6 +119,8 @@ namespace ECProject
       CoordinatorPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
       AppendMode = std::string(elem->GetText());
+    N = get_N(); // 获得N
+    get_num_arry();
   }
 
   void Config::printConfigs() const
@@ -140,5 +141,28 @@ namespace ECProject
     std::cout << "  CoordinatorPort: " << CoordinatorPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
+  }
+  int Config::get_N()
+  {
+    int N = 1;
+    while (true)
+    {
+      int temp_num_1 = std::ceil(((std::pow(2, N) * k) + r) / r);
+      int temp_num_2 = std::ceil(((std::pow(2, N + 1) * k) + r) / r);
+      if (temp_num_1 <= ClusterNum && temp_num_2 > ClusterNum)
+      {
+        return N;
+      }
+      N++;
+    }
+  }
+  void Config::get_num_arry()
+  {
+    for (int i = 1; i <=N; i++)
+    {
+      int temp_num = (std::ceil((std::pow(2, i - 1) * k + r) / r) * 2) - std::ceil((std::pow(2, i) * k + r) / r);
+      int L = static_cast<int>(temp_num);
+      this->num_arry.push_back(L);
+    }
   }
 }
