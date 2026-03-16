@@ -305,6 +305,8 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
       Get_OA_Information("OA_2.txt");
   int OA1_row_num = OA_1_Information.size();
   int OA2_row_num = OA_2_Information.size();
+  int OA1_num_cols = OA1_row_num > 0 ? OA_1_Information[0].size() : 0;
+  int OA2_num_cols = OA2_row_num > 0 ? OA_2_Information[0].size() : 0;
   Block *blocks_info = new Block[stripe->n];
   assert(stripe->object_keys.size() == 1);
   int OA1_row =
@@ -335,11 +337,276 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
   int sum = 0;
   std::for_each(temp_vector.begin(), temp_vector.end(),
                 [&sum](int num) { sum += num; });
-  int list_num = static_cast<int>(use_OA1_list_num_1-sum);//条带的第一组放置列
+  int list_num = static_cast<int>(use_OA1_list_num_1-sum);//条带的第一数据组所需OA1的列数（1-based）
   for (int i = 0; i < cluster_num - 1; i++)
     use_OA1_list.push_back(
         OA_1_Information[OA1_row - 1][initial_list + i -
                                       1]); // 这里校验组所用列应该单独拿出来
+
+  int k = stripe->k;
+  int r = stripe->r;
+  int small_group_num = r - b;
+
+  if (code_type == "RS") {
+    // num_arry[0]==1 与 ==2 的准备工作：OA1_row、initial_list 共用；OA1 列数 list_num 按 num_arry[0] 区分
+    // OA1_row = (floor(stripe_id/(2^N*OA2_row_num)) % OA1_row_num) + 1（已在上方计算）
+    // initial_list = (stripe_id % 2^N) + 1（已在上方计算）
+    int list_num_rs = list_num; // 第一数据组所需 OA1 列数（1-based）
+    if (!stripe->num_arry.empty() && stripe->num_arry[0] == 2) {
+      list_num_rs = (initial_list - 1) * (cluster_num - 2) + 3;
+    }
+
+    // OA2 行（两种 case 共用）
+    int OA2_row_index = static_cast<int>(floor(stripe->stripe_id / (std::pow(2, stripe->N)))) % OA2_row_num;
+    if (OA2_row_index < 0) OA2_row_index += OA2_row_num;
+
+    auto resolve_node = [&](int cluster_id, int node_idx_in_cluster) -> int {
+      if (cluster_id < 0 || cluster_id >= m_sys_config->ClusterNum || m_cluster_table[cluster_id].nodes.empty())
+        return m_cluster_table[0].nodes.empty() ? 0 : m_cluster_table[0].nodes[0];
+      if (node_idx_in_cluster >= (int)m_cluster_table[cluster_id].nodes.size())
+        node_idx_in_cluster %= m_cluster_table[cluster_id].nodes.size();    //超出节点范围取模
+      return m_cluster_table[cluster_id].nodes[node_idx_in_cluster];
+    };
+
+    if (stripe->num_arry.empty() || stripe->num_arry[0] == 1) {
+    // ========== num_arry[0]==1：校验块一组，机架 = OA1 第 OA1_row 行、第一列 ==========
+    int parity_cluster = (OA_1_Information[OA1_row - 1][0] - 1) % m_sys_config->ClusterNum; //减一是机架id从0开始
+    if (parity_cluster < 0) parity_cluster += m_sys_config->ClusterNum;
+
+    // 数据块分组数量与每组大小（由 initial_list 奇偶决定）
+    int num_data_groups;//定义数据组
+    auto get_data_group_id = [&](int i) -> int {
+      if (initial_list % 2 == 1) {
+        // 奇数：前 r-b 组每组 r-1 个，剩下每组 r 个
+        int small_total = small_group_num * (r - 1);
+        if (i < small_total)
+          return i / (r - 1);
+        return small_group_num + (i - small_total) / r;
+      } else {
+        // 偶数：后 r-b 组每组 r-1 个，前面每组 r 个
+        int num_large = static_cast<int>(ceil(static_cast<double>(k - small_group_num * (r - 1)) / r));
+        int large_total = num_large * r;
+        if (i < large_total)
+          return i / r;
+        return num_large + (i - large_total) / (r - 1);
+      }
+    };
+
+    int num_large_groups = 0; // initial_list 偶数时前面“大组”个数
+    if (initial_list % 2 == 1) {
+      int small_total = small_group_num * (r - 1);
+      num_data_groups = small_group_num + static_cast<int>(ceil(static_cast<double>(k - small_total) / r));
+    } else {
+      num_large_groups = static_cast<int>(ceil(static_cast<double>(k - small_group_num * (r - 1)) / r));//大组数
+      num_data_groups = num_large_groups + small_group_num;//数据组数
+    }
+
+    // 根据 initial_list 奇偶与组内块数选 OA2 列（num_arry[0]==1）
+    auto get_oa2_col_and_node = [&](int map2group, int position_in_group, bool is_small_group) -> int {
+      int oa2_col_0based;
+      if (initial_list % 2 == 1) {
+        if (is_small_group) {
+          // 奇数：组大小为 r-1 时，用 OA2 第 2~r 列（1-based）即 0-based 下标 1..r-1
+          oa2_col_0based = 1 + (position_in_group % (r - 1));
+        } else {
+          // 剩下组（含校验组）：用 OA2 第 1~r 列（1-based）即 0-based 下标 0..r-1
+          oa2_col_0based = position_in_group % r;
+        }
+      } else {
+        if (is_small_group) {
+          // 偶数：组大小为 r-1 时，用 OA2 第 1~r-1 列（1-based）即 0-based 下标 0..r-2
+          oa2_col_0based = position_in_group % (r - 1);
+        } else {
+          // 剩下组（含校验组）：用 OA2 第 1~r 列（1-based）即 0-based 下标 0..r-1
+          oa2_col_0based = position_in_group % r;
+        }
+      }
+      if (OA2_num_cols <= 0 || OA2_row_index >= OA2_row_num)
+        return 0;
+      int col = oa2_col_0based % OA2_num_cols;//保证他的列数不超过OA表的列数
+      if (col < 0) col += OA2_num_cols;
+      int oa2_val = OA_2_Information[OA2_row_index][col];//根据OA2行数和列数找到对应的节点
+      int node_idx = (oa2_val - 1) % m_sys_config->DatanodeNumPerCluster;
+      if (node_idx < 0) node_idx += m_sys_config->DatanodeNumPerCluster;
+      return node_idx; // 返回机架内节点下标，调用方再结合 map2cluster 查全局 node_id
+    };
+
+    int small_total = small_group_num * (r - 1);
+
+    for (int i = 0; i < stripe->n; i++) {
+      blocks_info[i].block_size = m_sys_config->BlockSize;
+      blocks_info[i].map2stripe = stripe->stripe_id;
+      blocks_info[i].map2key = stripe->object_keys[0];
+      int position_in_group = 0;
+      bool is_small_group = false;
+      if (i < k) {
+        // 数据块
+        std::string tmp = "_D";
+        if (i < 10) tmp = "_D0";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'D';
+        int data_group_id = get_data_group_id(i);// 数据组id从0开始的
+        blocks_info[i].map2group = 1 + data_group_id; // 组0留给校验
+        if (initial_list % 2 == 1) {
+          is_small_group = (data_group_id < small_group_num);
+          position_in_group = is_small_group ? (i % (r - 1)) : ((i - small_total) % r);
+        } else {
+          is_small_group = (data_group_id >= num_large_groups);
+          int large_total = num_large_groups * r;
+          if (data_group_id < num_large_groups)
+            position_in_group = (i - data_group_id * r);
+          else
+            position_in_group = (i - large_total) % (r - 1);
+        }
+        int oa1_col = (list_num_rs - 1 + data_group_id) % OA1_num_cols;
+        if (oa1_col < 0) oa1_col += OA1_num_cols;
+        int cluster_id = (OA_1_Information[OA1_row - 1][oa1_col] - 1) % m_sys_config->ClusterNum;
+        if (cluster_id < 0) cluster_id += m_sys_config->ClusterNum;
+        blocks_info[i].map2cluster = cluster_id;
+      } else {
+        // 校验块 (i in [k, k+r))
+        std::string tmp = "_G";
+        if (i - k < 10) tmp = "_G0";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - k);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'G';
+        blocks_info[i].map2group = 0; // 校验一组
+        blocks_info[i].map2cluster = parity_cluster;
+        is_small_group = false; // 校验组大小为 r，用 1~r 列
+        position_in_group = i - k;
+      }
+
+      int node_idx_in_cluster = get_oa2_col_and_node(blocks_info[i].map2group, position_in_group, is_small_group);
+      blocks_info[i].map2node = resolve_node(blocks_info[i].map2cluster, node_idx_in_cluster);
+
+      // 更新条带信息？？？？？？？
+      update_stripe_info_in_node(blocks_info[i].map2node, stripe->stripe_id, i);
+      m_cluster_table[blocks_info[i].map2cluster].blocks.push_back(&blocks_info[i]);
+      m_cluster_table[blocks_info[i].map2cluster].stripes.insert(stripe->stripe_id);
+      stripe->blocks.push_back(&blocks_info[i]);
+      stripe->place2clusters.insert(blocks_info[i].map2cluster);
+      add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
+    }
+
+    } else if (!stripe->num_arry.empty() && stripe->num_arry[0] == 2) {
+    // ========== num_arry[0]==2：两个校验组 + 剩余纯数据组 ==========
+    // 第一组：2 校验 + (r-3) 数据 → OA1 第 1 列机架
+    // 第二组：(r-2) 校验 + 1 数据 → OA1 第 2 列机架
+    // 剩余数据：前(r-b-2)组每组 r-1 块，后面每组 r 块，从 list_num_rs 列起
+    int cluster_1 = (OA_1_Information[OA1_row - 1][0] - 1) % m_sys_config->ClusterNum;
+    if (cluster_1 < 0) cluster_1 += m_sys_config->ClusterNum;
+    int cluster_2 = (OA_1_Information[OA1_row - 1][1] - 1) % m_sys_config->ClusterNum;
+    if (cluster_2 < 0) cluster_2 += m_sys_config->ClusterNum;
+
+    int small_data_group_num = std::max(0, r - b - 2); // 前 r-b-2 组每组 r-1  如果组数小于0的话就取0
+    int small_data_total = small_data_group_num * (r - 1);
+    // 纯数据组组数
+    int num_pure_data_groups = small_data_group_num + static_cast<int>(ceil(static_cast<double>(k - (r - 2) - small_data_total) / r));
+    int large_data_group_num = num_pure_data_groups - small_data_group_num;
+
+    auto get_oa2_col_case2 = [&](int map2group, int position_in_group, bool is_small_data_group) -> int {
+      int oa2_col_0based;
+      if (map2group == 0) {///组0，第一个校验组？？？
+        if (position_in_group < 2) {/////////组里的位置小于2？？？？？？？校验块
+          oa2_col_0based = position_in_group;
+        } else {
+          if (initial_list % 2 == 1) oa2_col_0based = position_in_group;
+          else oa2_col_0based = 3 + (position_in_group - 2);
+        }
+      } else if (map2group == 1) {
+        if (position_in_group == 0) {
+          oa2_col_0based = (initial_list % 2 == 1) ? 0 : 1;
+        } else {
+          oa2_col_0based = 2 + (position_in_group - 1) % (r - 2);
+        }
+      } else {
+        if (is_small_data_group) oa2_col_0based = position_in_group % (r - 1);
+        else oa2_col_0based = position_in_group % r;
+      }
+      if (OA2_num_cols <= 0 || OA2_row_index >= OA2_row_num) return 0;
+      int col = oa2_col_0based % OA2_num_cols;
+      if (col < 0) col += OA2_num_cols;
+      int oa2_val = OA_2_Information[OA2_row_index][col];
+      int node_idx = (oa2_val - 1) % m_sys_config->DatanodeNumPerCluster;
+      if (node_idx < 0) node_idx += m_sys_config->DatanodeNumPerCluster;
+      return node_idx;
+    };
+
+    for (int i = 0; i < stripe->n; i++) {
+      blocks_info[i].block_size = m_sys_config->BlockSize;
+      blocks_info[i].map2stripe = stripe->stripe_id;
+      blocks_info[i].map2key = stripe->object_keys[0];
+      int map2grp = -1, pos_in_grp = 0;
+      bool is_small_data_grp = false;
+      int cluster_id = 0;
+
+      if (i < r - 3) {
+        map2grp = 0; pos_in_grp = 2 + i; cluster_id = cluster_1;// 情况确定下来了
+        std::string tmp = (i < 10) ? "_D0" : "_D";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'D';
+      } else if (i == r - 3) {
+        map2grp = 1; pos_in_grp = 0; cluster_id = cluster_2;
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + (i < 10 ? "_D0" : "_D") + std::to_string(i);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'D';
+      } else if (i < k) {
+        int idx = i - (r - 2);
+        if (idx < small_data_total) {
+          int g = idx / (r - 1);
+          pos_in_grp = idx % (r - 1);
+          map2grp = 2 + g;
+          is_small_data_grp = true;
+        } else {
+          int rem = idx - small_data_total;
+          int g = small_data_group_num + rem / r;
+          pos_in_grp = rem % r;
+          map2grp = 2 + g;
+        }
+        int oa1_col = (list_num_rs - 1 + (map2grp - 2)) % OA1_num_cols;//对应第几列
+        if (oa1_col < 0) oa1_col += OA1_num_cols;
+        cluster_id = (OA_1_Information[OA1_row - 1][oa1_col] - 1) % m_sys_config->ClusterNum;
+        if (cluster_id < 0) cluster_id += m_sys_config->ClusterNum;
+        std::string tmp = (i < 10) ? "_D0" : "_D";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'D';
+      } else if (i <= k + 1) {
+        map2grp = 0; pos_in_grp = i - k; cluster_id = cluster_1;//两个校验块
+        std::string tmp = (i - k < 10) ? "_G0" : "_G";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - k);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'G';
+      } else {
+        map2grp = 1; pos_in_grp = 1 + (i - (k + 2)); cluster_id = cluster_2;   //m-2校验块的信息
+        std::string tmp = (i - k < 10) ? "_G0" : "_G";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - k);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'G';
+      }
+
+      blocks_info[i].map2group = map2grp;
+      blocks_info[i].map2cluster = cluster_id;
+    
+      int node_idx = get_oa2_col_case2(map2grp, pos_in_grp, is_small_data_grp);
+      blocks_info[i].map2node = resolve_node(cluster_id, node_idx);
+
+      update_stripe_info_in_node(blocks_info[i].map2node, stripe->stripe_id, i);
+      m_cluster_table[blocks_info[i].map2cluster].blocks.push_back(&blocks_info[i]);
+      m_cluster_table[blocks_info[i].map2cluster].stripes.insert(stripe->stripe_id);
+      stripe->blocks.push_back(&blocks_info[i]);
+      stripe->place2clusters.insert(blocks_info[i].map2cluster);
+      add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
+    }
+    }
+
+    stripe->num_groups = stripe->group_to_blocks.size();
+    return;
+  }
+
+  // ========== 非 RS：原有 UniLRC / AzureLRC 放置 ==========
   int temp_num = 0;
   int temp_num1 = 0;
   for (int i = 0; i < stripe->n; i++) {
@@ -380,17 +647,6 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
             int((i - stripe->k) / (stripe->r / stripe->z));
       else if (code_type == "AzureLRC")
         blocks_info[i].map2group = int(stripe->z);
-      else if (code_type == "RS") {
-        int idx = i - stripe->k;
-        blocks_info[i].map2group = [stripe, b, cluster_num, idx]() -> int {
-          int small_group_num = stripe->r - b;
-          int small_group_total = small_group_num * (stripe->r - 1);
-          if (idx < small_group_total)
-            return idx / (stripe->r - 1);
-          else
-            return small_group_num + (idx - small_group_total) / stripe->r;
-        }();
-      }
       blocks_info[i].map2cluster =
           (use_OA1_list[0] - 1) % m_sys_config->ClusterNum;
     }
@@ -786,7 +1042,7 @@ CoordinatorImpl::generate_add_plans(Stripe *stripe) {
     plan.set_append_size(append_size);
     plan.set_is_merge_parity(false);
     plan.set_cluster_id(mapped_cluster_id);
-    plan.set_append_mode("UNILRC_MODE");
+    plan.set_append_mode(m_sys_config->CodeType == "RS" ? m_sys_config->AppendMode : "UNILRC_MODE");
     plan.set_is_serialized(false);
 
     for (int j = 0; j < stripe->group_to_blocks[i].size(); j++) {

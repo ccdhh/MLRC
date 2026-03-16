@@ -74,11 +74,11 @@ int main(int argc, char **argv)
     std::cout<<"start L1 merge?(Y/N)"<<std::endl;
     char choose;
     std::cin>>choose;
-    switch choose
+    switch (choose)
     {
         case 'Y':
         {
-            start_merge();
+            client.start_merge();
             break;
         }
         case 'N':
@@ -93,7 +93,7 @@ int main(int argc, char **argv)
     
     
     
-    std::string output_file_name = "test_"  + code_type + + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
+    std::string output_file_name = "test_" + code_type + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
     std::ofstream output_file(output_file_name);
     if (!output_file.is_open())
     {

@@ -4,6 +4,7 @@
 #include <thread>
 #include <assert.h>
 #include <chrono>
+#include <cmath>
 #include "unilrc_encoder.h"
 namespace ECProject
 {
@@ -462,6 +463,32 @@ namespace ECProject
         data_block_num_per_group.push_back(local_data_num);
       }
     }
+    else if (code_type == "RS")
+    {
+      int b = (k + r - 1) % r + 1;
+      int small_group_num = r - b;
+      const std::vector<int> &num_arry = m_sys_config->num_arry;
+      if (num_arry.empty() || num_arry[0] == 1)
+      {
+        data_block_num_per_group.push_back(0);
+        int small_total = small_group_num * (r - 1);
+        int num_data_groups = small_group_num + static_cast<int>(std::ceil(static_cast<double>(k - small_total) / r));
+        for (int g = 0; g < num_data_groups; g++)
+        {
+          data_block_num_per_group.push_back(g < small_group_num ? (r - 1) : r);
+        }
+      }
+      else
+      {
+        data_block_num_per_group.push_back(r - 3);
+        data_block_num_per_group.push_back(1);
+        int small_data_group_num = std::max(0, r - b - 2);
+        int small_data_total = small_data_group_num * (r - 1);
+        int num_pure = small_data_group_num + static_cast<int>(std::ceil(static_cast<double>(k - (r - 2) - small_data_total) / r));
+        for (int g = 0; g < num_pure; g++)
+          data_block_num_per_group.push_back(g < small_data_group_num ? (r - 1) : r);
+      }
+    }
     return data_block_num_per_group;
   }
 
@@ -518,6 +545,30 @@ namespace ECProject
       for (int i = 0; i < z; i++)
       {
         global_pairty_block_num_per_group.push_back(local_global_parity_num);
+      }
+    }
+    else if (code_type == "RS")
+    {
+      const std::vector<int> &num_arry = m_sys_config->num_arry;
+      if (num_arry.empty() || num_arry[0] == 1)
+      {
+        global_pairty_block_num_per_group.push_back(r);
+        int b = (k + r - 1) % r + 1;
+        int small_group_num = r - b;
+        int small_total = small_group_num * (r - 1);
+        int num_data_groups = small_group_num + static_cast<int>(std::ceil(static_cast<double>(k - small_total) / r));
+        for (int g = 0; g < num_data_groups; g++)
+          global_pairty_block_num_per_group.push_back(0);
+      }
+      else
+      {
+        global_pairty_block_num_per_group.push_back(2);
+        global_pairty_block_num_per_group.push_back(r - 2);
+        int b = (k + r - 1) % r + 1;
+        int small_data_group_num = std::max(0, r - b - 2);
+        int num_pure = small_data_group_num + static_cast<int>(std::ceil(static_cast<double>(k - (r - 2) - small_data_group_num * (r - 1)) / r));
+        for (int g = 0; g < num_pure; g++)
+          global_pairty_block_num_per_group.push_back(0);
       }
     }
     return global_pairty_block_num_per_group;
@@ -590,7 +641,72 @@ namespace ECProject
         local_parity_block_num_per_group.push_back(1);
       }
     }
+    else if (code_type == "RS")
+    {
+      int b = (k + r - 1) % r + 1;
+      int small_group_num = r - b;
+      const std::vector<int> &num_arry = m_sys_config->num_arry;
+      int num_groups;
+      if (num_arry.empty() || num_arry[0] == 1)
+        num_groups = 1 + small_group_num + static_cast<int>(std::ceil(static_cast<double>(k - small_group_num * (r - 1)) / r));
+      else
+        num_groups = 2 + std::max(0, r - b - 2) + static_cast<int>(std::ceil(static_cast<double>(k - (r - 2) - std::max(0, r - b - 2) * (r - 1)) / r));
+      for (int i = 0; i < num_groups; i++)
+        local_parity_block_num_per_group.push_back(0);
+    }
     return local_parity_block_num_per_group;
+  }
+
+  void Client::get_rs_block_num_per_group_from_stripe_id(int k, int r, int z, int stripe_id, std::vector<int> &data_block_num_per_group, std::vector<int> &global_parity_block_num_per_group, std::vector<int> &local_parity_block_num_per_group)
+  {
+    data_block_num_per_group.clear();
+    global_parity_block_num_per_group.clear();
+    local_parity_block_num_per_group.clear();
+    int n = k + r;
+    int b = (n - 1) % r + 1;
+    int small_group_num = r - b;
+    const std::vector<int> &num_arry = m_sys_config->num_arry;
+    int N = m_sys_config->N;
+    int two_N = static_cast<int>(std::pow(2, N));
+    int initial_list = (stripe_id % two_N + two_N) % two_N + 1;
+
+    if (num_arry.empty() || num_arry[0] == 1) {
+      int small_total = small_group_num * (r - 1);
+      int num_data_groups;
+      int num_large_groups = 0;
+      if (initial_list % 2 == 1) {
+        num_data_groups = small_group_num + static_cast<int>(std::ceil(static_cast<double>(k - small_total) / r));
+      } else {
+        num_large_groups = static_cast<int>(std::ceil(static_cast<double>(k - small_group_num * (r - 1)) / r));
+        num_data_groups = num_large_groups + small_group_num;
+      }
+      data_block_num_per_group.push_back(0);
+      global_parity_block_num_per_group.push_back(r);
+      local_parity_block_num_per_group.push_back(0);
+      for (int g = 0; g < num_data_groups; g++) {
+        if (initial_list % 2 == 1)
+          data_block_num_per_group.push_back(g < small_group_num ? (r - 1) : r);
+        else
+          data_block_num_per_group.push_back(g < num_large_groups ? r : (r - 1));
+        global_parity_block_num_per_group.push_back(0);
+        local_parity_block_num_per_group.push_back(0);
+      }
+    } else {
+      int small_data_group_num = std::max(0, r - b - 2);
+      int small_data_total = small_data_group_num * (r - 1);
+      int num_pure = small_data_group_num + static_cast<int>(std::ceil(static_cast<double>(k - (r - 2) - small_data_total) / r));
+      data_block_num_per_group.push_back(r - 3);
+      data_block_num_per_group.push_back(1);
+      global_parity_block_num_per_group.push_back(2);
+      global_parity_block_num_per_group.push_back(r - 2);
+      local_parity_block_num_per_group.push_back(0);
+      local_parity_block_num_per_group.push_back(0);
+      for (int g = 0; g < num_pure; g++) {
+        data_block_num_per_group.push_back(g < small_data_group_num ? (r - 1) : r);
+        global_parity_block_num_per_group.push_back(0);
+        local_parity_block_num_per_group.push_back(0);
+      }
+    }
   }
 
   void Client::split_for_set_data_and_parity(const coordinator_proto::ReplyProxyIPsPorts *reply_proxy_ips_ports, const std::vector<char *> &cluster_slice_data, const std::vector<int> &data_block_num_per_group, const std::vector<int> &global_parity_block_num_per_group, const std::vector<int> &local_parity_block_num_per_group, std::vector<char *> &data_ptr_array, std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array)
@@ -628,10 +744,22 @@ namespace ECProject
       std::unique_ptr<bool[]> if_commit_arr(new bool[reply.append_keys_size()]);
       std::fill_n(if_commit_arr.get(), reply.append_keys_size(), false);
 
-      assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC"||m_sys_config->CodeType="RS");
-      std::vector<int> data_block_num_per_group = get_data_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
-      std::vector<int> global_parity_block_num_per_group = get_global_parity_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
-      std::vector<int> local_parity_block_num_per_group = get_local_parity_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
+      assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC" || m_sys_config->CodeType == "RS");
+      std::vector<int> data_block_num_per_group;
+      std::vector<int> global_parity_block_num_per_group;
+      std::vector<int> local_parity_block_num_per_group;
+      if (m_sys_config->CodeType == "RS" && reply.append_keys_size() > 0) {
+        int stripe_id = 0;
+        std::string first_key = reply.append_keys(0);
+        size_t pos = first_key.find('_');
+        if (pos != std::string::npos)
+          stripe_id = std::stoi(first_key.substr(0, pos));
+        get_rs_block_num_per_group_from_stripe_id(m_sys_config->k, m_sys_config->r, m_sys_config->z, stripe_id, data_block_num_per_group, global_parity_block_num_per_group, local_parity_block_num_per_group);
+      } else {
+        data_block_num_per_group = get_data_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
+        global_parity_block_num_per_group = get_global_parity_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
+        local_parity_block_num_per_group = get_local_parity_block_num_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, m_sys_config->CodeType);
+      }
       std::vector<char *> data_ptr_array, global_parity_ptr_array, local_parity_ptr_array;
       split_for_set_data_and_parity(&reply, cluster_slice_data, data_block_num_per_group, global_parity_block_num_per_group, local_parity_block_num_per_group, data_ptr_array, global_parity_ptr_array, local_parity_ptr_array);
       std::vector<char *> parity_ptr_array;

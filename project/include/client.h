@@ -78,6 +78,7 @@ namespace ECProject
     std::vector<int> get_data_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_global_parity_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_local_parity_block_num_per_group(int k, int r, int z, std::string code_type);
+    void get_rs_block_num_per_group_from_stripe_id(int k, int r, int z, int stripe_id, std::vector<int> &data_block_num_per_group, std::vector<int> &global_parity_block_num_per_group, std::vector<int> &local_parity_block_num_per_group);
     bool set(std::string key, std::string value);
     bool SetParameterByGrpc(ECSchema input_ecschema);
     std::shared_ptr<char[]> get(std::string key, size_t &data_size);
