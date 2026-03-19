@@ -84,26 +84,23 @@ int main(int argc, char **argv)
     std::chrono::duration<double> set_time = std::chrono::duration_cast<std::chrono::duration<double>>(set_end - set_start);
     std::cout << "write throughput: " << (static_cast<double> (total_write_size) / set_time.count() / 1024) << "MB/s" << std::endl;
 
-    std::cout<<"start L1 merge?(Y/N)"<<std::endl;
-    char choose;
-    std::cin>>choose;
-    switch (choose)
+    while (true)
     {
-        case 'Y':
+        std::cout << "start merge now? (Y/N)" << std::endl;
+        char choose;
+        std::cin >> choose;
+        if (choose == 'Y' || choose == 'y')
         {
             client.start_merge();
-            break;
         }
-        case 'N':
+        else if (choose == 'N' || choose == 'n')
         {
             break;
         }
-        default:
+        else
         {
-            std::cout << "Invalid input" << std::endl;
-            return -1;
+            std::cout << "Invalid input, please enter Y or N." << std::endl;
         }
-
     }
     
     

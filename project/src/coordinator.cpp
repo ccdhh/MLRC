@@ -4244,8 +4244,32 @@ grpc::Status CoordinatorImpl::mergeStripes(
   Stripe &stripe_b = m_stripe_table[stripe_id_b];
   int k = stripe_a.k;
   int r = stripe_a.r;
+  if (stripe_b.k != k || stripe_b.r != r) {
+    reply->set_success(false);
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "merge requires two stripes with same pre-merge k and r");
+  }
+  if (stripe_b.N != stripe_a.N || stripe_b.num_arry != stripe_a.num_arry) {
+    reply->set_success(false);
+    return grpc::Status(
+        grpc::StatusCode::INVALID_ARGUMENT,
+        "merge requires two stripes with same OA merge metadata (N and num_arry)");
+  }
   int block_size = m_sys_config->BlockSize;
   int new_k = 2 * k;  //新的数据块是原数据块的2倍
+
+  if (stripe_a.N <= 0) {
+    reply->set_success(false);
+    return grpc::Status(grpc::StatusCode::FAILED_PRECONDITION,
+                        "invalid stripe metadata: N must be positive for multi-round merge");
+  }
+  if (merge_round < 1 || merge_round > stripe_a.N) {
+    reply->set_success(false);
+    return grpc::Status(
+        grpc::StatusCode::INVALID_ARGUMENT,
+        "merge_round out of range, expected [1, N], got: " +
+            std::to_string(merge_round) + ", N=" + std::to_string(stripe_a.N));
+  }
 
   int new_stripe_id = request->new_stripe_id();
   // IMPORTANT:
@@ -4261,6 +4285,18 @@ grpc::Status CoordinatorImpl::mergeStripes(
   new_stripe.n = new_k + r;
   new_stripe.l = stripe_a.l;
   new_stripe.g_m = stripe_a.g_m;
+  // Keep OA placement metadata for next-round merge.
+  new_stripe.N = stripe_a.N;
+  new_stripe.num_arry = stripe_a.num_arry;
+  new_stripe.oa1_row_idx = stripe_a.oa1_row_idx;
+  new_stripe.oa2_row_idx = stripe_a.oa2_row_idx;
+  new_stripe.oa1_used_cols = stripe_a.oa1_used_cols;
+  for (int col : stripe_b.oa1_used_cols) {
+    if (std::find(new_stripe.oa1_used_cols.begin(), new_stripe.oa1_used_cols.end(), col) ==
+        new_stripe.oa1_used_cols.end()) {
+      new_stripe.oa1_used_cols.push_back(col);
+    }
+  }
 
   // Required racks after merge: ceil((new_k + r) / r)
   int required_racks = (new_k + r + r - 1) / r; // 上面的公式的等价形式
@@ -4350,6 +4386,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
 
   // 如果需要新机架，通过 OA1 公式计算列号
   int new_rack_cluster = -1;
+  int new_oa1_col_0based = -1;
   if (occupied_rack_count < required_racks) {
     std::vector<std::vector<int>> OA_1_Merge = Get_OA_Information("OA_1.txt");
     int OA1_num_cols_merge = OA_1_Merge.empty() ? 0 : static_cast<int>(OA_1_Merge[0].size());
@@ -4368,6 +4405,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
                        + (new_stripe_id % exp_N_minus_i)
                        + 1;
     int new_col_0based = new_col_1based - 1;
+    new_oa1_col_0based = new_col_0based;
 
     if (oa1_row >= 0 && new_col_0based >= 0 && new_col_0based < OA1_num_cols_merge) {
       new_rack_cluster = (OA_1_Merge[oa1_row][new_col_0based] - 1) % m_sys_config->ClusterNum;
@@ -4482,7 +4520,8 @@ grpc::Status CoordinatorImpl::mergeStripes(
   }
 
   // Build parity merge tasks
-  // Coefficient for j-th parity (1-based): gf_pow(j, k)，k 是合并前条带的参数
+  // Coefficient for j-th parity (1-based): gf_pow(gf_pow(2, j), k)
+  // All arithmetic is in GF(2^8), and k is pre-merge stripe k.
   struct ParityMergeTask {
     std::string parity_key_a;
     std::string parity_key_b;
@@ -4619,6 +4658,27 @@ grpc::Status CoordinatorImpl::mergeStripes(
     new_stripe.blocks.push_back(pa);
     new_stripe.place2clusters.insert(pa->map2cluster);
   }
+
+  // Rebuild merged stripe grouping metadata for recovery/append paths.
+  if (new_oa1_col_0based >= 0 &&
+      std::find(new_stripe.oa1_used_cols.begin(), new_stripe.oa1_used_cols.end(),
+                new_oa1_col_0based) == new_stripe.oa1_used_cols.end()) {
+    new_stripe.oa1_used_cols.push_back(new_oa1_col_0based);
+  }
+  new_stripe.group_to_blocks.clear();
+  std::map<int, int> cluster_to_group;
+  int next_group_id = 0;
+  for (int bid = 0; bid < static_cast<int>(new_stripe.blocks.size()); ++bid) {
+    Block *blk = new_stripe.blocks[bid];
+    int cid = blk->map2cluster;
+    if (cluster_to_group.find(cid) == cluster_to_group.end()) {
+      cluster_to_group[cid] = next_group_id++;
+    }
+    int gid = cluster_to_group[cid];
+    blk->map2group = gid;
+    add_to_map(new_stripe.group_to_blocks, gid, bid);
+  }
+  new_stripe.num_groups = static_cast<int>(new_stripe.group_to_blocks.size());
 
   // Remove old stripes from table
   m_stripe_table.erase(stripe_id_a);
