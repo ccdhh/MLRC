@@ -83,6 +83,9 @@ namespace ECProject
     int n, r, z;
     int num_groups;
     std::map<int, std::vector<int>> group_to_blocks;
+    int oa1_row_idx = -1;
+    std::vector<int> oa1_used_cols;
+    int oa2_row_idx = -1;
   } Stripe;
 
   typedef struct ObjectInfo

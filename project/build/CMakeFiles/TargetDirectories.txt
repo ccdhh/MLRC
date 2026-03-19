@@ -1,0 +1,6 @@
+/users/qiliang/UniLRC/project/build/CMakeFiles/run_coordinator.dir
+/users/qiliang/UniLRC/project/build/CMakeFiles/run_proxy.dir
+/users/qiliang/UniLRC/project/build/CMakeFiles/run_datanode.dir
+/users/qiliang/UniLRC/project/build/CMakeFiles/main_client.dir
+/users/qiliang/UniLRC/project/build/CMakeFiles/edit_cache.dir
+/users/qiliang/UniLRC/project/build/CMakeFiles/rebuild_cache.dir

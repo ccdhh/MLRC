@@ -903,7 +903,7 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "\001 \001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010clientip\030\003 \001("
   "\t\022\022\n\nclientport\030\004 \001(\005\022\021\n\tblock_ids\030\005 \003(\005"
   "\022\022\n\nblock_keys\030\006 \003(\t\022\023\n\013datanodeips\030\007 \003("
-  "\t\022\025\n\rdatanodeports\030\010 \003(\0052\307\t\n\014proxyServic"
+  "\t\022\025\n\rdatanodeports\030\010 \003(\0052\223\n\n\014proxyServic"
   "e\022D\n\ncheckalive\022\032.proxy_proto.Checkalive"
   "CMD\032\032.proxy_proto.RequestResult\022L\n\022encod"
   "eAndSetObject\022\037.proxy_proto.ObjectAndPla"
@@ -932,13 +932,15 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "ck\022\031.proxy_proto.NodeAndBlock\032\025.proxy_pr"
   "oto.DelReply\022X\n\027scheduleAppend2Datanode\022"
   "&.proxy_proto.AppendStripeDataPlacement\032"
-  "\025.proxy_proto.SetReply\022B\n\tgetBlocks\022\036.pr"
-  "oxy_proto.StripeAndBlockIDs\032\025.proxy_prot"
-  "o.GetReplyb\006proto3"
+  "\025.proxy_proto.SetReply\022J\n\rrelocateBlock\022"
+  "\033.proxy_proto.blockRelocPlan\032\034.proxy_pro"
+  "to.blockRelocReply\022B\n\tgetBlocks\022\036.proxy_"
+  "proto.StripeAndBlockIDs\032\025.proxy_proto.Ge"
+  "tReplyb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_proxy_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_proxy_2eproto = {
-    false, false, 4898, descriptor_table_protodef_proxy_2eproto,
+    false, false, 4974, descriptor_table_protodef_proxy_2eproto,
     "proxy.proto",
     &descriptor_table_proxy_2eproto_once, nullptr, 0, 23,
     schemas, file_default_instances, TableStruct_proxy_2eproto::offsets,

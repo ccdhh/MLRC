@@ -4,6 +4,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <cstdlib>
 #include "config.h"
 #include <iomanip>
 #include <iostream>
@@ -24,9 +25,21 @@ int main(int argc, char **argv)
 
     const ECProject::Config *config = ECProject::Config::getInstance(sys_config_path);
 
+    std::string coordinator_addr = config->CoordinatorIP + ":" + std::to_string(config->CoordinatorPort);
+    if (argc >= 2) {
+        coordinator_addr = argv[1];
+        std::cout << "Using coordinator address (from argv): " << coordinator_addr << std::endl;
+    } else {
+        const char *env_addr = std::getenv("COORDINATOR_ADDR");
+        if (env_addr && env_addr[0] != '\0') {
+            coordinator_addr = env_addr;
+            std::cout << "Using coordinator address (from COORDINATOR_ADDR): " << coordinator_addr << std::endl;
+        }
+    }
+
     std::string client_ip = "10.10.1.1";
-    int client_port = 44444;
-    ECProject::Client client(client_ip, client_port, config->CoordinatorIP + ":" + std::to_string(config->CoordinatorPort), sys_config_path);
+    int client_port = 55555;
+    ECProject::Client client(client_ip, client_port, coordinator_addr, sys_config_path);
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
     std::vector<int> parameters = client.get_parameters();
@@ -87,64 +100,66 @@ int main(int argc, char **argv)
         }
         default:
         {
-        }
-
-    }
-    
-    
-    
-    std::string output_file_name = "test_" + code_type + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
-    std::ofstream output_file(output_file_name);
-    if (!output_file.is_open())
-    {
-        std::cerr << "Error opening file: " << output_file_name << std::endl;
-        return 1;
-    }
-    freopen(output_file_name.c_str(), "w", stdout);
-    std::mt19937 rng(std::random_device{}());
-
-    std::uniform_int_distribution<int> dist_500(0, k*stripe_num - 500);
-    std::uniform_real_distribution<double> dist_double(0.0, 1.0);
-    
-    std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ibm_test_trace.csv";
-    std::fstream trace_file(trace_file_path);
-    std::string trace_line;
-    while(std::getline(trace_file, trace_line)){
-        std::string operation;
-        int operation_size;
-        std::istringstream iss(trace_line);
-        std::getline(iss, operation, ',');
-        iss >> operation_size;
-        std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-        if(operation == "GET"){
-            int start_block_id = dist_500(rng);
-            client.get_blocks(start_block_id, start_block_id + operation_size - 1);
-        }
-        else if(operation == "PUT"){
-            client.sub_set(operation_size);
-        }
-        else if(operation=="MERGE")
-        {
-             // 1) 选择要读的“部分块”（数据块+校验块）
-            auto ids = pick_some_data_and_parity_blocks(...);
-
-             // 2) 读取这些块的数据
-            auto blocks = client.get_blocks_by_ids(ids);   // 需要你在 Client 新增这个接口
-
-             // 3) 合并算法
-            auto merged = merge_algorithm(blocks);
-
-             // 4) 写回（覆盖写 or 写到新块再切元数据）
-            client.put_blocks_by_ids(target_ids, merged);  // 需要你在 Client 新增写接口
-        }
-        else{
-            std::cerr << "Unknown operation: " << operation << std::endl;
+            std::cout << "Invalid input" << std::endl;
             return -1;
         }
-        std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        std::cout << operation << " operation time: " << time_span.count() << " seconds" << std::endl;
+
     }
+    
+    
+    
+    // std::string output_file_name = "test_" + code_type + "_" + std::to_string(k) + "_" + std::to_string(r) + "_" + std::to_string(z) + ".txt";
+    // std::ofstream output_file(output_file_name);
+    // if (!output_file.is_open())
+    // {
+    //     std::cerr << "Error opening file: " << output_file_name << std::endl;
+    //     return 1;
+    // }
+    // freopen(output_file_name.c_str(), "w", stdout);
+    // std::mt19937 rng(std::random_device{}());
+
+    // std::uniform_int_distribution<int> dist_500(0, k*stripe_num - 500);
+    // std::uniform_real_distribution<double> dist_double(0.0, 1.0);
+    
+    // std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ibm_test_trace.csv";
+    // std::fstream trace_file(trace_file_path);
+    // std::string trace_line;
+    // while(std::getline(trace_file, trace_line)){
+    //     std::string operation;
+    //     int operation_size;
+    //     std::istringstream iss(trace_line);
+    //     std::getline(iss, operation, ',');
+    //     iss >> operation_size;
+    //     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    //     if(operation == "GET"){
+    //         int start_block_id = dist_500(rng);
+    //         client.get_blocks(start_block_id, start_block_id + operation_size - 1);
+    //     }
+    //     else if(operation == "PUT"){
+    //         client.sub_set(operation_size);
+    //     }
+        // else if(operation=="MERGE")
+        // {
+        //      // 1) 选择要读的“部分块”（数据块+校验块）
+        //     auto ids = pick_some_data_and_parity_blocks(...);
+
+        //      // 2) 读取这些块的数据
+        //     auto blocks = client.get_blocks_by_ids(ids);   // 需要你在 Client 新增这个接口
+
+        //      // 3) 合并算法
+        //     auto merged = merge_algorithm(blocks);
+
+        //      // 4) 写回（覆盖写 or 写到新块再切元数据）
+        //     client.put_blocks_by_ids(target_ids, merged);  // 需要你在 Client 新增写接口
+        // }
+    //     else{
+    //         std::cerr << "Unknown operation: " << operation << std::endl;
+    //         return -1;
+    //     }
+    //     std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    //     std::cout << operation << " operation time: " << time_span.count() << " seconds" << std::endl;
+    // // }
 
     /*std::string trace_file_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../../trace/ycsb_final.txt";
     std::fstream trace_file(trace_file_path);
@@ -173,65 +188,65 @@ int main(int argc, char **argv)
 
     
     //for read test
-    std::cout << "Normal read test start" << std::endl;
-    std::vector<std::chrono::duration<double>> read_time_spans;
-    for(int i = 0; i < 5; i++){
-        size_t data_size;
-        int id = i;
-        std::string key = std::to_string(id);
-        std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-        std::shared_ptr<char[]> data = client.get(key, data_size);
-        if(!data){
-            std::cout << "Get operation failed" << std::endl;
-            continue;
-        }
-        std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        read_time_spans.push_back(time_span);
-        //std::cout << "get time: " << time_span.count() << std::endl;
-    }
-    std::chrono::duration<double> read_total_time_span = std::accumulate(read_time_spans.begin(), read_time_spans.end(), std::chrono::duration<double>(0));
-    std::cout << "Total time: " << read_total_time_span.count() << std::endl;
-    std::cout << "Average time: " << read_total_time_span.count() / read_time_spans.size() << std::endl;
-    std::cout << "Throughput: " << read_time_spans.size() / read_total_time_span.count() << std::endl;
-    std::cout << "Speed" << static_cast<size_t>(block_size) * k / (read_total_time_span.count() / read_time_spans.size()) << "MB/s" << std::endl;
-    std::chrono::duration<double> read_max_time_span = *std::max_element(read_time_spans.begin(), read_time_spans.end());
-    std::chrono::duration<double> read_min_time_span = *std::min_element(read_time_spans.begin(), read_time_spans.end());
-    std::cout << "Max speed: " << static_cast<size_t>(block_size) * k / read_min_time_span.count() << "MB/s" << std::endl;
-    std::cout << "Min speed: " << static_cast<size_t>(block_size) * k / read_max_time_span.count() << "MB/s" << std::endl;
-    std::cout << "Normal read test end" << std::endl;
-    std::cout << std::endl;
+    // std::cout << "Normal read test start" << std::endl;
+    // std::vector<std::chrono::duration<double>> read_time_spans;
+    // for(int i = 0; i < 5; i++){
+    //     size_t data_size;
+    //     int id = i;
+    //     std::string key = std::to_string(id);
+    //     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    //     std::shared_ptr<char[]> data = client.get(key, data_size);
+    //     if(!data){
+    //         std::cout << "Get operation failed" << std::endl;
+    //         continue;
+    //     }
+    //     std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    //     read_time_spans.push_back(time_span);
+    //     //std::cout << "get time: " << time_span.count() << std::endl;
+    // }
+    // std::chrono::duration<double> read_total_time_span = std::accumulate(read_time_spans.begin(), read_time_spans.end(), std::chrono::duration<double>(0));
+    // std::cout << "Total time: " << read_total_time_span.count() << std::endl;
+    // std::cout << "Average time: " << read_total_time_span.count() / read_time_spans.size() << std::endl;
+    // std::cout << "Throughput: " << read_time_spans.size() / read_total_time_span.count() << std::endl;
+    // std::cout << "Speed" << static_cast<size_t>(block_size) * k / (read_total_time_span.count() / read_time_spans.size()) << "MB/s" << std::endl;
+    // std::chrono::duration<double> read_max_time_span = *std::max_element(read_time_spans.begin(), read_time_spans.end());
+    // std::chrono::duration<double> read_min_time_span = *std::min_element(read_time_spans.begin(), read_time_spans.end());
+    // std::cout << "Max speed: " << static_cast<size_t>(block_size) * k / read_min_time_span.count() << "MB/s" << std::endl;
+    // std::cout << "Min speed: " << static_cast<size_t>(block_size) * k / read_max_time_span.count() << "MB/s" << std::endl;
+    // std::cout << "Normal read test end" << std::endl;
+    // std::cout << std::endl;
     
-    //for degraded read test
-    std::vector<std::chrono::duration<double>> degraded_read_time_spans;
-    std::cout << "Degraded read test start" << std::endl;
-    for(int i = 0; i < k; i++){
-        size_t data_size;
-        int id = i;
-        std::string key = std::to_string(id);
-        std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-        std::shared_ptr<char[]> data = client.get_degraded_read_block(0, i);
-        if(!data){
-            std::cout << "Degraded read operation failed" << std::endl;
-            continue;
-        }
-        std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
-        degraded_read_time_spans.push_back(time_span);
-        //std::cout << "get time: " << time_span.count() << std::endl;
-    }
-    std::chrono::duration<double> degraded_read_total_time_span = std::accumulate(degraded_read_time_spans.begin(), degraded_read_time_spans.end(), std::chrono::duration<double>(0));
-    std::cout << "Average time: " << degraded_read_total_time_span.count() / degraded_read_time_spans.size() << std::endl;
-    std::chrono::duration<double> degraded_read_max_time_span = *std::max_element(degraded_read_time_spans.begin(), degraded_read_time_spans.end());
-    std::chrono::duration<double> degraded_read_min_time_span = *std::min_element(degraded_read_time_spans.begin(), degraded_read_time_spans.end());
-    std::cout << "Max time: "<< degraded_read_max_time_span.count() << std::endl;
-    std::cout << "Min time: "<< degraded_read_min_time_span.count() << std::endl;
-    std::cout << "Throughput: " << degraded_read_time_spans.size() / degraded_read_total_time_span.count() << std::endl;
-    std::cout << "Speed" << static_cast<size_t>(block_size)  / (degraded_read_total_time_span.count() / degraded_read_time_spans.size()) << "MB/s" << std::endl;
-    std::cout << "Max speed: " << static_cast<size_t>(block_size)  / degraded_read_min_time_span.count() << "MB/s" << std::endl;
-    std::cout << "Min speed: " << static_cast<size_t>(block_size)  / degraded_read_max_time_span.count() << "MB/s" << std::endl;
-    std::cout << "Degraded read test end" << std::endl;
-    std::cout << std::endl;
+    // //for degraded read test
+    // std::vector<std::chrono::duration<double>> degraded_read_time_spans;
+    // std::cout << "Degraded read test start" << std::endl;
+    // for(int i = 0; i < k; i++){
+    //     size_t data_size;
+    //     int id = i;
+    //     std::string key = std::to_string(id);
+    //     std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+    //     std::shared_ptr<char[]> data = client.get_degraded_read_block(0, i);
+    //     if(!data){
+    //         std::cout << "Degraded read operation failed" << std::endl;
+    //         continue;
+    //     }
+    //     std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double> time_span = std::chrono::duration_cast<std::chrono::duration<double>>(t2 - t1);
+    //     degraded_read_time_spans.push_back(time_span);
+    //     //std::cout << "get time: " << time_span.count() << std::endl;
+    // }
+    // std::chrono::duration<double> degraded_read_total_time_span = std::accumulate(degraded_read_time_spans.begin(), degraded_read_time_spans.end(), std::chrono::duration<double>(0));
+    // std::cout << "Average time: " << degraded_read_total_time_span.count() / degraded_read_time_spans.size() << std::endl;
+    // std::chrono::duration<double> degraded_read_max_time_span = *std::max_element(degraded_read_time_spans.begin(), degraded_read_time_spans.end());
+    // std::chrono::duration<double> degraded_read_min_time_span = *std::min_element(degraded_read_time_spans.begin(), degraded_read_time_spans.end());
+    // std::cout << "Max time: "<< degraded_read_max_time_span.count() << std::endl;
+    // std::cout << "Min time: "<< degraded_read_min_time_span.count() << std::endl;
+    // std::cout << "Throughput: " << degraded_read_time_spans.size() / degraded_read_total_time_span.count() << std::endl;
+    // std::cout << "Speed" << static_cast<size_t>(block_size)  / (degraded_read_total_time_span.count() / degraded_read_time_spans.size()) << "MB/s" << std::endl;
+    // std::cout << "Max speed: " << static_cast<size_t>(block_size)  / degraded_read_min_time_span.count() << "MB/s" << std::endl;
+    // std::cout << "Min speed: " << static_cast<size_t>(block_size)  / degraded_read_max_time_span.count() << "MB/s" << std::endl;
+    // std::cout << "Degraded read test end" << std::endl;
+    // std::cout << std::endl;
     
     //for single block recovery
     /*

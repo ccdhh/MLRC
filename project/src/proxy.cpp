@@ -2516,6 +2516,53 @@ namespace ECProject
 
     return grpc::Status::OK;
   }
+  grpc::Status ProxyImpl::relocateBlock(
+      grpc::ServerContext *context,
+      const proxy_proto::blockRelocPlan *plan,
+      proxy_proto::blockRelocReply *response)
+  {
+    int block_size = plan->block_size();
+    int num_blocks = plan->blocktomove_size();
+    bool all_ok = true;
+
+    for (int i = 0; i < num_blocks; i++) {
+      std::string block_key = plan->blocktomove(i);
+      std::string from_ip = plan->fromdatanodeip(i);
+      int from_port = plan->fromdatanodeport(i);
+      std::string to_ip = plan->todatanodeip(i);
+      int to_port = plan->todatanodeport(i);
+
+      std::unique_ptr<char[]> buf(new char[block_size]);
+
+      bool get_ok = GetFromDatanode(block_key, buf.get(), block_size, from_ip.c_str(), from_port);
+      if (!get_ok) {
+        std::cerr << "[Proxy" << m_self_cluster_id << "][Relocate] failed to read " << block_key
+                  << " from " << from_ip << ":" << from_port << std::endl;
+        all_ok = false;
+        continue;
+      }
+
+      bool set_ok = SetToDatanode(block_key.c_str(), block_key.size(),
+                                  buf.get(), block_size,
+                                  to_ip.c_str(), to_port, 0);
+      if (!set_ok) {
+        std::cerr << "[Proxy" << m_self_cluster_id << "][Relocate] failed to write " << block_key
+                  << " to " << to_ip << ":" << to_port << std::endl;
+        all_ok = false;
+        continue;
+      }
+
+      DelInDatanode(block_key, from_ip + ":" + std::to_string(from_port));
+
+      std::cout << "[Proxy" << m_self_cluster_id << "][Relocate] moved " << block_key
+                << " from " << from_ip << ":" << from_port
+                << " to " << to_ip << ":" << to_port << std::endl;
+    }
+
+    response->set_result(all_ok ? "ok" : "partial_failure");
+    return grpc::Status::OK;
+  }
+
   // delete
   grpc::Status ProxyImpl::deleteBlock(
       grpc::ServerContext *context,

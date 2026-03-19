@@ -1,40 +1,53 @@
 cmake_minimum_required(VERSION 3.22)
 project(project)
 
-# 启用汇编语言支持（NASM）
-enable_language(ASM_NASM)
+option(ENABLE_AVX2_ASM "Enable AVX2 NASM acceleration (may SIGILL on older CPUs)" OFF)
 
-set(CMAKE_ASM_NASM_SOURCE_FILE_EXTENSIONS asm)  # 识别 .asm 文件
-set(CMAKE_ASM_NASM_COMPILER "/usr/bin/nasm")              # 指定 NASM 汇编器
-set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
-set(CMAKE_ASM_NASM_COMPILE_OBJECT "<CMAKE_ASM_NASM_COMPILER> <INCLUDES> <FLAGS> -f elf64 -o <OBJECT> <SOURCE>")
-set(CMAKE_ASM_NASM_OUTPUT_EXTENSION .o)  
-# 设置 NASM 编译选项时添加包含路径
-set(CMAKE_ASM_NASM_FLAGS "-f elf64 -I${CMAKE_CURRENT_SOURCE_DIR}/src/asm")
+set(ASM_SOURCES "")
+if(ENABLE_AVX2_ASM)
+  # Enable assembly language support (NASM)
+  enable_language(ASM_NASM)
 
-set(ASM_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/reg_sizes.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_2vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_3vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_4vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_5vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_6vect_dot_prod_avx2.asm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/xor_gen_avx.asm
-)
+  set(CMAKE_ASM_NASM_SOURCE_FILE_EXTENSIONS asm)  # recognize .asm files
+  set(CMAKE_ASM_NASM_COMPILER "/usr/bin/nasm")    # specify NASM
+  set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
+  set(CMAKE_ASM_NASM_COMPILE_OBJECT "<CMAKE_ASM_NASM_COMPILER> <INCLUDES> <FLAGS> -f elf64 -o <OBJECT> <SOURCE>")
+  set(CMAKE_ASM_NASM_OUTPUT_EXTENSION .o)
+  # Include path for NASM
+  set(CMAKE_ASM_NASM_FLAGS "-f elf64 -I${CMAKE_CURRENT_SOURCE_DIR}/src/asm")
 
-# 标记为 NASM 汇编文件
-set_source_files_properties(
-    ${ASM_SOURCES}
-    PROPERTIES
-    LANGUAGE ASM_NASM
-)
+  set(ASM_SOURCES
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/reg_sizes.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_2vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_3vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_4vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_5vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/gf_6vect_dot_prod_avx2.asm
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/asm/xor_gen_avx.asm
+  )
+
+  set_source_files_properties(
+      ${ASM_SOURCES}
+      PROPERTIES
+      LANGUAGE ASM_NASM
+  )
+
+  foreach(_t run_coordinator run_proxy run_datanode main_client)
+    # Only defined for compilation units (not protobuf-generated)
+    add_compile_definitions(ENABLE_AVX2_ASM)
+  endforeach()
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "-gdwarf-4 -gstrict-dwarf -g -Wall -std=c++17 -DASIO_STANDALONE -O3 -funroll-loops -fdata-sections -ffunction-sections")
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-loops -ftree-vectorize -march=native")
+    option(ENABLE_MARCH_NATIVE "Enable -march=native (may break portability)" OFF)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -funroll-loops -ftree-vectorize")
+    if(ENABLE_MARCH_NATIVE)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+    endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -unroll -qopt-report -xHost")
 endif()

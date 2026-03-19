@@ -144,23 +144,27 @@ namespace ECProject
   }
   int Config::get_N()
   {
-    int N = 1;
-    while (true)
+    // Find the maximum N such that ceil(((2^N * k) + r) / r) fits in ClusterNum.
+    // If ClusterNum is too small, return 0 to avoid infinite loop.
+    if (ClusterNum <= 0 || r <= 0) return 0;
+    for (int N = 0; N < 32; N++)
     {
-      int temp_num_1 = std::ceil(((std::pow(2, N) * k) + r) / r);
-      int temp_num_2 = std::ceil(((std::pow(2, N + 1) * k) + r) / r);
+      int temp_num_1 = static_cast<int>(std::ceil(((std::pow(2.0, N) * k) + r) / static_cast<double>(r)));
+      int temp_num_2 = static_cast<int>(std::ceil(((std::pow(2.0, N + 1) * k) + r) / static_cast<double>(r)));
       if (temp_num_1 <= ClusterNum && temp_num_2 > ClusterNum)
       {
         return N;
       }
-      N++;
     }
+    return 0;
   }
   void Config::get_num_arry()
   {
-    for (int i = 1; i <=N; i++)
+    this->num_arry.clear();
+    for (int i = 1; i <= N; i++)
     {
-      int temp_num = (std::ceil((std::pow(2, i - 1) * k + r) / r) * 2) - std::ceil((std::pow(2, i) * k + r) / r);
+      int temp_num = (static_cast<int>(std::ceil((std::pow(2.0, i - 1) * k + r) / static_cast<double>(r))) * 2) -
+                     static_cast<int>(std::ceil((std::pow(2.0, i) * k + r) / static_cast<double>(r)));
       int L = static_cast<int>(temp_num);
       this->num_arry.push_back(L);
     }

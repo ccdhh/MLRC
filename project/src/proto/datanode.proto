@@ -34,6 +34,8 @@ service datanodeService {
   // get
   rpc handleGet(GetInfo) returns(RequestResult);
   rpc handleGetBreakdown(GetInfo) returns(RequestResult);
+  // stripe-level parity merge (local)
+  rpc handleStripeMergeParity(StripeMergeParityInfo) returns(RequestResult);
   // delete
   rpc handleDelete(DelInfo) returns(RequestResult);
 }
@@ -80,6 +82,14 @@ message GetInfo {
     int32 block_id = 3;
     string proxy_ip = 4;
     int32 proxy_port = 5;
+}
+
+message StripeMergeParityInfo {
+    string parity_key_a = 1;
+    string parity_key_b = 2;
+    string new_parity_key = 3;
+    int32 block_size = 4;
+    int32 gf_coeff = 5;
 }
 
 message DelInfo {

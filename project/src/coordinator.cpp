@@ -1,4 +1,5 @@
 #include "coordinator.h"
+#include "datanode.grpc.pb.h"
 #include "lrc.h"
 #include "meta_definition.h"
 #include "tinyxml2.h"
@@ -359,6 +360,7 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
     // OA2 行（两种 case 共用）
     int OA2_row_index = static_cast<int>(floor(stripe->stripe_id / (std::pow(2, stripe->N)))) % OA2_row_num;
     if (OA2_row_index < 0) OA2_row_index += OA2_row_num;
+    stripe->oa2_row_idx = OA2_row_index;
 
     auto resolve_node = [&](int cluster_id, int node_idx_in_cluster) -> int {
       if (cluster_id < 0 || cluster_id >= m_sys_config->ClusterNum || m_cluster_table[cluster_id].nodes.empty())
@@ -368,10 +370,16 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
       return m_cluster_table[cluster_id].nodes[node_idx_in_cluster];
     };
 
-    if (stripe->num_arry.empty() || stripe->num_arry[0] == 1) {
+    // For RS with small r (e.g. r=2), the num_arry[0]==2 placement path uses (r-2)
+    // and would cause division/modulo by zero. Force fallback to the safe case1 logic.
+    if (stripe->num_arry.empty() || stripe->num_arry[0] == 1 || r <= 2) {
     // ========== num_arry[0]==1：校验块一组，机架 = OA1 第 OA1_row 行、第一列 ==========
     int parity_cluster = (OA_1_Information[OA1_row - 1][0] - 1) % m_sys_config->ClusterNum; //减一是机架id从0开始
     if (parity_cluster < 0) parity_cluster += m_sys_config->ClusterNum;
+
+    stripe->oa1_row_idx = OA1_row - 1;
+    stripe->oa1_used_cols.clear();
+    stripe->oa1_used_cols.push_back(0);
 
     // 数据块分组数量与每组大小（由 initial_list 奇偶决定）
     int num_data_groups;//定义数据组
@@ -461,6 +469,10 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
         }
         int oa1_col = (list_num_rs - 1 + data_group_id) % OA1_num_cols;
         if (oa1_col < 0) oa1_col += OA1_num_cols;
+        if (std::find(stripe->oa1_used_cols.begin(), stripe->oa1_used_cols.end(), oa1_col)
+            == stripe->oa1_used_cols.end()) {
+          stripe->oa1_used_cols.push_back(oa1_col);
+        }
         int cluster_id = (OA_1_Information[OA1_row - 1][oa1_col] - 1) % m_sys_config->ClusterNum;
         if (cluster_id < 0) cluster_id += m_sys_config->ClusterNum;
         blocks_info[i].map2cluster = cluster_id;
@@ -494,6 +506,10 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
     // 第一组：2 校验 + (r-3) 数据 → OA1 第 1 列机架
     // 第二组：(r-2) 校验 + 1 数据 → OA1 第 2 列机架
     // 剩余数据：前(r-b-2)组每组 r-1 块，后面每组 r 块，从 list_num_rs 列起
+    stripe->oa1_row_idx = OA1_row - 1;
+    stripe->oa1_used_cols.clear();
+    stripe->oa1_used_cols.push_back(0);
+    stripe->oa1_used_cols.push_back(1);
     int cluster_1 = (OA_1_Information[OA1_row - 1][0] - 1) % m_sys_config->ClusterNum;
     if (cluster_1 < 0) cluster_1 += m_sys_config->ClusterNum;
     int cluster_2 = (OA_1_Information[OA1_row - 1][1] - 1) % m_sys_config->ClusterNum;
@@ -567,6 +583,10 @@ void CoordinatorImpl::initialize_equiox_stripe_placement(Stripe *stripe) {
         }
         int oa1_col = (list_num_rs - 1 + (map2grp - 2)) % OA1_num_cols;//对应第几列
         if (oa1_col < 0) oa1_col += OA1_num_cols;
+        if (std::find(stripe->oa1_used_cols.begin(), stripe->oa1_used_cols.end(), oa1_col)
+            == stripe->oa1_used_cols.end()) {
+          stripe->oa1_used_cols.push_back(oa1_col);
+        }
         cluster_id = (OA_1_Information[OA1_row - 1][oa1_col] - 1) % m_sys_config->ClusterNum;
         if (cluster_id < 0) cluster_id += m_sys_config->ClusterNum;
         std::string tmp = (i < 10) ? "_D0" : "_D";
@@ -919,13 +939,18 @@ CoordinatorImpl::generateAppendPlan(Stripe *stripe, int curr_logical_offset,
   return append_plans;
 }
 
-void CoordinatorImpl::notify_proxies_ready(
+bool CoordinatorImpl::notify_proxies_ready(
     const proxy_proto::AppendStripeDataPlacement &plan) {
   grpc::ClientContext cont;
   proxy_proto::SetReply set_reply;
   std::string chosen_proxy =
       m_cluster_table[plan.cluster_id()].proxy_ip + ":" +
       std::to_string(m_cluster_table[plan.cluster_id()].proxy_port);
+  if (m_proxy_ptrs.find(chosen_proxy) == m_proxy_ptrs.end() ||
+      !m_proxy_ptrs[chosen_proxy]) {
+    std::cout << "[APPEND434] Proxy not found: " << chosen_proxy << std::endl;
+    return false;
+  }
   grpc::Status status = m_proxy_ptrs[chosen_proxy]->scheduleAppend2Datanode(
       &cont, plan, &set_reply);
   if (status.ok()) {
@@ -933,10 +958,11 @@ void CoordinatorImpl::notify_proxies_ready(
     m_object_updating_table[plan.key()] =
         ObjectInfo(plan.append_size(), plan.stripe_id());
     m_mutex.unlock();
-  } else {
-    std::cout << "[APPEND434] Send append plan" << plan.key() << " failed! "
-              << std::endl;
+    return true;
   }
+  std::cout << "[APPEND434] Send append plan " << plan.key() << " to "
+            << chosen_proxy << " failed: " << status.error_message() << std::endl;
+  return false;
 }
 
 // Only processing the appending within a single stripe
@@ -1125,69 +1151,96 @@ grpc::Status CoordinatorImpl::uploadSetValue(
     grpc::ServerContext *context,
     const coordinator_proto::RequestProxyIPPort *keyValueSize,
     coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) {
+  (void)context;
   std::string clientID = keyValueSize->key();
   size_t setSizeBytes = keyValueSize->valuesizebytes();
   std::string code_type = m_sys_config->CodeType;
-  assert(setSizeBytes == static_cast<size_t>(m_sys_config->BlockSize) *
-                             static_cast<size_t>(m_sys_config->k) &&
-         "set size is not equal to the block stripe size!");
-  assert(
-      (code_type == "UniLRC" || code_type == "AzureLRC" ||
-       code_type == "OptimalLRC" || code_type == "UniformLRC" ||
-       code_type == "RS") &&
-      "Error: code type must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC!");
 
-  Stripe t_stripe;
-  t_stripe.stripe_id = m_cur_stripe_id++;
-  t_stripe.n = m_sys_config->n;
-  t_stripe.k = m_sys_config->k;
-  t_stripe.r = m_sys_config->r;
-  t_stripe.z = m_sys_config->z;
-  t_stripe.N = m_sys_config->N;
-  t_stripe.num_arry = m_sys_config->num_arry;
-  t_stripe.object_keys.push_back(clientID);
-  if (code_type == "UniLRC" || code_type == "AzureLRC") {
-    initialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);
-  } else if (code_type == "OptimalLRC") {
-    initialize_optimal_lrc_stripe_placement(&t_stripe);
-  } else if (code_type == "UniformLRC") {
-    initialize_uniform_lrc_stripe_placement(&t_stripe);
-  } else if (code_type == "RS") {
-    initialize_equiox_stripe_placement(&t_stripe);
+  size_t expected_size = static_cast<size_t>(m_sys_config->BlockSize) *
+                         static_cast<size_t>(m_sys_config->k);
+  if (setSizeBytes != expected_size) {
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "set size is not equal to the block stripe size! "
+                        "expected=" + std::to_string(expected_size) +
+                        " got=" + std::to_string(setSizeBytes));
+  }
+  if (code_type != "UniLRC" && code_type != "AzureLRC" &&
+      code_type != "OptimalLRC" && code_type != "UniformLRC" &&
+      code_type != "RS") {
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "code type must be UniLRC, AzureLRC, OptimalLRC, "
+                        "UniformLRC, or RS; got: " + code_type);
   }
 
-  print_stripe_data_placement(t_stripe);
+  try {
+    Stripe t_stripe;
+    t_stripe.stripe_id = m_cur_stripe_id++;
+    t_stripe.n = m_sys_config->n;
+    t_stripe.k = m_sys_config->k;
+    t_stripe.r = m_sys_config->r;
+    t_stripe.z = m_sys_config->z;
+    t_stripe.N = m_sys_config->N;
+    t_stripe.num_arry = m_sys_config->num_arry;
+    t_stripe.object_keys.push_back(clientID);
+    if (code_type == "UniLRC" || code_type == "AzureLRC") {
+      initialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);
+    } else if (code_type == "OptimalLRC") {
+      initialize_optimal_lrc_stripe_placement(&t_stripe);
+    } else if (code_type == "UniformLRC") {
+      initialize_uniform_lrc_stripe_placement(&t_stripe);
+    } else if (code_type == "RS") {
+      initialize_equiox_stripe_placement(&t_stripe);
+    }
 
-  std::vector<proxy_proto::AppendStripeDataPlacement> add_plans =
-      generate_add_plans(&t_stripe);
+    print_stripe_data_placement(t_stripe);
 
-  for (const auto &plan : add_plans) {
-    m_mutex.lock();
-    m_object_commit_table.erase(plan.key());
-    m_mutex.unlock();
+    std::vector<proxy_proto::AppendStripeDataPlacement> add_plans =
+        generate_add_plans(&t_stripe);
+
+    if (add_plans.empty()) {
+      return grpc::Status(grpc::StatusCode::INTERNAL,
+                          "generate_add_plans returned no plans for stripe (RS placement or num_groups may be wrong)");
+    }
+
+    for (const auto &plan : add_plans) {
+      m_mutex.lock();
+      m_object_commit_table.erase(plan.key());
+      m_mutex.unlock();
+    }
+
+    std::vector<std::thread> threads;
+    std::vector<bool> proxy_ok(add_plans.size(), false);
+    size_t sum_append_size = 0;
+    for (size_t i = 0; i < add_plans.size(); i++) {
+      const auto &plan = add_plans[i];
+      threads.push_back(std::thread([this, plan, &proxy_ok, i]() {
+        proxy_ok[i] = notify_proxies_ready(plan);
+      }));
+      proxyIPPort->add_append_keys(plan.key());
+      proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
+      proxyIPPort->add_proxyports(
+          m_cluster_table[plan.cluster_id()].proxy_port +
+          ECProject::PROXY_PORT_SHIFT); // use another port to accept data
+      proxyIPPort->add_cluster_slice_sizes(plan.append_size());
+      sum_append_size += plan.append_size();
+    }
+    for (auto &thread : threads) {
+      thread.join();
+    }
+    bool all_proxy_ok = std::all_of(proxy_ok.begin(), proxy_ok.end(), [](bool b) { return b; });
+    if (!all_proxy_ok) {
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                          "one or more proxies failed to accept placement plan (check proxy reachability and scheduleAppend2Datanode)");
+    }
+    proxyIPPort->set_sum_append_size(sum_append_size);
+
+    m_stripe_table[t_stripe.stripe_id] = std::move(t_stripe);
+
+    return grpc::Status::OK;
+  } catch (const std::exception &e) {
+    return grpc::Status(grpc::StatusCode::INTERNAL,
+                        std::string("uploadSetValue failed: ") + e.what());
   }
-
-  std::vector<std::thread> threads;
-  size_t sum_append_size = 0;
-  for (const auto &plan : add_plans) {
-    threads.push_back(
-        std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
-    proxyIPPort->add_append_keys(plan.key());
-    proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
-    proxyIPPort->add_proxyports(
-        m_cluster_table[plan.cluster_id()].proxy_port +
-        ECProject::PROXY_PORT_SHIFT); // use another port to accept data
-    proxyIPPort->add_cluster_slice_sizes(plan.append_size());
-    sum_append_size += plan.append_size();
-  }
-  for (auto &thread : threads) {
-    thread.join();
-  }
-  proxyIPPort->set_sum_append_size(sum_append_size);
-
-  m_stripe_table[t_stripe.stripe_id] = std::move(t_stripe);
-
-  return grpc::Status::OK;
 }
 
 grpc::Status CoordinatorImpl::uploadSubsetValue(
@@ -1655,6 +1708,17 @@ grpc::Status CoordinatorImpl::getBlocks(
     thread.join();
   }
   return grpc::Status::OK;
+}
+
+grpc::Status CoordinatorImpl::getBlocksByStripePos(
+    grpc::ServerContext *context,
+    const coordinator_proto::StripePosListAndClient *req,
+    coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) {
+  (void)context;
+  (void)req;
+  (void)proxyIPPort;
+  return grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
+                      "getBlocksByStripePos not implemented");
 }
 
 grpc::Status CoordinatorImpl::getDegradedReadBlocks(
@@ -3167,6 +3231,7 @@ grpc::Status CoordinatorImpl::multiBlockRecovery(
       decode_factors_split_for_proxies[index].push_back(decode_factors[i][0]);
     }
   }
+  return grpc::Status::OK;
 }
 
 grpc::Status
@@ -3550,10 +3615,13 @@ int CoordinatorImpl::randomly_select_a_node(int cluster_id, int stripe_id) {
 
 void CoordinatorImpl::update_stripe_info_in_node(int t_node_id, int stripe_id,
                                                  int index) {
-  assert(m_node_table[t_node_id].stripes.find(stripe_id) ==
-             m_node_table[t_node_id].stripes.end() &&
-         "The node has been selected for the stripe");
-  m_node_table[t_node_id].stripes[stripe_id] = index;
+  // In some placement schemes (especially under constrained configs),
+  // a node may be selected multiple times for the same stripe. This should not
+  // crash the coordinator; record the first index and keep going.
+  auto &stripe_map = m_node_table[t_node_id].stripes;
+  if (stripe_map.find(stripe_id) == stripe_map.end()) {
+    stripe_map[stripe_id] = index;
+  }
 }
 
 // maintain the block number of the stripe in the node
@@ -4113,9 +4181,33 @@ bool CoordinatorImpl::find_block(char type, int cluster_id, int stripe_id) {
 std::vector<std::vector<int>>
 CoordinatorImpl::Get_OA_Information(const std::string &filename) {
   std::vector<std::vector<int>> matrix;
-  std::ifstream infile(filename);
+  std::vector<std::string> candidates;
+  candidates.reserve(6);
+  candidates.push_back(filename);
+  // Common run locations:
+  // - build dir: project/build  -> ../src/OA_*.txt
+  // - repo root: UniLRC        -> project/src/OA_*.txt
+  // - project root: UniLRC/project -> src/OA_*.txt
+  candidates.push_back(std::string("../src/") + filename);
+  candidates.push_back(std::string("src/") + filename);
+  candidates.push_back(std::string("project/src/") + filename);
+  candidates.push_back(std::string("../project/src/") + filename);
+
+  std::ifstream infile;
+  std::string opened_path;
+  for (const auto &p : candidates) {
+    infile.open(p);
+    if (infile.is_open()) {
+      opened_path = p;
+      break;
+    }
+    infile.clear();
+  }
   if (!infile.is_open()) {
-    throw std::runtime_error("Cannot open file: " + filename);
+    std::string msg = "Cannot open file: " + filename + " (tried:";
+    for (const auto &p : candidates) msg += " " + p;
+    msg += " )";
+    throw std::runtime_error(msg);
   }
 
   std::string line;
@@ -4131,5 +4223,418 @@ CoordinatorImpl::Get_OA_Information(const std::string &filename) {
   }
 
   return matrix;
+}
+
+grpc::Status CoordinatorImpl::mergeStripes(
+    grpc::ServerContext *context,
+    const coordinator_proto::MergeRequest *request,
+    coordinator_proto::MergeReply *reply) {
+  int stripe_id_a = request->stripe_id_a();
+  int stripe_id_b = request->stripe_id_b();
+  int merge_round = request->merge_round();
+
+  if (m_stripe_table.find(stripe_id_a) == m_stripe_table.end() ||
+      m_stripe_table.find(stripe_id_b) == m_stripe_table.end()) {
+    reply->set_success(false);
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "stripe not found");
+  }  // 检查条带是否存在，如果不存在返回错误，终止grpc
+
+  Stripe &stripe_a = m_stripe_table[stripe_id_a];  //获取条带信息
+  Stripe &stripe_b = m_stripe_table[stripe_id_b];
+  int k = stripe_a.k;
+  int r = stripe_a.r;
+  int block_size = m_sys_config->BlockSize;
+  int new_k = 2 * k;  //新的数据块是原数据块的2倍
+
+  int new_stripe_id = request->new_stripe_id();
+  // IMPORTANT:
+  // Do NOT take a reference to `m_stripe_table[new_stripe_id]` here.
+  // If `new_stripe_id` equals `stripe_id_a` or `stripe_id_b`, it would alias
+  // `stripe_a/stripe_b` and corrupt their `blocks` vectors during metadata update.
+  // Build the merged stripe as a temporary object, then insert it at the end.
+  Stripe new_stripe;
+  new_stripe.stripe_id = new_stripe_id;
+  new_stripe.k = new_k;
+  new_stripe.r = r;
+  new_stripe.z = stripe_a.z;
+  new_stripe.n = new_k + r;
+  new_stripe.l = stripe_a.l;
+  new_stripe.g_m = stripe_a.g_m;
+
+  // Required racks after merge: ceil((new_k + r) / r)
+  int required_racks = (new_k + r + r - 1) / r; // 上面的公式的等价形式
+  // 日志输出
+  std::cout << "[Coordinator][Merge] merging stripe " << stripe_id_a
+            << " + " << stripe_id_b << " -> " << new_stripe_id
+            << " (round=" << merge_round << ", new_k=" << new_k
+            << ", r=" << r << ", racks_needed=" << required_racks << ")" << std::endl;
+
+  // ====== 收集块信息，统计每机架的总块数 ======
+  // 数据块：stripe_a [0..k-1], stripe_b [0..k-1]
+  // 校验块：合并后两个变一个，只算一份校验块的占位
+
+  // 每机架上的数据块
+  std::map<int, std::vector<Block*>> rack_to_data_blocks;
+  for (int i = 0; i < k; i++) {
+    rack_to_data_blocks[stripe_a.blocks[i]->map2cluster].push_back(stripe_a.blocks[i]);
+  }
+  for (int i = 0; i < k; i++) {
+    rack_to_data_blocks[stripe_b.blocks[i]->map2cluster].push_back(stripe_b.blocks[i]);
+  }
+
+  // 每机架上的校验块数（只算一份，取 stripe_a 的校验块位置）
+  std::map<int, int> rack_parity_count;
+  for (int j = 0; j < r; j++) {
+    int cid = stripe_a.blocks[k + j]->map2cluster;
+    rack_parity_count[cid]++;
+  }
+
+  // ====== 找出需要迁移的数据块 ======
+  struct MigrationTask {
+    Block *block;
+    int from_cluster;
+  };
+  std::vector<MigrationTask> migrations;
+
+  for (auto &[cid, data_blks] : rack_to_data_blocks) {
+    int parity_on_rack = rack_parity_count.count(cid) ? rack_parity_count[cid] : 0;
+    int total = static_cast<int>(data_blks.size()) + parity_on_rack;
+    int excess_count = total - r;
+    if (excess_count <= 0) continue;
+
+    // 优先迁移同节点冲突的数据块
+    // 统计每个节点上有几个数据块
+    std::map<int, std::vector<Block*>> node_to_blks;
+    for (Block *b : data_blks) {
+      node_to_blks[b->map2node].push_back(b);
+    }
+
+    std::vector<Block*> to_migrate;
+
+    // 第一轮：从同一节点有多个块的节点中挑出多余的
+    for (auto &[nid, nblks] : node_to_blks) {
+      while (nblks.size() > 1 && static_cast<int>(to_migrate.size()) < excess_count) {
+        to_migrate.push_back(nblks.back());
+        nblks.pop_back();
+      }
+    }
+
+    // 如果节点冲突不够填满 excess，再从任意块中补
+    for (auto &[nid, nblks] : node_to_blks) {
+      if (static_cast<int>(to_migrate.size()) >= excess_count) break;
+      while (!nblks.empty() && static_cast<int>(to_migrate.size()) < excess_count) {
+        to_migrate.push_back(nblks.back());
+        nblks.pop_back();
+      }
+    }
+
+    // 从 data_blks 中移除待迁移的块
+    for (Block *mb : to_migrate) {
+      data_blks.erase(
+          std::remove(data_blks.begin(), data_blks.end(), mb), data_blks.end());
+      migrations.push_back({mb, cid});
+    }
+  }
+
+  // ====== 为待迁移的块分配目标机架 ======
+  // 统计两个条带已占用的机架数（数据+一份校验的并集）
+  std::set<int> occupied_racks;
+  for (auto &[cid, blks] : rack_to_data_blocks) {
+    if (!blks.empty()) occupied_racks.insert(cid);
+  }
+  for (auto &[cid, cnt] : rack_parity_count) {
+    if (cnt > 0) occupied_racks.insert(cid);
+  }
+  int occupied_rack_count = static_cast<int>(occupied_racks.size());
+
+  // 如果需要新机架，通过 OA1 公式计算列号
+  int new_rack_cluster = -1;
+  if (occupied_rack_count < required_racks) {
+    std::vector<std::vector<int>> OA_1_Merge = Get_OA_Information("OA_1.txt");
+    int OA1_num_cols_merge = OA_1_Merge.empty() ? 0 : static_cast<int>(OA_1_Merge[0].size());
+    int oa1_row = stripe_a.oa1_row_idx;
+
+    int cluster_num_per_stripe = (k + r + r - 1) / r;
+    int num_arry_0 = (!stripe_a.num_arry.empty()) ? stripe_a.num_arry[0] : 1;
+    int N_val = stripe_a.N;
+
+    // 公式（1-based 列号）：
+    // (ceil((k+r)/r) - num_arry[0]) * 2^(N-i+1) + num_arry[0] + (new_id % 2^(N-i)) + 1
+    int exp_N_minus_i_plus_1 = 1 << (N_val - merge_round + 1);
+    int exp_N_minus_i = 1 << (N_val - merge_round);
+    int new_col_1based = (cluster_num_per_stripe - num_arry_0) * exp_N_minus_i_plus_1
+                       + num_arry_0
+                       + (new_stripe_id % exp_N_minus_i)
+                       + 1;
+    int new_col_0based = new_col_1based - 1;
+
+    if (oa1_row >= 0 && new_col_0based >= 0 && new_col_0based < OA1_num_cols_merge) {
+      new_rack_cluster = (OA_1_Merge[oa1_row][new_col_0based] - 1) % m_sys_config->ClusterNum;
+      if (new_rack_cluster < 0) new_rack_cluster += m_sys_config->ClusterNum;
+      std::cout << "[Coordinator][Merge] new rack: OA1 row=" << oa1_row
+                << " col=" << new_col_0based << " -> cluster " << new_rack_cluster << std::endl;
+    } else {
+      std::cerr << "[Coordinator][Merge] OA1 col out of range: col_1based=" << new_col_1based
+                << " OA1_cols=" << OA1_num_cols_merge << std::endl;
+    }
+  }
+
+  for (auto &mig : migrations) {
+    bool placed = false;
+
+    if (occupied_rack_count >= required_racks) {
+      // 已有机架够用，放到有空位的已有机架
+      for (auto &[cid, data_blks] : rack_to_data_blocks) {
+        int parity_on_rack = rack_parity_count.count(cid) ? rack_parity_count[cid] : 0;
+        if (static_cast<int>(data_blks.size()) + parity_on_rack < r) {
+          data_blks.push_back(mig.block);
+          placed = true;
+          break;
+        }
+      }
+    } else if (new_rack_cluster >= 0) {
+      // 需要新机架，放到 OA1 公式算出的新机架
+      rack_to_data_blocks[new_rack_cluster].push_back(mig.block);
+      occupied_racks.insert(new_rack_cluster);
+      occupied_rack_count = static_cast<int>(occupied_racks.size());
+      placed = true;
+    }
+
+    if (!placed) {
+      // 兜底：放到任意有空位的机架
+      for (auto &[cid, data_blks] : rack_to_data_blocks) {
+        int parity_on_rack = rack_parity_count.count(cid) ? rack_parity_count[cid] : 0;
+        if (static_cast<int>(data_blks.size()) + parity_on_rack < r) {
+          std::cerr<<"[Coordinator][Merge] replace any empty rack " << cid << std::endl;
+          data_blks.push_back(mig.block);
+          placed = true;
+          break;
+        }
+      }
+    }
+
+    if (!placed) {
+      std::cerr << "[Coordinator][Merge] cannot find rack for migrated block "
+                << mig.block->block_key << std::endl;
+    }
+  }
+
+  std::cout << "[Coordinator][Merge] " << migrations.size()
+            << " data blocks need migration" << std::endl;
+
+  // Build per-proxy relocation plans，通过 OA2 表选择目标节点
+  struct RelocEntry {
+    std::string block_key;
+    std::string from_ip; int from_port;
+    std::string to_ip; int to_port;
+  };
+  std::map<int, std::vector<RelocEntry>> proxy_reloc_plans;
+
+  std::vector<std::vector<int>> OA_2_Merge = Get_OA_Information("OA_2.txt");
+  int OA2_num_cols_merge = OA_2_Merge.empty() ? 0 : static_cast<int>(OA_2_Merge[0].size());
+  int oa2_row = stripe_a.oa2_row_idx;
+
+  // 记录新机架上已分配的块数（用于确定 OA2 列号从头开始递增）
+  std::map<int, int> new_rack_placed_count;
+
+  for (auto &mig : migrations) {
+    Block *blk = mig.block;
+    int old_node_id = blk->map2node;
+    Node &old_node = m_node_table[old_node_id];
+    int target_cluster = blk->map2cluster;
+
+    // 通过 OA2 表选择目标节点
+    int oa2_col = 0;
+    bool is_new_rack = (new_rack_cluster >= 0 && target_cluster == new_rack_cluster);
+
+    if (is_new_rack) {
+      // 新机架：从第 0 列开始，依次递增
+      oa2_col = new_rack_placed_count[target_cluster];
+      new_rack_placed_count[target_cluster]++;
+    } else {
+      // 已有机架：用第 r+1 列（0-based 第 r 列）
+      oa2_col = r;
+    }
+
+    int node_idx = 0;
+    if (oa2_row >= 0 && oa2_col < OA2_num_cols_merge) {
+      int oa2_val = OA_2_Merge[oa2_row][oa2_col % OA2_num_cols_merge];
+      node_idx = (oa2_val - 1) % m_sys_config->DatanodeNumPerCluster;
+      if (node_idx < 0) node_idx += m_sys_config->DatanodeNumPerCluster;
+    }
+
+    int new_node_id = m_cluster_table[target_cluster].nodes[
+        node_idx % static_cast<int>(m_cluster_table[target_cluster].nodes.size())];
+    Node &new_node = m_node_table[new_node_id];
+
+    RelocEntry entry;
+    entry.block_key = blk->block_key;
+    entry.from_ip = old_node.node_ip;
+    entry.from_port = old_node.node_port;
+    entry.to_ip = new_node.node_ip;
+    entry.to_port = new_node.node_port;
+
+    proxy_reloc_plans[target_cluster].push_back(entry);
+
+    blk->map2node = new_node_id;
+    blk->map2cluster = target_cluster;
+  }
+
+  // Build parity merge tasks
+  // Coefficient for j-th parity (1-based): gf_pow(j, k)，k 是合并前条带的参数
+  struct ParityMergeTask {
+    std::string parity_key_a;
+    std::string parity_key_b;
+    std::string new_parity_key;
+    std::string datanode_ip;
+    int datanode_port;
+    unsigned char gf_coeff;
+  };
+  std::vector<ParityMergeTask> parity_tasks;
+
+  for (int j = 0; j < r; j++) {
+    Block *pa = stripe_a.blocks[k + j];
+    Block *pb = stripe_b.blocks[k + j];
+    int j_1based = j + 1;
+    unsigned char base = ECProject::gf_pow(2, static_cast<unsigned int>(j_1based));
+    unsigned char coeff = ECProject::gf_pow(base, static_cast<unsigned int>(k));
+
+    Node &parity_node = m_node_table[pa->map2node];
+    std::string new_key = std::to_string(new_stripe_id) +
+                          (j < 10 ? "_G0" : "_G") + std::to_string(j);
+
+    parity_tasks.push_back({pa->block_key, pb->block_key, new_key,
+                            parity_node.node_ip, parity_node.node_port,
+                            coeff});
+
+    std::cout << "[Coordinator][Merge] parity j=" << j_1based
+              << " coeff=" << (int)coeff
+              << " on node " << parity_node.node_ip << ":" << parity_node.node_port
+              << " (" << pa->block_key << " + " << pb->block_key
+              << " -> " << new_key << ")" << std::endl;
+  }
+
+  // ====== Execute in two threads ======
+  bool migration_ok = true;
+  bool parity_ok = true;
+
+  // Thread 1: data block migration
+  std::thread migration_thread([&]() {
+    for (auto &[cluster_id, entries] : proxy_reloc_plans) {
+      if (entries.empty()) continue;
+
+      std::string proxy_addr =
+          m_cluster_table[cluster_id].proxy_ip + ":" +
+          std::to_string(m_cluster_table[cluster_id].proxy_port);
+
+      if (m_proxy_ptrs.find(proxy_addr) == m_proxy_ptrs.end()) {
+        std::cerr << "[Coordinator][Merge] proxy not found: " << proxy_addr << std::endl;
+        migration_ok = false;
+        continue;
+      }
+
+      grpc::ClientContext ctx;
+      proxy_proto::blockRelocPlan plan;
+      proxy_proto::blockRelocReply reloc_reply;
+
+      plan.set_block_size(block_size);
+      for (auto &e : entries) {
+        plan.add_blocktomove(e.block_key);
+        plan.add_fromdatanodeip(e.from_ip);
+        plan.add_fromdatanodeport(e.from_port);
+        plan.add_todatanodeip(e.to_ip);
+        plan.add_todatanodeport(e.to_port);
+      }
+
+      grpc::Status st = m_proxy_ptrs[proxy_addr]->relocateBlock(&ctx, plan, &reloc_reply);
+      if (!st.ok()) {
+        std::cerr << "[Coordinator][Merge] relocate failed via " << proxy_addr
+                  << ": " << st.error_message() << std::endl;
+        migration_ok = false;
+      } else {
+        std::cout << "[Coordinator][Merge] relocated " << entries.size()
+                  << " blocks via " << proxy_addr << std::endl;
+      }
+    }
+  });
+
+  // Thread 2: parity block merge on datanodes
+  std::thread parity_thread([&]() {
+    std::vector<std::thread> sub_threads;
+    for (auto &task : parity_tasks) {
+      sub_threads.emplace_back([&task, block_size, &parity_ok]() {
+        auto channel = grpc::CreateChannel(
+            task.datanode_ip + ":" + std::to_string(task.datanode_port),
+            grpc::InsecureChannelCredentials());
+        auto stub = datanode_proto::datanodeService::NewStub(channel);
+
+        grpc::ClientContext ctx;
+        datanode_proto::StripeMergeParityInfo info;
+        datanode_proto::RequestResult result;
+        info.set_parity_key_a(task.parity_key_a);
+        info.set_parity_key_b(task.parity_key_b);
+        info.set_new_parity_key(task.new_parity_key);
+        info.set_block_size(block_size);
+        info.set_gf_coeff(static_cast<int>(task.gf_coeff));
+
+        grpc::Status st = stub->handleStripeMergeParity(&ctx, info, &result);
+        if (!st.ok() || !result.message()) {
+          std::cerr << "[Coordinator][Merge] parity merge failed on "
+                    << task.datanode_ip << ":" << task.datanode_port
+                    << " for " << task.new_parity_key << std::endl;
+          parity_ok = false;
+        }
+      });
+    }
+    for (auto &t : sub_threads) t.join();
+  });
+
+  migration_thread.join();
+  parity_thread.join();
+
+  // ====== Update metadata ======
+  // Build new stripe's block list
+  for (int i = 0; i < k; i++) {
+    Block *blk = stripe_a.blocks[i];
+    blk->map2stripe = new_stripe_id;
+    blk->block_id = i;
+    new_stripe.blocks.push_back(blk);
+    new_stripe.place2clusters.insert(blk->map2cluster);
+  }
+  for (int i = 0; i < k; i++) {
+    Block *blk = stripe_b.blocks[i];
+    blk->map2stripe = new_stripe_id;
+    blk->block_id = k + i;
+    new_stripe.blocks.push_back(blk);
+    new_stripe.place2clusters.insert(blk->map2cluster);
+  }
+  // New parity blocks: update keys and add to stripe
+  for (int j = 0; j < r; j++) {
+    Block *pa = stripe_a.blocks[k + j];
+    pa->block_key = parity_tasks[j].new_parity_key;
+    pa->map2stripe = new_stripe_id;
+    pa->block_id = new_k + j;
+    pa->block_type = 'G';
+    new_stripe.blocks.push_back(pa);
+    new_stripe.place2clusters.insert(pa->map2cluster);
+  }
+
+  // Remove old stripes from table
+  m_stripe_table.erase(stripe_id_a);
+  m_stripe_table.erase(stripe_id_b);
+
+  // Insert merged stripe metadata after deleting old entries.
+  m_stripe_table[new_stripe_id] = std::move(new_stripe);
+
+  bool success = migration_ok && parity_ok;
+  reply->set_success(success);
+  reply->set_new_stripe_id(new_stripe_id);
+
+  std::cout << "[Coordinator][Merge] merge " << (success ? "succeeded" : "FAILED")
+            << " -> new stripe " << new_stripe_id
+            << " (data=" << new_k << " parity=" << r << ")" << std::endl;
+
+  return grpc::Status::OK;
 }
 } // namespace ECProject

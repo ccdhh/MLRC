@@ -67,6 +67,11 @@ namespace ECProject
             grpc::ServerContext *context,
             const datanode_proto::GetInfo *get_info,
             datanode_proto::RequestResult *response) override;
+        // stripe-level parity merge (local)
+        grpc::Status handleStripeMergeParity(
+            grpc::ServerContext *context,
+            const datanode_proto::StripeMergeParityInfo *info,
+            datanode_proto::RequestResult *response) override;
         // delete
         grpc::Status handleDelete(
             grpc::ServerContext *context,

@@ -23,6 +23,10 @@ namespace ECProject
     {
       std::cout << status.error_code() << ": " << status.error_message()
                 << std::endl;
+      if (status.error_code() == grpc::StatusCode::UNAVAILABLE ||
+          status.error_message().find("refused") != std::string::npos ||
+          status.error_message().find("connect") != std::string::npos)
+        std::cout << "[Hint] Cannot reach coordinator. Ensure coordinator is running (e.g. ./run_coordinator) and listening on the address in config (parameterConfiguration.xml: CoordinatorIP:CoordinatorPort)." << std::endl;
       return "RPC failed";
     }
   }
@@ -734,7 +738,10 @@ namespace ECProject
 
     if (!status.ok())
     {
-      std::cout << "[SET402] upload data failed!" << std::endl;
+      std::cout << "[SET402] upload data failed! gRPC code=" << status.error_code()
+                << " message=" << status.error_message() << std::endl;
+      if (status.error_code() == grpc::StatusCode::UNAVAILABLE)
+        std::cout << "[Hint] Coordinator unreachable. Start coordinator first (e.g. ./run_coordinator) and ensure config CoordinatorIP:CoordinatorPort is correct." << std::endl;
       return false;
     }
     else
@@ -831,7 +838,8 @@ namespace ECProject
 
     if (!status.ok())
     {
-      std::cout << "[SET402] upload data failed!" << std::endl;
+      std::cout << "[SET402] upload data failed! gRPC code=" << status.error_code()
+                << " message=" << status.error_message() << std::endl;
       return false;
     }
     else
@@ -1472,10 +1480,75 @@ namespace ECProject
   }
   void Client::start_merge()
   {
+    // List all stripes first
+    grpc::ClientContext list_ctx;
+    coordinator_proto::RequestToCoordinator list_req;
+    coordinator_proto::RepStripeIds list_reply;
+    list_req.set_name(m_clientID);
+    grpc::Status list_st = m_coordinator_ptr->listStripes(&list_ctx, list_req, &list_reply);
+    if (!list_st.ok()) {
+      std::cout << "[Client] listStripes failed: " << list_st.error_message() << std::endl;
+      return;
+    }
 
+    std::vector<int> stripe_ids;
+    for (int i = 0; i < list_reply.stripe_ids_size(); i++) {
+      stripe_ids.push_back(list_reply.stripe_ids(i));
+    }
+    std::sort(stripe_ids.begin(), stripe_ids.end());
+
+    if (stripe_ids.size() < 2) {
+      std::cout << "[Client] need at least 2 stripes to merge, got "
+                << stripe_ids.size() << std::endl;
+      return;
+    }
+
+    std::cout << "[Client] available stripes: ";
+    for (int sid : stripe_ids) std::cout << sid << " ";
+    std::cout << std::endl;
+
+    int merge_round;
+    std::cout << "Enter merge round (i, starting from 1): ";
+    std::cin >> merge_round;
+    if (merge_round < 1) {
+      std::cout << "[Client] invalid merge round" << std::endl;
+      return;
+    }
+
+    // Merge consecutive pairs
+    int pairs = stripe_ids.size() / 2;
+    std::cout << "[Client] will merge " << pairs << " pairs (round " << merge_round << ")" << std::endl;
+
+    for (int p = 0; p < pairs; p++) {
+      int sid_a = stripe_ids[2 * p];
+      int sid_b = stripe_ids[2 * p + 1];
+
+      std::cout << "[Client] merging stripe " << sid_a << " + " << sid_b << " ..." << std::endl;
+
+      grpc::ClientContext ctx;
+      coordinator_proto::MergeRequest req;
+      coordinator_proto::MergeReply rep;
+      req.set_stripe_id_a(sid_a);
+      req.set_stripe_id_b(sid_b);
+      req.set_merge_round(merge_round);
+      req.set_new_stripe_id(p);
+
+      grpc::Status st = m_coordinator_ptr->mergeStripes(&ctx, req, &rep);
+      if (!st.ok()) {
+        std::cout << "[Client] mergeStripes RPC failed: " << st.error_message() << std::endl;
+        continue;
+      }
+
+      if (rep.success()) {
+        std::cout << "[Client] merge succeeded -> new stripe " << rep.new_stripe_id() << std::endl;
+      } else {
+        std::cout << "[Client] merge returned failure for stripes "
+                  << sid_a << " + " << sid_b << std::endl;
+      }
+    }
   }
   void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list)
   {
-    this->
+    
   }
 } // namespace ECProject

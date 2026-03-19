@@ -97,7 +97,7 @@ namespace ECProject
     std::vector<int> get_parameters();
     bool decode_test(int stripe_id, int failed_block_id, std::string client_ip, int client_port, double &decode_time);
     void start_merge();
-    void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list);
+    void get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list);
   private:
     std::unique_ptr<coordinator_proto::coordinatorService::Stub> m_coordinator_ptr;
     std::string m_coordinatorIpPort;

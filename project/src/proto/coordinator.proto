@@ -56,6 +56,9 @@ service coordinatorService {
   rpc delByKey(KeyFromClient) returns (RepIfDeling) {};
   rpc delByStripe(StripeIdFromClient) returns (RepIfDeling) {};
 
+  // merge
+  rpc mergeStripes(MergeRequest) returns (MergeReply) {};
+
   //other
   rpc listStripes(RequestToCoordinator) returns (RepStripeIds) {};
   rpc decodeTest(KeyAndClientIP) returns (DegradedReadReply) {};
@@ -199,4 +202,16 @@ message StripePosListAndClient {
   repeated StripePos items = 1;
   string clientip = 2;
   int32 clientport = 3;
+}
+
+message MergeRequest {
+  int32 stripe_id_a = 1;
+  int32 stripe_id_b = 2;
+  int32 merge_round = 3;
+  int32 new_stripe_id = 4;
+}
+
+message MergeReply {
+  bool success = 1;
+  int32 new_stripe_id = 2;
 }

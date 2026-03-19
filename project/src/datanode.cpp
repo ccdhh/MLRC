@@ -1,5 +1,6 @@
 #include "datanode.h"
 #include "toolbox.h"
+#include "unilrc_encoder.h"
 #include <fstream>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -761,6 +762,69 @@ namespace ECProject
             std::cout << "exception" << std::endl;
             std::cout << e.what() << std::endl;
         }
+        return grpc::Status::OK;
+    }
+
+    grpc::Status DatanodeImpl::handleStripeMergeParity(
+        grpc::ServerContext *context,
+        const datanode_proto::StripeMergeParityInfo *info,
+        datanode_proto::RequestResult *response)
+    {
+        std::string parity_key_a = info->parity_key_a();
+        std::string parity_key_b = info->parity_key_b();
+        std::string new_parity_key = info->new_parity_key();
+        int block_size = info->block_size();
+        unsigned char coeff = static_cast<unsigned char>(info->gf_coeff());
+
+        std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+        std::string path_a = targetdir + parity_key_a;
+        std::string path_b = targetdir + parity_key_b;
+        std::string path_new = targetdir + new_parity_key;
+
+        if (access(path_a.c_str(), 0) == -1) {
+            std::cerr << "[Datanode" << m_port << "][StripeMergeParity] parity A not found: " << path_a << std::endl;
+            response->set_message(false);
+            return grpc::Status::OK;
+        }
+        if (access(path_b.c_str(), 0) == -1) {
+            std::cerr << "[Datanode" << m_port << "][StripeMergeParity] parity B not found: " << path_b << std::endl;
+            response->set_message(false);
+            return grpc::Status::OK;
+        }
+
+        std::unique_ptr<char[]> buf_a(new char[block_size]);
+        std::unique_ptr<char[]> buf_b(new char[block_size]);
+        std::unique_ptr<char[]> buf_new(new char[block_size]);
+
+        std::ifstream ifs_a(path_a, std::ios::binary);
+        ifs_a.read(buf_a.get(), block_size);
+        ifs_a.close();
+
+        std::ifstream ifs_b(path_b, std::ios::binary);
+        ifs_b.read(buf_b.get(), block_size);
+        ifs_b.close();
+
+        // P'_j = P^A_j XOR gf_mul(coeff, P^B_j)
+        for (int i = 0; i < block_size; i++) {
+            unsigned char a_byte = static_cast<unsigned char>(buf_a[i]);
+            unsigned char b_byte = static_cast<unsigned char>(buf_b[i]);
+            buf_new[i] = static_cast<char>(a_byte ^ ECProject::gf_mul(coeff, b_byte));
+        }
+
+        if (access(targetdir.c_str(), 0) == -1) {
+            createDirectories(targetdir);
+        }
+
+        std::ofstream ofs(path_new, std::ios::binary | std::ios::out | std::ios::trunc);
+        ofs.write(buf_new.get(), block_size);
+        ofs.flush();
+        ofs.close();
+
+        std::cout << "[Datanode" << m_port << "][StripeMergeParity] merged "
+                  << parity_key_a << " + coeff*" << parity_key_b
+                  << " -> " << new_parity_key << std::endl;
+
+        response->set_message(true);
         return grpc::Status::OK;
     }
 

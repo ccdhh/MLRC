@@ -97,6 +97,11 @@ namespace ECProject
         grpc::ServerContext *context,
         const proxy_proto::NodeAndBlock *node_and_block,
         proxy_proto::DelReply *response) override;
+    // block relocation for stripe merge
+    grpc::Status relocateBlock(
+        grpc::ServerContext *context,
+        const proxy_proto::blockRelocPlan *plan,
+        proxy_proto::blockRelocReply *response) override;
     // get stripe
     grpc::Status getBlocks(
         grpc::ServerContext *context,

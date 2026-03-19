@@ -7,15 +7,18 @@
     <!--8388608-->
     <!--67108864-->
     <DatanodeNumPerCluster>6</DatanodeNumPerCluster>
-    <ClusterNum>6</ClusterNum>
+    <ClusterNum>4</ClusterNum>
+    <!-- Multi-machine: set to coordinator host IP reachable from clients.
+         You can also override without editing this file: ./main_client <ip:port> or COORDINATOR_ADDR=<ip:port> -->
     <CoordinatorIP>10.10.1.2</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
+    <!-- Coordinator listens on 0.0.0.0:CoordinatorPort. Proxies use port from clusterInformation.xml; data port = proxy_port+1. Start proxy as: ./run_proxy <ip>:50405 -->
     <!-- AppendMode: REP_MODE; UNILRC_MODE; CACHED_MODE -->
     <AppendMode>EQUIOX_MODE</AppendMode>
     <alpha>2</alpha>
     <!-- LRC: UniLRC; AzureLRC; OptimalLRC; UniformLRC -->
     <CodeType>RS</CodeType>
-    <k>12</k>
+    <k>2</k>
     <r>2</r>
     <z>0</z>
     <!-- <CodeType>UniformLRC</CodeType>

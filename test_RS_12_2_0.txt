@@ -1,0 +1,11 @@
+GET operation time: 0.0418826 seconds
+GET operation time: 0.0066539 seconds
+GET operation time: 0.0477843 seconds
+GET operation time: 0.00738027 seconds
+GET operation time: 0.00792008 seconds
+GET operation time: 0.0357289 seconds
+GET operation time: 0.00520453 seconds
+GET operation time: 0.0216311 seconds
+[SET402] upload data failed! gRPC code=14 message=Socket closed
+PUT operation time: 0.00516473 seconds
+[Client] get blocks failed!

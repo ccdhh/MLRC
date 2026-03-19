@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 extern "C" {
+#ifdef ENABLE_AVX2_ASM
     void gf_vect_dot_prod_avx2(int len, int vec, unsigned char *g_tbls, unsigned char **buffs, unsigned char*dests);
     void gf_2vect_dot_prod_avx2(int len, int vec, unsigned char *g_tbls, unsigned char **buffs, unsigned char**dests);
     void gf_3vect_dot_prod_avx2(int len, int vec, unsigned char *g_tbls, unsigned char **buffs, unsigned char**dests);
@@ -10,11 +11,27 @@ extern "C" {
     void gf_5vect_dot_prod_avx2(int len, int vec, unsigned char *g_tbls, unsigned char **buffs, unsigned char**dests);
     void gf_6vect_dot_prod_avx2(int len, int vec, unsigned char *g_tbls, unsigned char **buffs, unsigned char**dests);
     int xor_gen_avx(int vects, int len, void **array);
+#endif
 }
 
 int ECProject::xor_avx(int vects, int len, void **array)
 {
+#ifdef ENABLE_AVX2_ASM
     return xor_gen_avx(vects, len, array);
+#else
+    if (vects <= 0 || len <= 0 || array == nullptr) return 0;
+    unsigned char *dest = static_cast<unsigned char*>(array[vects - 1]);
+    if (!dest) return 0;
+    for (int i = 0; i < len; i++) {
+        unsigned char acc = 0;
+        for (int v = 0; v < vects - 1; v++) {
+            unsigned char *src = static_cast<unsigned char*>(array[v]);
+            acc ^= src ? src[i] : 0;
+        }
+        dest[i] = acc;
+    }
+    return 0;
+#endif
 }
 
 unsigned char
@@ -86,6 +103,19 @@ ECProject::gf_mul(unsigned char a, unsigned char b)
 #else
         return gf_mul_table_base[b * 256 + a];
 #endif
+}
+
+unsigned char
+ECProject::gf_pow(unsigned char base, unsigned int exp)
+{
+        unsigned char result = 1;
+        while (exp > 0) {
+                if (exp & 1)
+                        result = gf_mul(result, base);
+                base = gf_mul(base, base);
+                exp >>= 1;
+        }
+        return result;
 }
 
 int
@@ -465,7 +495,7 @@ void ECProject::decode_unilrc(const int k, const int r, const int z, const int b
         vect_ptrs[i] = block_ptrs[i];
     }
     vect_ptrs[block_num] = res_ptr;
-    xor_gen_avx(block_num + 1, block_size, (void **)vect_ptrs);
+    xor_avx(block_num + 1, block_size, (void **)vect_ptrs);
 }
 
 void ECProject::decode_azure_lrc(const int k, const int r, const int z, const int block_num,
@@ -479,7 +509,7 @@ void ECProject::decode_azure_lrc(const int k, const int r, const int z, const in
             vect_ptrs[i] = block_ptrs[i];
         }
         vect_ptrs[block_num] = res_ptr;
-        xor_gen_avx(block_num + 1, block_size, (void **)vect_ptrs);
+        xor_avx(block_num + 1, block_size, (void **)vect_ptrs);
     }
     else
     {
@@ -606,6 +636,11 @@ ECProject::ec_encode_data_avx2(int len, int k, int rows, unsigned char *g_tbls, 
                     unsigned char **coding)
 {
 
+#ifndef ENABLE_AVX2_ASM
+        // Portable fallback: no AVX2 assembly available/allowed
+        ec_encode_data_base(len, k, rows, g_tbls, data, coding);
+        return;
+#else
         if (len < 32) {
                 ec_encode_data_base(len, k, rows, g_tbls, data, coding);
                 return;
@@ -636,6 +671,7 @@ ECProject::ec_encode_data_avx2(int len, int k, int rows, unsigned char *g_tbls, 
         case 0:
                 break;
         }
+#endif
 }
 
 void

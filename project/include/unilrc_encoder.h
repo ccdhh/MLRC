@@ -94,6 +94,9 @@ namespace ECProject
     unsigned char
     gf_inv(unsigned char a);
 
+    unsigned char
+    gf_pow(unsigned char base, unsigned int exp);
+
     void gf_gen_cauchy_matrix1(unsigned char *a, int m, int k);
 
     void gf_gen_local_vector(unsigned char *a, int k, int p);
