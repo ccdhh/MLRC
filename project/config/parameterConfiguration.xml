@@ -2,12 +2,12 @@
 <Configuration>
     <AlignedSize>4096</AlignedSize>
     <UnitSize>8192</UnitSize>
-    <BlockSize>1048576</BlockSize>
-    <!--1048576-->
+    <BlockSize>67108864</BlockSize>
+    <!--64MB=67108864; 1MB=1048576-->
     <!--8388608-->
     <!--67108864-->
-    <DatanodeNumPerCluster>6</DatanodeNumPerCluster>
-    <ClusterNum>4</ClusterNum>
+    <DatanodeNumPerCluster>8</DatanodeNumPerCluster>
+    <ClusterNum>16</ClusterNum>
     <!-- Multi-machine: set to coordinator host IP reachable from clients.
          You can also override without editing this file: ./main_client <ip:port> or COORDINATOR_ADDR=<ip:port> -->
     <CoordinatorIP>10.10.1.2</CoordinatorIP>
@@ -18,8 +18,8 @@
     <alpha>2</alpha>
     <!-- LRC: UniLRC; AzureLRC; OptimalLRC; UniformLRC -->
     <CodeType>RS</CodeType>
-    <k>2</k>
-    <r>2</r>
+    <k>10</k>
+    <r>4</r>
     <z>0</z>
     <!-- <CodeType>UniformLRC</CodeType>
     <k>30</k>
