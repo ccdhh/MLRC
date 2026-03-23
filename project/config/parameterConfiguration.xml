@@ -2,7 +2,7 @@
 <Configuration>
     <AlignedSize>4096</AlignedSize>
     <UnitSize>8192</UnitSize>
-    <BlockSize>67108864</BlockSize>
+    <BlockSize>1048576</BlockSize>
     <!--64MB=67108864; 1MB=1048576-->
     <!--8388608-->
     <!--67108864-->

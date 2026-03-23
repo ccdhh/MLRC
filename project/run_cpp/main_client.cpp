@@ -96,7 +96,7 @@ int main(int argc, char **argv)
             std::cout<<"merge completed"<<std::endl;
             break;
         }
-        std::cout << "start["<<merge_round<<"time]merge now? (Y/N)" << std::endl;
+        std::cout << "start[ "<<merge_round<<" time]merge now? (Y/N)" << std::endl;
         char choose;
         std::cin >> choose;
         if (choose == 'Y' || choose == 'y')

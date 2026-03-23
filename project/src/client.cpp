@@ -1508,7 +1508,7 @@ namespace ECProject
     std::cout << std::endl;
 
     int merge_round_input;
-    std::cout << "Please enter merge round (start from 1, current merge round: "<<merge_round<<"): ";
+    std::cout << "Please enter merge round (start from 1, current merge round:  "<<merge_round<<" ): ";
     std::cin >> merge_round_input;
     if (merge_round_input < 1) {
       std::cout << "[Client] invalid merge round" << std::endl;
