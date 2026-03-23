@@ -1478,7 +1478,7 @@ namespace ECProject
     }
     return true;
   }
-  void Client::start_merge()
+  void Client::start_merge(int merge_round)
   {
     // List all stripes first
     grpc::ClientContext list_ctx;
@@ -1507,10 +1507,10 @@ namespace ECProject
     for (int sid : stripe_ids) std::cout << sid << " ";
     std::cout << std::endl;
 
-    int merge_round;
-    std::cout << "Enter merge round (i, starting from 1): ";
-    std::cin >> merge_round;
-    if (merge_round < 1) {
+    int merge_round_input;
+    std::cout << "Please enter merge round (start from 1, current merge round: "<<merge_round<<"): ";
+    std::cin >> merge_round_input;
+    if (merge_round_input < 1) {
       std::cout << "[Client] invalid merge round" << std::endl;
       return;
     }
@@ -1518,7 +1518,7 @@ namespace ECProject
     // Merge consecutive pairs
     int pairs = stripe_ids.size() / 2;
     std::cout << "[Client] will merge " << pairs << " pairs (round " << merge_round << ")" << std::endl;
-
+    std::chrono::high_resolution_clock::time_point merge_start=std::chrono::high_resolution_clock::now();
     for (int p = 0; p < pairs; p++) {
       int sid_a = stripe_ids[2 * p];
       int sid_b = stripe_ids[2 * p + 1];
@@ -1546,6 +1546,9 @@ namespace ECProject
                   << sid_a << " + " << sid_b << std::endl;
       }
     }
+    std::chrono::high_resolution_clock::time_point merge_end=std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> merge_time = std::chrono::duration_cast<std::chrono::duration<double>>(merge_end - merge_start);
+    std::cout << "[merge"<<merge_round<<"time] total spend time: " << merge_time.count() << " seconds" << std::endl;
   }
   void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list)
   {
