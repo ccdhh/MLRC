@@ -84,9 +84,9 @@ int main(int argc, char **argv)
     std::chrono::duration<double> set_time = std::chrono::duration_cast<std::chrono::duration<double>>(set_end - set_start);
     std::cout << "write throughput: " << (static_cast<double> (total_write_size) / set_time.count() / 1024) << "MB/s" << std::endl;
 
-    std::cout << "\n[Merge bandwidth] 若需仅在合并阶段限速：先勿在放置阶段执行 limit 脚本。\n"
-            << "  在合并前于另一终端执行: sh limit_all_intra10Gb_inter1Gb.sh\n"
-            << "  合并完成后再执行: sh unlimit_all_proxy.sh\n\n";
+    std::cout << "\n[Merge bandwidth] if you want to limit the bandwidth during merge, please execute the following commands:\n"
+            << "  before merge please execute: sh limit_all_intra10Gb_inter1Gb.sh\n"
+            << "  after merge please execute: sh unlimit_all_proxy.sh\n\n";
      int merge_round=1;
 
     while (true)

@@ -1,21 +1,38 @@
 #!/bin/bash
 
-# 检查enp6s0f0是否存在且处于UP状态
-if ip link show enp6s0f0 &> /dev/null && \
-   ip link show enp6s0f0 | grep -q 'state UP'
-then
-    wondershaper -c -a enp6s0f0
-    exit 0
+set -u
+
+WS_BIN="$(command -v wondershaper || true)"
+if [ -z "$WS_BIN" ]; then
+    for p in /usr/sbin/wondershaper /sbin/wondershaper /usr/bin/wondershaper; do
+        if [ -x "$p" ]; then
+            WS_BIN="$p"
+            break
+        fi
+    done
+fi
+if [ -z "$WS_BIN" ]; then
+    echo "Error: wondershaper not found. Please install it or add it to PATH." >&2
+    exit 127
 fi
 
-# 检查enp6s0f1是否存在且处于UP状态
-if ip link show enp6s0f1 &> /dev/null && \
-   ip link show enp6s0f1 | grep -q 'state UP'
-then
-    wondershaper -c -a enp6s0f1
-    exit 0
+applied=0
+
+# 清除 enp6s0f0（只要接口存在就清）
+if ip link show enp6s0f0 &> /dev/null; then
+    "$WS_BIN" clear enp6s0f0 || exit 1
+    applied=1
 fi
 
-# 如果都不满足则报错
-echo "Error: No active interface found!" >&2
-exit 1
+# 清除 enp6s0f1（只要接口存在就清）
+if ip link show enp6s0f1 &> /dev/null; then
+    "$WS_BIN" clear enp6s0f1 || exit 1
+    applied=1
+fi
+
+if [ "$applied" -eq 0 ]; then
+    echo "Error: No active interface found!" >&2
+    exit 1
+fi
+
+exit 0
