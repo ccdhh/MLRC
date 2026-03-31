@@ -1553,8 +1553,8 @@ namespace ECProject
     }
     std::chrono::high_resolution_clock::time_point merge_end=std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> merge_time = std::chrono::duration_cast<std::chrono::duration<double>>(merge_end - merge_start);
-    std::cout << "[merge"<<merge_round<<"time] total spend time: " << merge_time.count() << " seconds"
-              << " | coordinator data migration (sum per pair): " << sum_data_migration_seconds << " s"
+    std::cout << "[merge"<<merge_round<<"time] total spend time: " << merge_time.count() << " seconds"<<'\n'
+              << " | coordinator data migration (sum per pair): " << sum_data_migration_seconds << " s"<<'\n'
               << " | coordinator parity update (sum per pair): " << sum_parity_update_seconds << " s"
               << std::endl;
   }

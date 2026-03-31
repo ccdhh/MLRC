@@ -43,15 +43,15 @@ esac
 INTRA_RACK_Kbps=10485760   # 10 Gb/s 机架内（固定）
 
 # enp6s0f0: 机架内
-if ip link show enp6s0f0 &> /dev/null && ip link show enp6s0f0 | grep -q 'state UP'; then
-    "$WS_BIN" enp6s0f0 "$INTRA_RACK_Kbps" "$INTRA_RACK_Kbps" || exit 1
+if ip link show enp6s0f0 >/dev/null 2>&1 && ip link show enp6s0f0 | grep -q 'state UP'; then
+    "$WS_BIN" -a enp6s0f0 -d "$INTRA_RACK_Kbps" -u "$INTRA_RACK_Kbps" || exit 1
     echo "enp6s0f0: $INTRA_RACK_Kbps Kbps (10 Gb/s 机架内)"
     applied=1
 fi
 
 # enp6s0f1: 机架间
-if ip link show enp6s0f1 &> /dev/null && ip link show enp6s0f1 | grep -q 'state UP'; then
-    "$WS_BIN" enp6s0f1 "$INTER_RACK_Kbps" "$INTER_RACK_Kbps" || exit 1
+if ip link show enp6s0f1 >/dev/null 2>&1 && ip link show enp6s0f1 | grep -q 'state UP'; then
+    "$WS_BIN" -a enp6s0f1 -d "$INTER_RACK_Kbps" -u "$INTER_RACK_Kbps" || exit 1
     echo "enp6s0f1: $INTER_RACK_Kbps Kbps (机架间 ${INTER_GB} Gb/s)"
     applied=1
 fi
