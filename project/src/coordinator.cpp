@@ -4,6 +4,7 @@
 #include "meta_definition.h"
 #include "tinyxml2.h"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -4557,9 +4558,12 @@ grpc::Status CoordinatorImpl::mergeStripes(
   // ====== Execute in two threads ======
   bool migration_ok = true;
   bool parity_ok = true;
+  std::atomic<double> data_migration_seconds{0.0};
+  std::atomic<double> parity_update_seconds{0.0};
 
   // Thread 1: data block migration
   std::thread migration_thread([&]() {
+    auto migration_wall_start = std::chrono::high_resolution_clock::now();
     for (auto &[cluster_id, entries] : proxy_reloc_plans) {
       if (entries.empty()) continue;
 
@@ -4596,10 +4600,15 @@ grpc::Status CoordinatorImpl::mergeStripes(
                   << " blocks via " << proxy_addr << std::endl;
       }
     }
+    data_migration_seconds.store(
+        std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - migration_wall_start)
+            .count());
   });
 
   // Thread 2: parity block merge on datanodes
   std::thread parity_thread([&]() {
+    auto parity_wall_start = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> sub_threads;
     for (auto &task : parity_tasks) {
       sub_threads.emplace_back([&task, block_size, &parity_ok]() {
@@ -4627,10 +4636,16 @@ grpc::Status CoordinatorImpl::mergeStripes(
       });
     }
     for (auto &t : sub_threads) t.join();
+    parity_update_seconds.store(
+        std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - parity_wall_start)
+            .count());
   });
 
   migration_thread.join();
   parity_thread.join();
+  reply->set_data_migration_seconds(data_migration_seconds.load());
+  reply->set_parity_update_seconds(parity_update_seconds.load());
 
   // ====== Update metadata ======
   // Build new stripe's block list

@@ -214,4 +214,7 @@ message MergeRequest {
 message MergeReply {
   bool success = 1;
   int32 new_stripe_id = 2;
+  // Wall time inside mergeStripes for each concurrent phase (seconds).
+  double data_migration_seconds = 3;
+  double parity_update_seconds = 4;
 }

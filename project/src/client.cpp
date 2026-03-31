@@ -1519,6 +1519,8 @@ namespace ECProject
     int pairs = stripe_ids.size() / 2;
     std::cout << "[Client] will merge " << pairs << " pairs (round " << merge_round << ")" << std::endl;
     std::chrono::high_resolution_clock::time_point merge_start=std::chrono::high_resolution_clock::now();
+    double sum_data_migration_seconds = 0.0;
+    double sum_parity_update_seconds = 0.0;
     for (int p = 0; p < pairs; p++) {
       int sid_a = stripe_ids[2 * p];
       int sid_b = stripe_ids[2 * p + 1];
@@ -1539,6 +1541,9 @@ namespace ECProject
         continue;
       }
 
+      sum_data_migration_seconds += rep.data_migration_seconds();
+      sum_parity_update_seconds += rep.parity_update_seconds();
+
       if (rep.success()) {
         std::cout << "[Client] merge succeeded -> new stripe " << rep.new_stripe_id() << std::endl;
       } else {
@@ -1548,7 +1553,10 @@ namespace ECProject
     }
     std::chrono::high_resolution_clock::time_point merge_end=std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> merge_time = std::chrono::duration_cast<std::chrono::duration<double>>(merge_end - merge_start);
-    std::cout << "[merge"<<merge_round<<"time] total spend time: " << merge_time.count() << " seconds" << std::endl;
+    std::cout << "[merge"<<merge_round<<"time] total spend time: " << merge_time.count() << " seconds"
+              << " | coordinator data migration (sum per pair): " << sum_data_migration_seconds << " s"
+              << " | coordinator parity update (sum per pair): " << sum_parity_update_seconds << " s"
+              << std::endl;
   }
   void Client::get_block_each_stripe_position(int stripe_cnt,const std::vector<int>& pos_list)
   {
