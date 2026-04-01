@@ -36,6 +36,8 @@ service datanodeService {
   rpc handleGetBreakdown(GetInfo) returns(RequestResult);
   // stripe-level parity merge (local)
   rpc handleStripeMergeParity(StripeMergeParityInfo) returns(RequestResult);
+  // read full block bytes for cross-datanode parity merge
+  rpc readBlockBytes(ReadBlockBytesRequest) returns(ReadBlockBytesReply);
   // delete
   rpc handleDelete(DelInfo) returns(RequestResult);
 }
@@ -52,6 +54,7 @@ message RequestResult {
     double disk_io_start_time = 3;
     double disk_io_end_time = 4;
     double grpc_start_time = 5;
+    double exec_seconds = 6;
 }
 
 message SetInfo {
@@ -90,6 +93,18 @@ message StripeMergeParityInfo {
     string new_parity_key = 3;
     int32 block_size = 4;
     int32 gf_coeff = 5;
+    string parity_b_datanode_ip = 6;
+    int32 parity_b_datanode_port = 7;
+}
+
+message ReadBlockBytesRequest {
+    string block_key = 1;
+    int32 block_size = 2;
+}
+
+message ReadBlockBytesReply {
+    bool ok = 1;
+    bytes data = 2;
 }
 
 message DelInfo {

@@ -2,6 +2,7 @@
 #include "coordinator.grpc.pb.h"
 #include <asio.hpp>
 #include <thread>
+#include <mutex>
 #include <assert.h>
 #include <chrono>
 #include <cmath>
@@ -1515,41 +1516,82 @@ namespace ECProject
       return;
     }
 
-    // Merge consecutive pairs
+    // Merge consecutive pairs in bounded batches so network transfers can overlap.
     int pairs = stripe_ids.size() / 2;
-    std::cout << "[Client] will merge " << pairs << " pairs (round " << merge_round << ")" << std::endl;
+    // Be conservative by default. Higher merge concurrency can overload the
+    // proxy/datanode socket pipeline and lead to "Socket closed" during relocation.
+    int merge_concurrency = 1;
+    if (const char *env_concurrency = std::getenv("MERGE_CONCURRENCY"); env_concurrency && env_concurrency[0] != '\0')
+    {
+      merge_concurrency = std::max(1, std::atoi(env_concurrency));
+    }
+    merge_concurrency = std::min(merge_concurrency, pairs);
+    std::cout << "[Client] will merge " << pairs << " pairs (round " << merge_round
+              << ", concurrency " << merge_concurrency << ")" << std::endl;
     std::chrono::high_resolution_clock::time_point merge_start=std::chrono::high_resolution_clock::now();
     double sum_data_migration_seconds = 0.0;
     double sum_parity_update_seconds = 0.0;
-    for (int p = 0; p < pairs; p++) {
-      int sid_a = stripe_ids[2 * p];
-      int sid_b = stripe_ids[2 * p + 1];
+    std::mutex merge_stats_mutex;
+    bool merge_failed = false;
+    for (int batch_start = 0; batch_start < pairs; batch_start += merge_concurrency) {
+      if (merge_failed) {
+        break;
+      }
+      int batch_end = std::min(batch_start + merge_concurrency, pairs);
+      std::vector<std::thread> merge_threads;
+      merge_threads.reserve(batch_end - batch_start);
 
-      std::cout << "[Client] merging stripe " << sid_a << " + " << sid_b << " ..." << std::endl;
+      for (int p = batch_start; p < batch_end; p++) {
+        int sid_a = stripe_ids[2 * p];
+        int sid_b = stripe_ids[2 * p + 1];
+        std::cout << "[Client] queue merge stripe " << sid_a << " + " << sid_b
+                  << " as new stripe " << p << std::endl;
 
-      grpc::ClientContext ctx;
-      coordinator_proto::MergeRequest req;
-      coordinator_proto::MergeReply rep;
-      req.set_stripe_id_a(sid_a);
-      req.set_stripe_id_b(sid_b);
-      req.set_merge_round(merge_round);
-      req.set_new_stripe_id(p);
+        merge_threads.emplace_back([this, sid_a, sid_b, merge_round, p,
+                                    &sum_data_migration_seconds, &sum_parity_update_seconds,
+                                    &merge_stats_mutex, &merge_failed]() {
+          grpc::ClientContext ctx;
+          coordinator_proto::MergeRequest req;
+          coordinator_proto::MergeReply rep;
+          req.set_stripe_id_a(sid_a);
+          req.set_stripe_id_b(sid_b);
+          req.set_merge_round(merge_round);
+          req.set_new_stripe_id(p);
 
-      grpc::Status st = m_coordinator_ptr->mergeStripes(&ctx, req, &rep);
-      if (!st.ok()) {
-        std::cout << "[Client] mergeStripes RPC failed: " << st.error_message() << std::endl;
-        continue;
+          grpc::Status st = m_coordinator_ptr->mergeStripes(&ctx, req, &rep);
+
+          std::lock_guard<std::mutex> lock(merge_stats_mutex);
+          if (!st.ok()) {
+            std::cout << "[Client] mergeStripes RPC failed for stripes "
+                      << sid_a << " + " << sid_b << ": "
+                      << st.error_message() << std::endl;
+            merge_failed = true;
+            return;
+          }
+
+          sum_data_migration_seconds += rep.data_migration_seconds();
+          sum_parity_update_seconds += rep.parity_update_seconds();
+
+          if (rep.success()) {
+            std::cout << "[Client] merge succeeded -> new stripe "
+                      << rep.new_stripe_id() << " (" << sid_a
+                      << " + " << sid_b << ")" << std::endl;
+          } else {
+            std::cout << "[Client] merge returned failure for stripes "
+                      << sid_a << " + " << sid_b << std::endl;
+            merge_failed = true;
+          }
+        });
       }
 
-      sum_data_migration_seconds += rep.data_migration_seconds();
-      sum_parity_update_seconds += rep.parity_update_seconds();
-
-      if (rep.success()) {
-        std::cout << "[Client] merge succeeded -> new stripe " << rep.new_stripe_id() << std::endl;
-      } else {
-        std::cout << "[Client] merge returned failure for stripes "
-                  << sid_a << " + " << sid_b << std::endl;
+      for (auto &merge_thread : merge_threads) {
+        merge_thread.join();
       }
+    }
+    if (merge_failed) {
+      std::cout << "[Client] merge stopped early because at least one pair failed."
+                << " You can retry from the current stripe set after checking logs."
+                << std::endl;
     }
     std::chrono::high_resolution_clock::time_point merge_end=std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> merge_time = std::chrono::duration_cast<std::chrono::duration<double>>(merge_end - merge_start);

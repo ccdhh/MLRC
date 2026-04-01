@@ -72,6 +72,10 @@ namespace ECProject
             grpc::ServerContext *context,
             const datanode_proto::StripeMergeParityInfo *info,
             datanode_proto::RequestResult *response) override;
+        grpc::Status readBlockBytes(
+            grpc::ServerContext *context,
+            const datanode_proto::ReadBlockBytesRequest *request,
+            datanode_proto::ReadBlockBytesReply *response) override;
         // delete
         grpc::Status handleDelete(
             grpc::ServerContext *context,

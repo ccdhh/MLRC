@@ -4428,6 +4428,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
         int parity_on_rack = rack_parity_count.count(cid) ? rack_parity_count[cid] : 0;
         if (static_cast<int>(data_blks.size()) + parity_on_rack < r) {
           data_blks.push_back(mig.block);
+          mig.block->map2cluster = cid;
           placed = true;
           break;
         }
@@ -4435,6 +4436,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
     } else if (new_rack_cluster >= 0) {
       // 需要新机架，放到 OA1 公式算出的新机架
       rack_to_data_blocks[new_rack_cluster].push_back(mig.block);
+      mig.block->map2cluster = new_rack_cluster;
       occupied_racks.insert(new_rack_cluster);
       occupied_rack_count = static_cast<int>(occupied_racks.size());
       placed = true;
@@ -4447,6 +4449,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
         if (static_cast<int>(data_blks.size()) + parity_on_rack < r) {
           std::cerr<<"[Coordinator][Merge] replace any empty rack " << cid << std::endl;
           data_blks.push_back(mig.block);
+          mig.block->map2cluster = cid;
           placed = true;
           break;
         }
@@ -4529,6 +4532,8 @@ grpc::Status CoordinatorImpl::mergeStripes(
     std::string new_parity_key;
     std::string datanode_ip;
     int datanode_port;
+    std::string parity_b_ip;
+    int parity_b_port;
     unsigned char gf_coeff;
   };
   std::vector<ParityMergeTask> parity_tasks;
@@ -4541,11 +4546,13 @@ grpc::Status CoordinatorImpl::mergeStripes(
     unsigned char coeff = ECProject::gf_pow(base, static_cast<unsigned int>(k));
 
     Node &parity_node = m_node_table[pa->map2node];
+    Node &parity_b_node = m_node_table[pb->map2node];
     std::string new_key = std::to_string(new_stripe_id) +
                           (j < 10 ? "_G0" : "_G") + std::to_string(j);
 
     parity_tasks.push_back({pa->block_key, pb->block_key, new_key,
                             parity_node.node_ip, parity_node.node_port,
+                            parity_b_node.node_ip, parity_b_node.node_port,
                             coeff});
 
     std::cout << "[Coordinator][Merge] parity j=" << j_1based
@@ -4555,51 +4562,74 @@ grpc::Status CoordinatorImpl::mergeStripes(
               << " -> " << new_key << ")" << std::endl;
   }
 
+  struct RelocRpcTask {
+    std::string proxy_addr;
+    RelocEntry entry;
+  };
+  std::vector<RelocRpcTask> reloc_tasks;
+  for (auto &[cluster_id, entries] : proxy_reloc_plans) {
+    if (entries.empty()) continue;
+    std::string proxy_addr =
+        m_cluster_table[cluster_id].proxy_ip + ":" +
+        std::to_string(m_cluster_table[cluster_id].proxy_port);
+    for (const auto &entry : entries) {
+      reloc_tasks.push_back({proxy_addr, entry});
+    }
+  }
+
   // ====== Execute in two threads ======
-  bool migration_ok = true;
-  bool parity_ok = true;
+  std::atomic<bool> migration_ok{true};
+  std::atomic<bool> parity_ok{true};
   std::atomic<double> data_migration_seconds{0.0};
   std::atomic<double> parity_update_seconds{0.0};
 
   // Thread 1: data block migration
   std::thread migration_thread([&]() {
     auto migration_wall_start = std::chrono::high_resolution_clock::now();
-    for (auto &[cluster_id, entries] : proxy_reloc_plans) {
-      if (entries.empty()) continue;
+    std::vector<std::thread> sub_threads;
+    sub_threads.reserve(reloc_tasks.size());
+    for (const auto &task : reloc_tasks) {
+      sub_threads.emplace_back([this, &task, block_size, &migration_ok]() {
+        if (m_proxy_ptrs.find(task.proxy_addr) == m_proxy_ptrs.end()) {
+          std::cerr << "[Coordinator][Merge] proxy not found: "
+                    << task.proxy_addr << std::endl;
+          migration_ok.store(false);
+          return;
+        }
 
-      std::string proxy_addr =
-          m_cluster_table[cluster_id].proxy_ip + ":" +
-          std::to_string(m_cluster_table[cluster_id].proxy_port);
+        grpc::ClientContext ctx;
+        proxy_proto::blockRelocPlan plan;
+        proxy_proto::blockRelocReply reloc_reply;
+        plan.set_block_size(block_size);
+        plan.add_blocktomove(task.entry.block_key);
+        plan.add_fromdatanodeip(task.entry.from_ip);
+        plan.add_fromdatanodeport(task.entry.from_port);
+        plan.add_todatanodeip(task.entry.to_ip);
+        plan.add_todatanodeport(task.entry.to_port);
 
-      if (m_proxy_ptrs.find(proxy_addr) == m_proxy_ptrs.end()) {
-        std::cerr << "[Coordinator][Merge] proxy not found: " << proxy_addr << std::endl;
-        migration_ok = false;
-        continue;
-      }
+        grpc::Status st = m_proxy_ptrs[task.proxy_addr]->relocateBlock(&ctx, plan, &reloc_reply);
+        if (!st.ok()) {
+          std::cerr << "[Coordinator][Merge] relocate failed for "
+                    << task.entry.block_key << " via " << task.proxy_addr
+                    << ": " << st.error_message() << std::endl;
+          migration_ok.store(false);
+          return;
+        }
 
-      grpc::ClientContext ctx;
-      proxy_proto::blockRelocPlan plan;
-      proxy_proto::blockRelocReply reloc_reply;
+        if (reloc_reply.result() != "ok") {
+          std::cerr << "[Coordinator][Merge] relocate returned "
+                    << reloc_reply.result() << " for " << task.entry.block_key
+                    << " via " << task.proxy_addr << std::endl;
+          migration_ok.store(false);
+          return;
+        }
 
-      plan.set_block_size(block_size);
-      for (auto &e : entries) {
-        plan.add_blocktomove(e.block_key);
-        plan.add_fromdatanodeip(e.from_ip);
-        plan.add_fromdatanodeport(e.from_port);
-        plan.add_todatanodeip(e.to_ip);
-        plan.add_todatanodeport(e.to_port);
-      }
-
-      grpc::Status st = m_proxy_ptrs[proxy_addr]->relocateBlock(&ctx, plan, &reloc_reply);
-      if (!st.ok()) {
-        std::cerr << "[Coordinator][Merge] relocate failed via " << proxy_addr
-                  << ": " << st.error_message() << std::endl;
-        migration_ok = false;
-      } else {
-        std::cout << "[Coordinator][Merge] relocated " << entries.size()
-                  << " blocks via " << proxy_addr << std::endl;
-      }
+        std::cout << "[Coordinator][Merge] relocated block "
+                  << task.entry.block_key << " via " << task.proxy_addr
+                  << std::endl;
+      });
     }
+    for (auto &t : sub_threads) t.join();
     data_migration_seconds.store(
         std::chrono::duration<double>(
             std::chrono::high_resolution_clock::now() - migration_wall_start)
@@ -4625,13 +4655,15 @@ grpc::Status CoordinatorImpl::mergeStripes(
         info.set_new_parity_key(task.new_parity_key);
         info.set_block_size(block_size);
         info.set_gf_coeff(static_cast<int>(task.gf_coeff));
+        info.set_parity_b_datanode_ip(task.parity_b_ip);
+        info.set_parity_b_datanode_port(task.parity_b_port);
 
         grpc::Status st = stub->handleStripeMergeParity(&ctx, info, &result);
         if (!st.ok() || !result.message()) {
           std::cerr << "[Coordinator][Merge] parity merge failed on "
                     << task.datanode_ip << ":" << task.datanode_port
                     << " for " << task.new_parity_key << std::endl;
-          parity_ok = false;
+          parity_ok.store(false);
         }
       });
     }
@@ -4702,7 +4734,7 @@ grpc::Status CoordinatorImpl::mergeStripes(
   // Insert merged stripe metadata after deleting old entries.
   m_stripe_table[new_stripe_id] = std::move(new_stripe);
 
-  bool success = migration_ok && parity_ok;
+  bool success = migration_ok.load() && parity_ok.load();
   reply->set_success(success);
   reply->set_new_stripe_id(new_stripe_id);
 

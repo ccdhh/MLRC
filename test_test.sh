@@ -54,7 +54,7 @@ INTRA_RACK_Kbps=10485760   # 10 Gb/s 机架内（固定）
 if ip link show enp6s0f0 &> /dev/null && ip link show enp6s0f0 | grep -q 'state UP'; then
     shape_prep_clear_iface_qdisc enp6s0f0
     "$WS_BIN" -a enp6s0f0 -d "$INTRA_RACK_Kbps" -u "$INTRA_RACK_Kbps" || exit 1
-    echo "enp6s0f0: $INTRA_RACK_Kbps Kbps (10 Gb/s intra-rack)"
+    echo "enp6s0f0: $INTRA_RACK_Kbps Kbps (intra-rack 10 Gb/s)"
     applied=1
 fi
 
