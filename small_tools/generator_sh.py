@@ -138,7 +138,15 @@ if __name__ == "__main__":
         generate_run_proxy_datanode_file()
     #generater_cluster_information_xml()
     #generate_run_proxy_datanode_file() # for test
-    generater_cluster_information_xml()
+    # WARNING:
+    # This writes project/config/clusterInformation.xml in legacy
+    # "same proxy IP + multi-port datanodes" format.
+    # Keep disabled by default to avoid accidentally overwriting
+    # real-physical-node deployment configs.
+    if os.environ.get("GEN_LEGACY_CLUSTER_XML", "0") == "1":
+        generater_cluster_information_xml()
+    else:
+        print("Skip writing clusterInformation.xml (set GEN_LEGACY_CLUSTER_XML=1 to enable).")
     
     # cnt = 0
     # for proxy in proxy_ip_list:

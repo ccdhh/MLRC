@@ -60,11 +60,34 @@ clear_iface() {
     return 0
 }
 
-clear_iface enp6s0f0
-clear_iface enp6s0f1
+# Avoid duplicate work.
+SEEN_IFACES=""
+maybe_clear_iface() {
+    iface="$1"
+    [ -z "$iface" ] && return 0
+    case " $SEEN_IFACES " in
+        *" $iface "*) return 0 ;;
+    esac
+    SEEN_IFACES="$SEEN_IFACES $iface"
+    clear_iface "$iface"
+}
+
+# 1) Try legacy fixed names first.
+maybe_clear_iface enp6s0f0
+maybe_clear_iface enp6s0f1
+
+# 2) Clear interfaces that carry 10.10.1.x addresses.
+for iface in $(ip -4 -o addr show scope global 2>/dev/null | awk '$4 ~ /^10\\.10\\.1\\./ {print $2}'); do
+    maybe_clear_iface "$iface"
+done
+
+# 3) Fallback: clear any interface currently showing htb/ingress qdisc.
+for iface in $(tc qdisc show 2>/dev/null | awk '/^(qdisc htb|qdisc ingress)/ {for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); break}}' | sort -u); do
+    maybe_clear_iface "$iface"
+done
 
 if [ "$cleared_any" -eq 0 ]; then
-    echo "Warning: No matched interface found (enp6s0f0/enp6s0f1)." >&2
+    echo "Warning: No matched interface found for clear (legacy names / 10.10.1.x / htb+ingress)." >&2
 fi
 
 exit "$failed"

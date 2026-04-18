@@ -1,10 +1,12 @@
 #include "datanode.h"
 #include "toolbox.h"
 #include "unilrc_encoder.h"
+#include <chrono>
+#include <cstring>
 #include <fstream>
+#include <thread>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <chrono>
 namespace ECProject
 {
     grpc::Status DatanodeImpl::checkalive(
@@ -781,22 +783,33 @@ namespace ECProject
             return grpc::Status::OK;
         }
 
-        std::ifstream ifs(readpath, std::ios::binary);
-        if (!ifs.is_open()) {
+        struct stat st {};
+        if (stat(readpath.c_str(), &st) != 0 || st.st_size == 0) {
             response->set_ok(false);
             return grpc::Status::OK;
         }
 
         std::string data;
         data.resize(static_cast<size_t>(block_size), '\0');
-        ifs.read(data.data(), block_size);
-        if (ifs.gcount() != static_cast<std::streamsize>(block_size)) {
-            response->set_ok(false);
-            return grpc::Status::OK;
+
+        if (static_cast<size_t>(st.st_size) == static_cast<size_t>(block_size)) {
+            std::ifstream ifs(readpath, std::ios::binary);
+            if (!ifs.is_open()) {
+                response->set_ok(false);
+                return grpc::Status::OK;
+            }
+            ifs.read(data.data(), block_size);
+            if (ifs.gcount() != static_cast<std::streamsize>(block_size)) {
+                response->set_ok(false);
+                return grpc::Status::OK;
+            }
+        } else {
+            /* Serialized parity layout (append with is_serialized): rebuild flat block */
+            deserialize(readpath, data.data());
         }
 
         response->set_ok(true);
-        response->set_data(data);
+        response->set_data(std::move(data));
         return grpc::Status::OK;
     }
 
@@ -827,31 +840,67 @@ namespace ECProject
         std::unique_ptr<char[]> buf_b(new char[block_size]);
         std::unique_ptr<char[]> buf_new(new char[block_size]);
 
-        std::ifstream ifs_a(path_a, std::ios::binary);
-        ifs_a.read(buf_a.get(), block_size);
-        ifs_a.close();
+        struct stat sta {};
+        if (stat(path_a.c_str(), &sta) != 0) {
+            std::cerr << "[Datanode" << m_port << "][StripeMergeParity] stat parity A failed: " << path_a << std::endl;
+            response->set_message(false);
+            return grpc::Status::OK;
+        }
+        if (static_cast<size_t>(sta.st_size) == static_cast<size_t>(block_size)) {
+            std::ifstream ifs_a(path_a, std::ios::binary);
+            ifs_a.read(buf_a.get(), block_size);
+            if (ifs_a.gcount() != static_cast<std::streamsize>(block_size)) {
+                std::cerr << "[Datanode" << m_port << "][StripeMergeParity] parity A short read: " << path_a << std::endl;
+                response->set_message(false);
+                return grpc::Status::OK;
+            }
+            ifs_a.close();
+        } else {
+            memset(buf_a.get(), 0, static_cast<size_t>(block_size));
+            deserialize(path_a, buf_a.get());
+        }
 
         bool loaded_b = false;
         if (access(path_b.c_str(), 0) != -1) {
-            std::ifstream ifs_b(path_b, std::ios::binary);
-            ifs_b.read(buf_b.get(), block_size);
-            ifs_b.close();
-            loaded_b = true;
-        } else if (!parity_b_ip.empty() && parity_b_port > 0) {
-            auto channel = grpc::CreateChannel(
-                parity_b_ip + ":" + std::to_string(parity_b_port),
-                grpc::InsecureChannelCredentials());
-            auto stub = datanode_proto::datanodeService::NewStub(channel);
-            grpc::ClientContext read_ctx;
-            datanode_proto::ReadBlockBytesRequest read_req;
-            datanode_proto::ReadBlockBytesReply read_rep;
-            read_req.set_block_key(parity_key_b);
-            read_req.set_block_size(block_size);
-            grpc::Status read_st = stub->readBlockBytes(&read_ctx, read_req, &read_rep);
-            if (read_st.ok() && read_rep.ok() &&
-                read_rep.data().size() == static_cast<size_t>(block_size)) {
-                memcpy(buf_b.get(), read_rep.data().data(), static_cast<size_t>(block_size));
+            struct stat stb {};
+            if (stat(path_b.c_str(), &stb) == 0 &&
+                static_cast<size_t>(stb.st_size) == static_cast<size_t>(block_size)) {
+                std::ifstream ifs_b(path_b, std::ios::binary);
+                ifs_b.read(buf_b.get(), block_size);
+                if (ifs_b.gcount() == static_cast<std::streamsize>(block_size))
+                    loaded_b = true;
+                ifs_b.close();
+            } else if (access(path_b.c_str(), 0) != -1) {
+                memset(buf_b.get(), 0, static_cast<size_t>(block_size));
+                deserialize(path_b, buf_b.get());
                 loaded_b = true;
+            }
+        } else if (!parity_b_ip.empty() && parity_b_port > 0) {
+            const std::string peer = parity_b_ip + ":" + std::to_string(parity_b_port);
+            grpc::Status read_st = grpc::Status::OK;
+            for (int attempt = 0; attempt < 5 && !loaded_b; ++attempt) {
+                auto channel = grpc::CreateChannel(peer, grpc::InsecureChannelCredentials());
+                (void)channel->GetState(true);
+                auto stub = datanode_proto::datanodeService::NewStub(channel);
+                grpc::ClientContext read_ctx;
+                read_ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(60));
+                datanode_proto::ReadBlockBytesRequest read_req;
+                datanode_proto::ReadBlockBytesReply read_rep;
+                read_req.set_block_key(parity_key_b);
+                read_req.set_block_size(block_size);
+                read_st = stub->readBlockBytes(&read_ctx, read_req, &read_rep);
+                if (read_st.ok() && read_rep.ok() &&
+                    read_rep.data().size() == static_cast<size_t>(block_size)) {
+                    memcpy(buf_b.get(), read_rep.data().data(), static_cast<size_t>(block_size));
+                    loaded_b = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(80 * (attempt + 1)));
+            }
+            if (!loaded_b) {
+                std::cerr << "[Datanode" << m_port << "][StripeMergeParity] remote read parity B failed peer="
+                          << peer << " grpc=" << read_st.error_code() << " "
+                          << read_st.error_message() << std::endl;
             }
         }
 

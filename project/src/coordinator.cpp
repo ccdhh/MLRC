@@ -4577,19 +4577,19 @@ grpc::Status CoordinatorImpl::mergeStripes(
     }
   }
 
-  // ====== Execute in two threads ======
+  // Data migration first, then parity merge (avoids racing relocate vs parity read)
   std::atomic<bool> migration_ok{true};
   std::atomic<bool> parity_ok{true};
   std::atomic<double> data_migration_seconds{0.0};
   std::atomic<double> parity_update_seconds{0.0};
 
-  // Thread 1: data block migration
-  std::thread migration_thread([&]() {
+  {
     auto migration_wall_start = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> sub_threads;
     sub_threads.reserve(reloc_tasks.size());
     for (const auto &task : reloc_tasks) {
-      sub_threads.emplace_back([this, &task, block_size, &migration_ok]() {
+      // Capture task by value — &task would race across threads (undefined behavior).
+      sub_threads.emplace_back([this, task, block_size, &migration_ok]() {
         if (m_proxy_ptrs.find(task.proxy_addr) == m_proxy_ptrs.end()) {
           std::cerr << "[Coordinator][Merge] proxy not found: "
                     << task.proxy_addr << std::endl;
@@ -4634,20 +4634,25 @@ grpc::Status CoordinatorImpl::mergeStripes(
         std::chrono::duration<double>(
             std::chrono::high_resolution_clock::now() - migration_wall_start)
             .count());
-  });
+  }
 
-  // Thread 2: parity block merge on datanodes
-  std::thread parity_thread([&]() {
+  {
     auto parity_wall_start = std::chrono::high_resolution_clock::now();
     std::vector<std::thread> sub_threads;
-    for (auto &task : parity_tasks) {
-      sub_threads.emplace_back([&task, block_size, &parity_ok]() {
-        auto channel = grpc::CreateChannel(
-            task.datanode_ip + ":" + std::to_string(task.datanode_port),
-            grpc::InsecureChannelCredentials());
+    for (const auto &task : parity_tasks) {
+      // Capture task by value — &task would race across threads (undefined behavior).
+      sub_threads.emplace_back([task, block_size, &parity_ok]() {
+        const std::string peer =
+            task.datanode_ip + ":" + std::to_string(task.datanode_port);
+        auto channel = grpc::CreateChannel(peer, grpc::InsecureChannelCredentials());
+        // Do not fail merge on WaitForConnected alone: gRPC lazily connects and
+        // WaitForConnected often hits the deadline even when the peer is up; the
+        // unary RPC below establishes the connection and reports real errors.
+        (void)channel->GetState(true);
         auto stub = datanode_proto::datanodeService::NewStub(channel);
 
         grpc::ClientContext ctx;
+        ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
         datanode_proto::StripeMergeParityInfo info;
         datanode_proto::RequestResult result;
         info.set_parity_key_a(task.parity_key_a);
@@ -4660,9 +4665,14 @@ grpc::Status CoordinatorImpl::mergeStripes(
 
         grpc::Status st = stub->handleStripeMergeParity(&ctx, info, &result);
         if (!st.ok() || !result.message()) {
-          std::cerr << "[Coordinator][Merge] parity merge failed on "
-                    << task.datanode_ip << ":" << task.datanode_port
-                    << " for " << task.new_parity_key << std::endl;
+          std::cerr << "[Coordinator][Merge] parity merge failed on " << peer
+                    << " for " << task.new_parity_key;
+          if (!st.ok()) {
+            std::cerr << " grpc: " << st.error_message();
+          } else {
+            std::cerr << " (datanode returned failure)";
+          }
+          std::cerr << std::endl;
           parity_ok.store(false);
         }
       });
@@ -4672,12 +4682,23 @@ grpc::Status CoordinatorImpl::mergeStripes(
         std::chrono::duration<double>(
             std::chrono::high_resolution_clock::now() - parity_wall_start)
             .count());
-  });
+  }
 
-  migration_thread.join();
-  parity_thread.join();
   reply->set_data_migration_seconds(data_migration_seconds.load());
   reply->set_parity_update_seconds(parity_update_seconds.load());
+
+  const bool merge_ok = migration_ok.load() && parity_ok.load();
+  reply->set_new_stripe_id(new_stripe_id);
+
+  if (!merge_ok) {
+    reply->set_success(false);
+    std::cout << "[Coordinator][Merge] merge FAILED"
+              << " (stripe " << stripe_id_a << " + " << stripe_id_b
+              << " -> intended new stripe " << new_stripe_id
+              << "): metadata NOT updated; fix datanode/proxy issues and retry"
+              << std::endl;
+    return grpc::Status::OK;
+  }
 
   // ====== Update metadata ======
   // Build new stripe's block list
@@ -4734,12 +4755,8 @@ grpc::Status CoordinatorImpl::mergeStripes(
   // Insert merged stripe metadata after deleting old entries.
   m_stripe_table[new_stripe_id] = std::move(new_stripe);
 
-  bool success = migration_ok.load() && parity_ok.load();
-  reply->set_success(success);
-  reply->set_new_stripe_id(new_stripe_id);
-
-  std::cout << "[Coordinator][Merge] merge " << (success ? "succeeded" : "FAILED")
-            << " -> new stripe " << new_stripe_id
+  reply->set_success(true);
+  std::cout << "[Coordinator][Merge] merge succeeded -> new stripe " << new_stripe_id
             << " (data=" << new_k << " parity=" << r << ")" << std::endl;
 
   return grpc::Status::OK;
