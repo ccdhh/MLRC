@@ -191,6 +191,17 @@ message RecoveryReply {
   double decode_time = 3;
   double disk_write_time = 4;
   double grpc_start_time = 5;
+  double total_time = 6;
+  double ilp_time = 7;
+  int32 helper_block_count = 8;
+  repeated string selected_equations = 9;
+  repeated int32 helper_block_ids = 10;
+  bool success = 11;
+  string message = 12;
+  string repair_mode = 13;
+  string equation_policy = 14;
+  repeated int32 partition_shard_counts = 15;
+  int32 max_partition_shard_count = 16;
 }
 
 message StripePos {

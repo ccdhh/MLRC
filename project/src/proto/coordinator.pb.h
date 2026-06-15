@@ -3892,12 +3892,133 @@ class RecoveryReply final :
   // accessors -------------------------------------------------------
 
   enum : int {
+    kSelectedEquationsFieldNumber = 9,
+    kHelperBlockIdsFieldNumber = 10,
+    kPartitionShardCountsFieldNumber = 15,
+    kMessageFieldNumber = 12,
+    kRepairModeFieldNumber = 13,
+    kEquationPolicyFieldNumber = 14,
     kDiskReadTimeFieldNumber = 1,
     kNetworkTimeFieldNumber = 2,
     kDecodeTimeFieldNumber = 3,
     kDiskWriteTimeFieldNumber = 4,
     kGrpcStartTimeFieldNumber = 5,
+    kTotalTimeFieldNumber = 6,
+    kIlpTimeFieldNumber = 7,
+    kHelperBlockCountFieldNumber = 8,
+    kSuccessFieldNumber = 11,
+    kMaxPartitionShardCountFieldNumber = 16,
   };
+  // repeated string selected_equations = 9;
+  int selected_equations_size() const;
+  private:
+  int _internal_selected_equations_size() const;
+  public:
+  void clear_selected_equations();
+  const std::string& selected_equations(int index) const;
+  std::string* mutable_selected_equations(int index);
+  void set_selected_equations(int index, const std::string& value);
+  void set_selected_equations(int index, std::string&& value);
+  void set_selected_equations(int index, const char* value);
+  void set_selected_equations(int index, const char* value, size_t size);
+  std::string* add_selected_equations();
+  void add_selected_equations(const std::string& value);
+  void add_selected_equations(std::string&& value);
+  void add_selected_equations(const char* value);
+  void add_selected_equations(const char* value, size_t size);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>& selected_equations() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>* mutable_selected_equations();
+  private:
+  const std::string& _internal_selected_equations(int index) const;
+  std::string* _internal_add_selected_equations();
+  public:
+
+  // repeated int32 helper_block_ids = 10;
+  int helper_block_ids_size() const;
+  private:
+  int _internal_helper_block_ids_size() const;
+  public:
+  void clear_helper_block_ids();
+  private:
+  int32_t _internal_helper_block_ids(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      _internal_helper_block_ids() const;
+  void _internal_add_helper_block_ids(int32_t value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      _internal_mutable_helper_block_ids();
+  public:
+  int32_t helper_block_ids(int index) const;
+  void set_helper_block_ids(int index, int32_t value);
+  void add_helper_block_ids(int32_t value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      helper_block_ids() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      mutable_helper_block_ids();
+
+  // repeated int32 partition_shard_counts = 15;
+  int partition_shard_counts_size() const;
+  private:
+  int _internal_partition_shard_counts_size() const;
+  public:
+  void clear_partition_shard_counts();
+  private:
+  int32_t _internal_partition_shard_counts(int index) const;
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      _internal_partition_shard_counts() const;
+  void _internal_add_partition_shard_counts(int32_t value);
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      _internal_mutable_partition_shard_counts();
+  public:
+  int32_t partition_shard_counts(int index) const;
+  void set_partition_shard_counts(int index, int32_t value);
+  void add_partition_shard_counts(int32_t value);
+  const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+      partition_shard_counts() const;
+  ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+      mutable_partition_shard_counts();
+
+  // string message = 12;
+  void clear_message();
+  const std::string& message() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_message(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_message();
+  PROTOBUF_NODISCARD std::string* release_message();
+  void set_allocated_message(std::string* message);
+  private:
+  const std::string& _internal_message() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_message(const std::string& value);
+  std::string* _internal_mutable_message();
+  public:
+
+  // string repair_mode = 13;
+  void clear_repair_mode();
+  const std::string& repair_mode() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_repair_mode(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_repair_mode();
+  PROTOBUF_NODISCARD std::string* release_repair_mode();
+  void set_allocated_repair_mode(std::string* repair_mode);
+  private:
+  const std::string& _internal_repair_mode() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_repair_mode(const std::string& value);
+  std::string* _internal_mutable_repair_mode();
+  public:
+
+  // string equation_policy = 14;
+  void clear_equation_policy();
+  const std::string& equation_policy() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_equation_policy(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_equation_policy();
+  PROTOBUF_NODISCARD std::string* release_equation_policy();
+  void set_allocated_equation_policy(std::string* equation_policy);
+  private:
+  const std::string& _internal_equation_policy() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_equation_policy(const std::string& value);
+  std::string* _internal_mutable_equation_policy();
+  public:
+
   // double disk_read_time = 1;
   void clear_disk_read_time();
   double disk_read_time() const;
@@ -3943,6 +4064,51 @@ class RecoveryReply final :
   void _internal_set_grpc_start_time(double value);
   public:
 
+  // double total_time = 6;
+  void clear_total_time();
+  double total_time() const;
+  void set_total_time(double value);
+  private:
+  double _internal_total_time() const;
+  void _internal_set_total_time(double value);
+  public:
+
+  // double ilp_time = 7;
+  void clear_ilp_time();
+  double ilp_time() const;
+  void set_ilp_time(double value);
+  private:
+  double _internal_ilp_time() const;
+  void _internal_set_ilp_time(double value);
+  public:
+
+  // int32 helper_block_count = 8;
+  void clear_helper_block_count();
+  int32_t helper_block_count() const;
+  void set_helper_block_count(int32_t value);
+  private:
+  int32_t _internal_helper_block_count() const;
+  void _internal_set_helper_block_count(int32_t value);
+  public:
+
+  // bool success = 11;
+  void clear_success();
+  bool success() const;
+  void set_success(bool value);
+  private:
+  bool _internal_success() const;
+  void _internal_set_success(bool value);
+  public:
+
+  // int32 max_partition_shard_count = 16;
+  void clear_max_partition_shard_count();
+  int32_t max_partition_shard_count() const;
+  void set_max_partition_shard_count(int32_t value);
+  private:
+  int32_t _internal_max_partition_shard_count() const;
+  void _internal_set_max_partition_shard_count(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:coordinator_proto.RecoveryReply)
  private:
   class _Internal;
@@ -3951,11 +4117,24 @@ class RecoveryReply final :
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
   struct Impl_ {
+    ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string> selected_equations_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t > helper_block_ids_;
+    mutable std::atomic<int> _helper_block_ids_cached_byte_size_;
+    ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t > partition_shard_counts_;
+    mutable std::atomic<int> _partition_shard_counts_cached_byte_size_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr message_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr repair_mode_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr equation_policy_;
     double disk_read_time_;
     double network_time_;
     double decode_time_;
     double disk_write_time_;
     double grpc_start_time_;
+    double total_time_;
+    double ilp_time_;
+    int32_t helper_block_count_;
+    bool success_;
+    int32_t max_partition_shard_count_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -6494,6 +6673,425 @@ inline void RecoveryReply::_internal_set_grpc_start_time(double value) {
 inline void RecoveryReply::set_grpc_start_time(double value) {
   _internal_set_grpc_start_time(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.grpc_start_time)
+}
+
+// double total_time = 6;
+inline void RecoveryReply::clear_total_time() {
+  _impl_.total_time_ = 0;
+}
+inline double RecoveryReply::_internal_total_time() const {
+  return _impl_.total_time_;
+}
+inline double RecoveryReply::total_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.total_time)
+  return _internal_total_time();
+}
+inline void RecoveryReply::_internal_set_total_time(double value) {
+  
+  _impl_.total_time_ = value;
+}
+inline void RecoveryReply::set_total_time(double value) {
+  _internal_set_total_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.total_time)
+}
+
+// double ilp_time = 7;
+inline void RecoveryReply::clear_ilp_time() {
+  _impl_.ilp_time_ = 0;
+}
+inline double RecoveryReply::_internal_ilp_time() const {
+  return _impl_.ilp_time_;
+}
+inline double RecoveryReply::ilp_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.ilp_time)
+  return _internal_ilp_time();
+}
+inline void RecoveryReply::_internal_set_ilp_time(double value) {
+  
+  _impl_.ilp_time_ = value;
+}
+inline void RecoveryReply::set_ilp_time(double value) {
+  _internal_set_ilp_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.ilp_time)
+}
+
+// int32 helper_block_count = 8;
+inline void RecoveryReply::clear_helper_block_count() {
+  _impl_.helper_block_count_ = 0;
+}
+inline int32_t RecoveryReply::_internal_helper_block_count() const {
+  return _impl_.helper_block_count_;
+}
+inline int32_t RecoveryReply::helper_block_count() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.helper_block_count)
+  return _internal_helper_block_count();
+}
+inline void RecoveryReply::_internal_set_helper_block_count(int32_t value) {
+  
+  _impl_.helper_block_count_ = value;
+}
+inline void RecoveryReply::set_helper_block_count(int32_t value) {
+  _internal_set_helper_block_count(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.helper_block_count)
+}
+
+// repeated string selected_equations = 9;
+inline int RecoveryReply::_internal_selected_equations_size() const {
+  return _impl_.selected_equations_.size();
+}
+inline int RecoveryReply::selected_equations_size() const {
+  return _internal_selected_equations_size();
+}
+inline void RecoveryReply::clear_selected_equations() {
+  _impl_.selected_equations_.Clear();
+}
+inline std::string* RecoveryReply::add_selected_equations() {
+  std::string* _s = _internal_add_selected_equations();
+  // @@protoc_insertion_point(field_add_mutable:coordinator_proto.RecoveryReply.selected_equations)
+  return _s;
+}
+inline const std::string& RecoveryReply::_internal_selected_equations(int index) const {
+  return _impl_.selected_equations_.Get(index);
+}
+inline const std::string& RecoveryReply::selected_equations(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.selected_equations)
+  return _internal_selected_equations(index);
+}
+inline std::string* RecoveryReply::mutable_selected_equations(int index) {
+  // @@protoc_insertion_point(field_mutable:coordinator_proto.RecoveryReply.selected_equations)
+  return _impl_.selected_equations_.Mutable(index);
+}
+inline void RecoveryReply::set_selected_equations(int index, const std::string& value) {
+  _impl_.selected_equations_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::set_selected_equations(int index, std::string&& value) {
+  _impl_.selected_equations_.Mutable(index)->assign(std::move(value));
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::set_selected_equations(int index, const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.selected_equations_.Mutable(index)->assign(value);
+  // @@protoc_insertion_point(field_set_char:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::set_selected_equations(int index, const char* value, size_t size) {
+  _impl_.selected_equations_.Mutable(index)->assign(
+    reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_set_pointer:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline std::string* RecoveryReply::_internal_add_selected_equations() {
+  return _impl_.selected_equations_.Add();
+}
+inline void RecoveryReply::add_selected_equations(const std::string& value) {
+  _impl_.selected_equations_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::add_selected_equations(std::string&& value) {
+  _impl_.selected_equations_.Add(std::move(value));
+  // @@protoc_insertion_point(field_add:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::add_selected_equations(const char* value) {
+  GOOGLE_DCHECK(value != nullptr);
+  _impl_.selected_equations_.Add()->assign(value);
+  // @@protoc_insertion_point(field_add_char:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline void RecoveryReply::add_selected_equations(const char* value, size_t size) {
+  _impl_.selected_equations_.Add()->assign(reinterpret_cast<const char*>(value), size);
+  // @@protoc_insertion_point(field_add_pointer:coordinator_proto.RecoveryReply.selected_equations)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>&
+RecoveryReply::selected_equations() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.RecoveryReply.selected_equations)
+  return _impl_.selected_equations_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedPtrField<std::string>*
+RecoveryReply::mutable_selected_equations() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.RecoveryReply.selected_equations)
+  return &_impl_.selected_equations_;
+}
+
+// repeated int32 helper_block_ids = 10;
+inline int RecoveryReply::_internal_helper_block_ids_size() const {
+  return _impl_.helper_block_ids_.size();
+}
+inline int RecoveryReply::helper_block_ids_size() const {
+  return _internal_helper_block_ids_size();
+}
+inline void RecoveryReply::clear_helper_block_ids() {
+  _impl_.helper_block_ids_.Clear();
+}
+inline int32_t RecoveryReply::_internal_helper_block_ids(int index) const {
+  return _impl_.helper_block_ids_.Get(index);
+}
+inline int32_t RecoveryReply::helper_block_ids(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.helper_block_ids)
+  return _internal_helper_block_ids(index);
+}
+inline void RecoveryReply::set_helper_block_ids(int index, int32_t value) {
+  _impl_.helper_block_ids_.Set(index, value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.helper_block_ids)
+}
+inline void RecoveryReply::_internal_add_helper_block_ids(int32_t value) {
+  _impl_.helper_block_ids_.Add(value);
+}
+inline void RecoveryReply::add_helper_block_ids(int32_t value) {
+  _internal_add_helper_block_ids(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.RecoveryReply.helper_block_ids)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+RecoveryReply::_internal_helper_block_ids() const {
+  return _impl_.helper_block_ids_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+RecoveryReply::helper_block_ids() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.RecoveryReply.helper_block_ids)
+  return _internal_helper_block_ids();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+RecoveryReply::_internal_mutable_helper_block_ids() {
+  return &_impl_.helper_block_ids_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+RecoveryReply::mutable_helper_block_ids() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.RecoveryReply.helper_block_ids)
+  return _internal_mutable_helper_block_ids();
+}
+
+// bool success = 11;
+inline void RecoveryReply::clear_success() {
+  _impl_.success_ = false;
+}
+inline bool RecoveryReply::_internal_success() const {
+  return _impl_.success_;
+}
+inline bool RecoveryReply::success() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.success)
+  return _internal_success();
+}
+inline void RecoveryReply::_internal_set_success(bool value) {
+  
+  _impl_.success_ = value;
+}
+inline void RecoveryReply::set_success(bool value) {
+  _internal_set_success(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.success)
+}
+
+// string message = 12;
+inline void RecoveryReply::clear_message() {
+  _impl_.message_.ClearToEmpty();
+}
+inline const std::string& RecoveryReply::message() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.message)
+  return _internal_message();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void RecoveryReply::set_message(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.message_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.message)
+}
+inline std::string* RecoveryReply::mutable_message() {
+  std::string* _s = _internal_mutable_message();
+  // @@protoc_insertion_point(field_mutable:coordinator_proto.RecoveryReply.message)
+  return _s;
+}
+inline const std::string& RecoveryReply::_internal_message() const {
+  return _impl_.message_.Get();
+}
+inline void RecoveryReply::_internal_set_message(const std::string& value) {
+  
+  _impl_.message_.Set(value, GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::_internal_mutable_message() {
+  
+  return _impl_.message_.Mutable(GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::release_message() {
+  // @@protoc_insertion_point(field_release:coordinator_proto.RecoveryReply.message)
+  return _impl_.message_.Release();
+}
+inline void RecoveryReply::set_allocated_message(std::string* message) {
+  if (message != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.message_.SetAllocated(message, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.message_.IsDefault()) {
+    _impl_.message_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:coordinator_proto.RecoveryReply.message)
+}
+
+// string repair_mode = 13;
+inline void RecoveryReply::clear_repair_mode() {
+  _impl_.repair_mode_.ClearToEmpty();
+}
+inline const std::string& RecoveryReply::repair_mode() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.repair_mode)
+  return _internal_repair_mode();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void RecoveryReply::set_repair_mode(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.repair_mode_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.repair_mode)
+}
+inline std::string* RecoveryReply::mutable_repair_mode() {
+  std::string* _s = _internal_mutable_repair_mode();
+  // @@protoc_insertion_point(field_mutable:coordinator_proto.RecoveryReply.repair_mode)
+  return _s;
+}
+inline const std::string& RecoveryReply::_internal_repair_mode() const {
+  return _impl_.repair_mode_.Get();
+}
+inline void RecoveryReply::_internal_set_repair_mode(const std::string& value) {
+  
+  _impl_.repair_mode_.Set(value, GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::_internal_mutable_repair_mode() {
+  
+  return _impl_.repair_mode_.Mutable(GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::release_repair_mode() {
+  // @@protoc_insertion_point(field_release:coordinator_proto.RecoveryReply.repair_mode)
+  return _impl_.repair_mode_.Release();
+}
+inline void RecoveryReply::set_allocated_repair_mode(std::string* repair_mode) {
+  if (repair_mode != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.repair_mode_.SetAllocated(repair_mode, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.repair_mode_.IsDefault()) {
+    _impl_.repair_mode_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:coordinator_proto.RecoveryReply.repair_mode)
+}
+
+// string equation_policy = 14;
+inline void RecoveryReply::clear_equation_policy() {
+  _impl_.equation_policy_.ClearToEmpty();
+}
+inline const std::string& RecoveryReply::equation_policy() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.equation_policy)
+  return _internal_equation_policy();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void RecoveryReply::set_equation_policy(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.equation_policy_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.equation_policy)
+}
+inline std::string* RecoveryReply::mutable_equation_policy() {
+  std::string* _s = _internal_mutable_equation_policy();
+  // @@protoc_insertion_point(field_mutable:coordinator_proto.RecoveryReply.equation_policy)
+  return _s;
+}
+inline const std::string& RecoveryReply::_internal_equation_policy() const {
+  return _impl_.equation_policy_.Get();
+}
+inline void RecoveryReply::_internal_set_equation_policy(const std::string& value) {
+  
+  _impl_.equation_policy_.Set(value, GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::_internal_mutable_equation_policy() {
+  
+  return _impl_.equation_policy_.Mutable(GetArenaForAllocation());
+}
+inline std::string* RecoveryReply::release_equation_policy() {
+  // @@protoc_insertion_point(field_release:coordinator_proto.RecoveryReply.equation_policy)
+  return _impl_.equation_policy_.Release();
+}
+inline void RecoveryReply::set_allocated_equation_policy(std::string* equation_policy) {
+  if (equation_policy != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.equation_policy_.SetAllocated(equation_policy, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.equation_policy_.IsDefault()) {
+    _impl_.equation_policy_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:coordinator_proto.RecoveryReply.equation_policy)
+}
+
+// repeated int32 partition_shard_counts = 15;
+inline int RecoveryReply::_internal_partition_shard_counts_size() const {
+  return _impl_.partition_shard_counts_.size();
+}
+inline int RecoveryReply::partition_shard_counts_size() const {
+  return _internal_partition_shard_counts_size();
+}
+inline void RecoveryReply::clear_partition_shard_counts() {
+  _impl_.partition_shard_counts_.Clear();
+}
+inline int32_t RecoveryReply::_internal_partition_shard_counts(int index) const {
+  return _impl_.partition_shard_counts_.Get(index);
+}
+inline int32_t RecoveryReply::partition_shard_counts(int index) const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.partition_shard_counts)
+  return _internal_partition_shard_counts(index);
+}
+inline void RecoveryReply::set_partition_shard_counts(int index, int32_t value) {
+  _impl_.partition_shard_counts_.Set(index, value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.partition_shard_counts)
+}
+inline void RecoveryReply::_internal_add_partition_shard_counts(int32_t value) {
+  _impl_.partition_shard_counts_.Add(value);
+}
+inline void RecoveryReply::add_partition_shard_counts(int32_t value) {
+  _internal_add_partition_shard_counts(value);
+  // @@protoc_insertion_point(field_add:coordinator_proto.RecoveryReply.partition_shard_counts)
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+RecoveryReply::_internal_partition_shard_counts() const {
+  return _impl_.partition_shard_counts_;
+}
+inline const ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >&
+RecoveryReply::partition_shard_counts() const {
+  // @@protoc_insertion_point(field_list:coordinator_proto.RecoveryReply.partition_shard_counts)
+  return _internal_partition_shard_counts();
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+RecoveryReply::_internal_mutable_partition_shard_counts() {
+  return &_impl_.partition_shard_counts_;
+}
+inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
+RecoveryReply::mutable_partition_shard_counts() {
+  // @@protoc_insertion_point(field_mutable_list:coordinator_proto.RecoveryReply.partition_shard_counts)
+  return _internal_mutable_partition_shard_counts();
+}
+
+// int32 max_partition_shard_count = 16;
+inline void RecoveryReply::clear_max_partition_shard_count() {
+  _impl_.max_partition_shard_count_ = 0;
+}
+inline int32_t RecoveryReply::_internal_max_partition_shard_count() const {
+  return _impl_.max_partition_shard_count_;
+}
+inline int32_t RecoveryReply::max_partition_shard_count() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.max_partition_shard_count)
+  return _internal_max_partition_shard_count();
+}
+inline void RecoveryReply::_internal_set_max_partition_shard_count(int32_t value) {
+  
+  _impl_.max_partition_shard_count_ = value;
+}
+inline void RecoveryReply::set_max_partition_shard_count(int32_t value) {
+  _internal_set_max_partition_shard_count(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.max_partition_shard_count)
 }
 
 // -------------------------------------------------------------------

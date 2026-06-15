@@ -55,6 +55,7 @@ message RequestResult {
     double disk_io_end_time = 4;
     double grpc_start_time = 5;
     double exec_seconds = 6;
+    int32 data_port = 7;
 }
 
 message SetInfo {
@@ -77,6 +78,10 @@ message AppendInfo {
 message MergeParityInfo {
     string block_key = 1;
     int32 block_id = 2;
+    // Stripe write-back: recovery_size>0 writes [recovery_offset, recovery_offset+size) only.
+    // recovery_size==0 keeps legacy full-block recovery (trunc + BlockSize bytes).
+    int32 recovery_offset = 3;
+    int32 recovery_size = 4;
 }
 
 message GetInfo {
@@ -85,6 +90,8 @@ message GetInfo {
     int32 block_id = 3;
     string proxy_ip = 4;
     int32 proxy_port = 5;
+    int32 read_offset = 6;
+    int32 read_length = 7;
 }
 
 message StripeMergeParityInfo {

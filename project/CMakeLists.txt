@@ -158,6 +158,12 @@ foreach (_target
             ${CMAKE_CURRENT_SOURCE_DIR}/src/lrc.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/config.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/unilrc_encoder.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/proxy_glrc_phase2.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/proxy_glrc_pipeline.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_shard_plan.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_repair_ilp.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_pipeline_plan.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_pipeline_codec.cpp
             #${_target}.cpp
             )
     target_link_libraries(${_target}

@@ -468,6 +468,10 @@ namespace ECProject
         data_block_num_per_group.push_back(local_data_num);
       }
     }
+    else if (code_type == "gLRC")
+    {
+      glrc_fill_data_blocks_per_group(data_block_num_per_group, k, r, z);
+    }
     else if (code_type == "RS")
     {
       int b = (k + r - 1) % r + 1;
@@ -551,6 +555,11 @@ namespace ECProject
       {
         global_pairty_block_num_per_group.push_back(local_global_parity_num);
       }
+    }
+    else if (code_type == "gLRC")
+    {
+      for (int i = 0; i < z; i++)
+        global_pairty_block_num_per_group.push_back(i == z - 1 ? r : 0);
     }
     else if (code_type == "RS")
     {
@@ -645,6 +654,11 @@ namespace ECProject
       {
         local_parity_block_num_per_group.push_back(1);
       }
+    }
+    else if (code_type == "gLRC")
+    {
+      for (int i = 0; i < z; i++)
+        local_parity_block_num_per_group.push_back(1);
     }
     else if (code_type == "RS")
     {
@@ -752,7 +766,7 @@ namespace ECProject
       std::unique_ptr<bool[]> if_commit_arr(new bool[reply.append_keys_size()]);
       std::fill_n(if_commit_arr.get(), reply.append_keys_size(), false);
 
-      assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC" || m_sys_config->CodeType == "RS");
+      assert(m_sys_config->CodeType == "UniLRC" || m_sys_config->CodeType == "OptimalLRC" || m_sys_config->CodeType == "UniformLRC" || m_sys_config->CodeType == "AzureLRC" || m_sys_config->CodeType == "gLRC" || m_sys_config->CodeType == "RS");
       std::vector<int> data_block_num_per_group;
       std::vector<int> global_parity_block_num_per_group;
       std::vector<int> local_parity_block_num_per_group;
@@ -797,6 +811,10 @@ namespace ECProject
       {
         //ECProject::encode_azure_lrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(global_parity_ptr_array.data()), reinterpret_cast<unsigned char **>(local_parity_ptr_array.data()), m_sys_config->BlockSize);
         ECProject::encode_rs(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(parity_ptr_array.data()), m_sys_config->BlockSize);
+      }
+      else if (m_sys_config->CodeType == "gLRC")
+      {
+        ECProject::encode_glrc(m_sys_config->k, m_sys_config->r, m_sys_config->z, reinterpret_cast<unsigned char **>(data_ptr_array.data()), reinterpret_cast<unsigned char **>(parity_ptr_array.data()), m_sys_config->BlockSize);
       }
       for (int i = 0; i < reply.append_keys_size(); i++)
       {
@@ -1433,6 +1451,10 @@ namespace ECProject
     {
       parameters.push_back(4);
     }
+    else if(m_sys_config->CodeType == "gLRC")
+    {
+      parameters.push_back(5);
+    }
     else
     {
       std::cout << "[Client] CodeType not supported!" << std::endl;
@@ -1462,22 +1484,59 @@ namespace ECProject
 
   bool Client::multi_block_recovery(int stripe_id, std::vector<int> block_ids)
   {
+    GlrcMultiRecoveryMetrics metrics;
+    return multi_block_recovery_breakdown(stripe_id, block_ids, metrics);
+  }
+
+  bool Client::multi_block_recovery_breakdown(int stripe_id, std::vector<int> block_ids,
+                                              GlrcMultiRecoveryMetrics &metrics)
+  {
+    metrics = GlrcMultiRecoveryMetrics{};
     grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(600));
     coordinator_proto::StripeIdAndBlockIDsFromClient request;
     request.set_stripe_id(stripe_id);
-    for(int i = 0; i < block_ids.size(); i++)
-    {
+    for (int i = 0; i < (int)block_ids.size(); i++)
       request.add_block_ids(block_ids[i]);
-    }
 
     coordinator_proto::RecoveryReply reply;
     grpc::Status status = m_coordinator_ptr->multiBlockRecovery(&context, request, &reply);
     if (!status.ok())
     {
-      std::cout << "[Client] multi block recovery failed!" << std::endl;
+      metrics.success = false;
+      metrics.message = status.error_message();
+      std::cout << "[Client] multi block recovery failed: " << metrics.message << std::endl;
       return false;
     }
-    return true;
+
+    metrics.success = reply.success();
+    metrics.message = reply.message();
+    metrics.total_time = reply.total_time();
+    metrics.ilp_time = reply.ilp_time();
+    metrics.disk_read_time = reply.disk_read_time();
+    metrics.network_time = reply.network_time();
+    metrics.decode_time = reply.decode_time();
+    metrics.disk_write_time = reply.disk_write_time();
+    metrics.helper_block_count = reply.helper_block_count();
+    metrics.repair_mode = reply.repair_mode();
+    metrics.equation_policy = reply.equation_policy();
+    metrics.selected_equations.clear();
+    metrics.helper_block_ids.clear();
+    for (int i = 0; i < reply.selected_equations_size(); i++)
+      metrics.selected_equations.push_back(reply.selected_equations(i));
+    for (int i = 0; i < reply.helper_block_ids_size(); i++)
+      metrics.helper_block_ids.push_back(reply.helper_block_ids(i));
+
+    if (metrics.success)
+    {
+      std::cout << "[Client] gLRC recovery OK stripe=" << stripe_id
+                << " total=" << metrics.total_time << "s" << std::endl;
+    }
+    else
+    {
+      std::cout << "[Client] gLRC multi-block recovery failed: " << metrics.message << std::endl;
+    }
+    return metrics.success;
   }
   void Client::start_merge(int merge_round)
   {

@@ -40,8 +40,6 @@ service proxyService {
   rpc deleteBlock(NodeAndBlock) returns (DelReply);
   // append
   rpc scheduleAppend2Datanode(AppendStripeDataPlacement) returns (SetReply);
-  // block relocation for stripe merge
-  rpc relocateBlock(blockRelocPlan) returns (blockRelocReply);
   // get stripe
   rpc getBlocks(StripeAndBlockIDs) returns (GetReply);
 }
@@ -208,6 +206,65 @@ message RecoveryRequest{
   repeated int32 proxyport = 11;
   bool is_to_send_block_id = 12;
   int32 block_id_to_send = 13;
+  bool glrc_ilp_recovery = 14;
+  repeated int32 failed_block_ids = 15;
+  repeated string failed_block_keys = 16;
+  repeated string replaced_node_ips = 17;
+  repeated int32 replaced_node_ports = 18;
+  repeated string selected_equations = 19;
+  repeated int32 selected_equation_indices = 20;
+  bool glrc_ilp_phase2 = 21;
+  int32 phase2_partition_id = 22;
+  int32 phase2_shard_count = 23;
+  int32 phase2_stripe_byte_len = 24;
+  int32 phase2_shard_begin = 25;
+  int32 phase2_shard_count_local = 26;
+  int32 phase2_byte_off = 27;
+  int32 phase2_byte_len = 28;
+  bool phase2_do_write_back = 29;
+  int32 phase2_exchange_epoch = 30;
+  repeated string phase2_peer_proxy_ips = 31;
+  repeated int32 phase2_peer_proxy_ports = 32;
+  repeated int32 phase2_peer_partition_ids = 33;
+  repeated int32 phase2_peer_shard_begins = 34;
+  repeated int32 phase2_peer_shard_counts = 35;
+  bool glrc_ilp_pipeline = 36;
+  int32 pipeline_shard_count = 37;
+  int32 pipeline_hub_block_id = 38;
+  repeated int32 pipeline_local_direct_equation_indices = 39;
+  int32 pipeline_exchange_epoch = 40;
+  /** 0=hub, 1=chain_head, 2=hop_server, 3=local_direct */
+  int32 pipeline_role = 41;
+  int32 pipeline_chain_id = 42;
+  int32 pipeline_equation_index = 43;
+  int32 pipeline_eq_slot = 44;
+  repeated int32 pipeline_hop_block_ids = 45;
+  repeated string pipeline_hop_proxy_ips = 46;
+  repeated int32 pipeline_hop_proxy_ports = 47;
+  repeated string pipeline_hop_datanode_ips = 48;
+  repeated int32 pipeline_hop_datanode_ports = 49;
+  repeated string pipeline_hop_block_keys = 50;
+  repeated int32 pipeline_hop_coefs = 51;
+  int32 pipeline_my_hop_index = 52;
+  string pipeline_hub_proxy_ip = 53;
+  int32 pipeline_hub_proxy_port = 54;
+  int32 pipeline_local_failed_block_id = 55;
+  string pipeline_local_failed_block_key = 56;
+  string pipeline_local_replaced_node_ip = 57;
+  int32 pipeline_local_replaced_node_port = 58;
+  repeated int32 pipeline_hub_chain_eq_slots = 59;
+  repeated int32 pipeline_hub_is_chain_tail_flags = 60;
+  repeated int32 pipeline_hub_chain_hub_coefs = 61;
+  string pipeline_hub_block_key = 62;
+  int32 pipeline_chain_hub_is_tail_flag = 63;
+  int32 pipeline_equation_is_local = 64;
+  repeated int32 pipeline_hub_chain_equation_is_local = 65;
+  repeated int32 pipeline_hub_chain_local_only_flags = 66;
+  /** Coordinator-assigned TCP listen ports (avoid hash collisions). */
+  repeated int32 pipeline_hop_listen_ports = 67;
+  int32 pipeline_my_listen_port = 68;
+  int32 pipeline_chain_hub_listen_port = 69;
+  repeated int32 pipeline_hub_listener_ports = 70;
 }
 
 message MultipleRecoveryRequest{

@@ -52,6 +52,8 @@ namespace ECProject
 
     void encode_optimal_lrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
 
+    void encode_glrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
+
     void encode_uniform_lrc(int k, int r, int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
 
     void encode_rs(int k,int r,int z, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
@@ -64,6 +66,8 @@ namespace ECProject
 
     void partial_encode_optimal_lrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
 
+    void partial_encode_glrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
+
     void partial_encode_uniform_lrc(int k, int r, int z, int data_block_num, unsigned char **data_ptrs, unsigned char **parity_ptrs, int block_size);
 
     /* Matrix generation helpers: generate full (m+z) x k encode matrix for each scheme
@@ -72,7 +76,14 @@ namespace ECProject
     void gen_unilrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
     void gen_azure_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
     void gen_optimal_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+    void gen_glrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
     void gen_uniform_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
+
+    int glrc_non_global_data_quota(int k, int r, int z);
+    int glrc_global_payload_quota(int k, int r, int z);
+    int glrc_data_group_id(int data_block_index, int k, int r, int z);
+    int glrc_data_blocks_in_group(int group_id, int k, int r, int z);
+    void glrc_fill_data_blocks_per_group(std::vector<int> &data_blocks_per_group, int k, int r, int z);
 
     void decode_unilrc(const int k, const int r, const int z, const int block_num,
                        const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size);
@@ -84,6 +95,35 @@ namespace ECProject
     void decode_optimal_lrc(const int k, const int r, const int z, const int block_num,
                             const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size,
                             int failed_block_id);
+
+    void decode_glrc(const int k, const int r, const int z, const int block_num,
+                     const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size,
+                     int failed_block_id);
+
+    bool decode_glrc_ilp(const int k, const int r, const int z, int block_size,
+                         const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
+                         const std::vector<int> &failed_block_ids,
+                         const std::vector<int> &selected_equation_indices,
+                         std::vector<unsigned char *> &recovered_ptrs);
+
+    bool decode_glrc_ilp_range(const int k, const int r, const int z, int block_size,
+                               const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
+                               const std::vector<int> &failed_block_ids,
+                               const std::vector<int> &selected_equation_indices,
+                               int range_off, int range_len,
+                               std::vector<unsigned char *> &recovered_ptrs);
+
+    /** Decode from per-equation RHS buffers (pipeline hub: one partial per selected equation). */
+    bool decode_glrc_ilp_rhs_range(const int k, const int r, const int z, int block_size,
+                                   unsigned char **rhs_ptrs,
+                                   const std::vector<int> &failed_block_ids,
+                                   const std::vector<int> &selected_equation_indices,
+                                   int range_off, int range_len,
+                                   std::vector<unsigned char *> &recovered_ptrs);
+
+    bool glrc_ilp_decode_matrix_invertible(int k, int r, int z,
+                                           const std::vector<int> &failed_block_ids,
+                                           const std::vector<int> &selected_equation_indices);
 
     void decode_uniform_lrc(const int k, const int r, const int z, const int block_num,
                             const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size,

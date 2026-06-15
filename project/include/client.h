@@ -12,9 +12,27 @@
 #include <asio.hpp>
 #include "config.h"
 #include "toolbox.h"
+#include <string>
 #include <vector>
 namespace ECProject
 {
+  struct GlrcMultiRecoveryMetrics
+  {
+    bool success = false;
+    std::string message;
+    double total_time = 0.0;
+    double ilp_time = 0.0;
+    double disk_read_time = 0.0;
+    double network_time = 0.0;
+    double decode_time = 0.0;
+    double disk_write_time = 0.0;
+    int helper_block_count = 0;
+    std::string repair_mode;
+    std::string equation_policy;
+    std::vector<std::string> selected_equations;
+    std::vector<int> helper_block_ids;
+  };
+
   class Client
   {
   public:
@@ -74,6 +92,8 @@ namespace ECProject
     bool recovery_breakdown(int stripe_id, int failed_block_id, double &disk_read_time, double &network_time, double &decode_time, double &disk_write_time);
     bool recovery(int stripe_id, int failed_block_id);
     bool multi_block_recovery(int stripe_id, std::vector<int> block_ids);
+    bool multi_block_recovery_breakdown(int stripe_id, std::vector<int> block_ids,
+                                        GlrcMultiRecoveryMetrics &metrics);
     int recovery_full_node(int node_id);
     std::vector<int> get_data_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_global_parity_block_num_per_group(int k, int r, int z, std::string code_type);

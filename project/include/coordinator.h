@@ -13,6 +13,7 @@
 #include <config.h>
 #include <toolbox.h>
 #include "unilrc_encoder.h"
+#include "glrc_repair_ilp.h"
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
@@ -80,15 +81,10 @@ namespace ECProject
         grpc::ServerContext *context,
         const coordinator_proto::BlockIDsAndClientIP *blockIDsClient,
         coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) override;
-    grpc::Status getBlocksByStripePos(
-        grpc::ServerContext *context,
-        const coordinator_proto::StripePosListAndClient *req,
-        coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) override;
     grpc::Status getDegradedReadBlocks(
         grpc::ServerContext *context,
         const coordinator_proto::BlockIDsAndClientIP *blockIDsClient,
         coordinator_proto::ReplyProxyIPsPorts *proxyIPPort) override;
-
     // degraded read
     grpc::Status getDegradedReadBlock(
       grpc::ServerContext *context,
@@ -128,12 +124,6 @@ namespace ECProject
         grpc::ServerContext *context,
         const coordinator_proto::StripeIdFromClient *stripeid,
         coordinator_proto::RepIfDeling *delReplyClient) override;
-    // merge
-    grpc::Status mergeStripes(
-        grpc::ServerContext *context,
-        const coordinator_proto::MergeRequest *request,
-        coordinator_proto::MergeReply *reply) override;
-
     // other
     grpc::Status listStripes(
         grpc::ServerContext *context,
@@ -142,6 +132,8 @@ namespace ECProject
 
     bool init_clusterinfo(std::string m_clusterinfo_path);
     bool init_proxyinfo();
+    /** Repair proxy (gRPC) for blocks on this datanode  one proxy per datanode when configured. */
+    std::string repair_proxy_key_for_node(int node_id) const;
     void update_stripe_info_in_node(bool add_or_sub, int t_node_id, int stripe_id);
     int randomly_select_a_cluster(int stripe_id);
     int randomly_select_a_node(int cluster_id, int stripe_id);
@@ -151,9 +143,9 @@ namespace ECProject
     int count_block_num(char type, int cluster_id, int stripe_id, int group_id);
     bool find_block(char type, int cluster_id, int stripe_id);
 
-    void initialize_equiox_stripe_placement(Stripe *stripe);
     void initialize_unilrc_and_azurelrc_stripe_placement(Stripe *stripe);
     void initialize_optimal_lrc_stripe_placement(Stripe *stripe);
+    void initialize_glrc_stripe_placement(Stripe *stripe);
     void initialize_uniform_lrc_stripe_placement(Stripe *stripe);
     void add_to_map(std::map<int, std::vector<int>> &map, int key, int value);
     std::vector<proxy_proto::AppendStripeDataPlacement> generate_add_plans(Stripe *stripe);
@@ -161,13 +153,19 @@ namespace ECProject
     std::vector<proxy_proto::AppendStripeDataPlacement> generateAppendPlan(Stripe *stripe, int curr_logical_offset, int append_size);
     void update_stripe_info_in_node(int t_node_id, int stripe_id, int index);
     int getClusterAppendSize(Stripe *stripe, const std::map<int, std::pair<int, int>> &block_to_slice_sizes, int curr_group_id, int parity_slice_size);
-    bool notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan);
+    void notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan);
     std::vector<int> get_recovery_group_ids(std::string code_type, int k, int r, int z, int failed_block_id);
     void init_recovery_group_lookup_table();
     void print_stripe_data_placement(Stripe &stripe);
     int get_cluster_id_by_group_id(Stripe &stripe, int group_id);
     void getStripeFromProxy(std::string client_ip, int client_port, std::string proxy_ip, int proxy_port, int stripe_id, int group_id, std::vector<int> block_ids);
     bool recovery_one_block(int stripe_id, int failed_block_id);
+    bool recovery_glrc_ilp_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
+                                       coordinator_proto::RecoveryReply *recovery_reply);
+    bool recovery_glrc_ilp_phase2_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
+                                              coordinator_proto::RecoveryReply *recovery_reply);
+    bool recovery_glrc_ilp_pipeline_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
+                                              coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_one_block_breakdown(int stripe_id, int failed_block_id, 
       std::vector<double> &disk_io_start_time, std::vector<double> &disk_io_end_time, std::vector<double> &decode_start_time, std::vector<double> &decode_end_time,
       std::vector<double> &network_start_time, std::vector<double> &network_end_time, double &cross_rack_network_time, double &cross_rack_xor_time,
@@ -183,7 +181,6 @@ namespace ECProject
     ECProject::ToolBox *m_toolbox;
     int m_cur_cluster_id = 0;
     int m_cur_stripe_id = 0;
-
     std::unordered_map<std::string, ObjectInfo> m_object_commit_table;
     std::unordered_map<std::string, ObjectInfo> m_object_updating_table;
     std::map<int, Cluster> m_cluster_table;
@@ -196,7 +193,6 @@ namespace ECProject
 
   private:
     std::mutex m_mutex;
-    std::vector<std::vector<int>> Get_OA_Information(const std::string& filename);
     std::condition_variable cv;
     std::map<std::string, std::unique_ptr<proxy_proto::proxyService::Stub>>
         m_proxy_ptrs;
@@ -257,18 +253,11 @@ namespace ECProject
       grpc::EnableDefaultHealthCheckService(true);
       grpc::reflection::InitProtoReflectionServerBuilderPlugin();
       grpc::ServerBuilder builder;
-      // Listen on all interfaces (0.0.0.0) so clients from any host can connect
-      std::string listen_address("0.0.0.0:");
-      std::string::size_type colon = m_coordinator_ip_port.find_last_of(':');
-      if (colon != std::string::npos)
-        listen_address += m_coordinator_ip_port.substr(colon + 1);
-      else
-        listen_address = m_coordinator_ip_port;
-      builder.AddListeningPort(listen_address, grpc::InsecureServerCredentials());
+      std::string server_address(m_coordinator_ip_port);
+      builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
       builder.RegisterService(&m_coordinatorImpl);
       std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
-      std::cout << "Server listening on " << listen_address
-                << " (client should connect to " << m_coordinator_ip_port << ")" << std::endl;
+      std::cout << "Server listening on " << server_address << std::endl;
       server->Wait();
     }
 

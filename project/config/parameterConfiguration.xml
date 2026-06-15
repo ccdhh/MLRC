@@ -1,26 +1,61 @@
 <?xml version='1.0' encoding='UTF-8'?>
+<!--
+  gLRC 修复实验配置说明（两个正交维度，共 2×2=4 种组合 C0–C3）
+
+  【维度 1】执行架构 — GlrcRepairMode（修复方式 / 谁来执行）
+    phase1  单 anchor repair proxy 拉取全部 helper，整 block 解码后写回。
+            适合 f=1 或作为 baseline；所有 helper 流量经过 anchor 对应 datanode 的 proxy。
+    phase2  按 GlrcShardCount 分片；每个失败块 partition 在各自 datanode 的 repair proxy 上
+            并行执行（部分读 + 分片解码 + proxy 间 exchange）。f>1 时各 partition 带宽独立。
+    pipeline 按 GlrcShardCount 分片；多方程链并行，链内 W=1 逐分片流水，Hub 为参与方程最多的
+            survivor proxy；local 单失败块可 local-direct 不经 Hub。
+
+  【维度 2】方程选择 — GlrcEquationPolicy（选哪些修复方程）
+    local-then-global  Ceph 风格：优先 local XOR，不足再用 global Cauchy 方程。
+    local-first        pipeline 推荐：优先 local 方程组合，不足再加 global。
+    ilp-min-helper     ILP 穷举：在可解方案中最小化 helper 块数量（helper 并集最小）。
+
+  四种实验组合（改下面两个标签即可切换，无需改代码）：
+    C0: phase1 + local-then-global   （默认，Phase1 baseline）
+    C1: phase2 + local-then-global
+    C2: phase1 + ilp-min-helper
+    C3: phase2 + ilp-min-helper
+
+  其他 gLRC 相关项：
+    GlrcShardCount      仅 phase2 生效；BlockSize 必须能被其整除。
+    GlrcPhase2WriteBack phase2 是否在修复后写回 datanode（重复随机试验可设 false）。
+    NodeBlockBandwidthMBps  每个 repair proxy / datanode 的链路限速（MB/s）；0 表示不限速。
+                            拓扑须为「每 datanode 一个 repair proxy」（见 clusterInformation.xml）。
+
+  前置条件：CodeType 必须为 gLRC；ClusterNum >= z。
+-->
 <Configuration>
     <AlignedSize>4096</AlignedSize>
     <UnitSize>8192</UnitSize>
-    <BlockSize>1048576</BlockSize>
-    
-    
-    
-    <DatanodeNumPerCluster>10</DatanodeNumPerCluster>
-    <ClusterNum>16</ClusterNum>
-    
-    <CoordinatorIP>10.10.1.2</CoordinatorIP>
+    <BlockSize>16777216</BlockSize>
+
+    <!-- 链路带宽：每个 proxy 进程独立 ingress 上限；phase2 各 partition 各用各 datanode 的 proxy -->
+    <NodeBlockBandwidthMBps>24</NodeBlockBandwidthMBps>
+
+    <!-- 修复方式：phase1 | phase2 | pipeline -->
+    <GlrcRepairMode>pipeline</GlrcRepairMode>
+    <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
+    <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
+
+    <GlrcShardCount>16</GlrcShardCount>
+    <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
+
+    <DatanodeNumPerCluster>15</DatanodeNumPerCluster>
+    <ClusterNum>3</ClusterNum>
+    <CoordinatorIP>127.0.0.1</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
-    
-    
-    <AppendMode>EQUIOX_MODE</AppendMode>
+
+    <AppendMode>UNILRC_MODE</AppendMode>
     <alpha>2</alpha>
-    
-    <CodeType>RS</CodeType>
-    <k>10</k>
-    <r>4</r>
-    <z>0</z>
-    
-    
-    
+
+    <CodeType>gLRC</CodeType>
+    <k>9</k>
+    <r>3</r>
+    <z>3</z>
+
 </Configuration>

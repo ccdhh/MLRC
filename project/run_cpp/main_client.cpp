@@ -11,17 +11,209 @@
 #include <chrono>
 #include <algorithm>
 #include <random>
+#include <numeric>
+#include <sstream>
+#include <thread>
 #include "unilrc_encoder.h"
+#include "glrc_repair_ilp.h"
 
+static int env_int_or(const char *name, int default_value)
+{
+    const char *v = std::getenv(name);
+    if (!v || v[0] == '\0')
+        return default_value;
+    return std::max(1, std::atoi(v));
+}
+
+static bool parse_failed_blocks_env(const char *raw, int n, std::vector<int> &out)
+{
+    if (!raw || raw[0] == '\0')
+        return false;
+    out.clear();
+    std::stringstream ss(raw);
+    std::string token;
+    while (std::getline(ss, token, ','))
+    {
+        if (token.empty())
+            continue;
+        int id = std::stoi(token);
+        if (id < 0 || id >= n)
+            return false;
+        out.push_back(id);
+    }
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return !out.empty();
+}
+
+#include "runtime_paths.h"
+
+static bool read_glrc_test_params(int n, int &fail_count, int &trial_count)
+{
+    const char *env_f = std::getenv("GLRC_FAIL_COUNT");
+    const char *env_t = std::getenv("GLRC_TRIALS");
+    const bool non_interactive = !isatty(STDIN_FILENO);
+
+    if (non_interactive)
+    {
+        fail_count = (env_f && env_f[0]) ? std::max(1, std::atoi(env_f)) : 1;
+        trial_count = (env_t && env_t[0]) ? std::max(1, std::atoi(env_t)) : 1;
+        return true;
+    }
+
+    std::cout << "请输入失败块数量 f (1.." << (n - 1) << "): " << std::flush;
+    if (!(std::cin >> fail_count) || fail_count < 1 || fail_count >= n)
+    {
+        std::cerr << "无效的 f，请输入 [1, " << (n - 1) << "] 之间的整数。" << std::endl;
+        return false;
+    }
+    std::cout << "请输入随机实验次数: " << std::flush;
+    if (!(std::cin >> trial_count) || trial_count < 1)
+    {
+        std::cerr << "无效的实验次数，请输入 >= 1 的整数。" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &m, int k, int r, int z)
+{
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "  repair_mode:       " << m.repair_mode << std::endl;
+    std::cout << "  equation_policy:   " << m.equation_policy << std::endl;
+    std::cout << "  selected_equations:  ";
+    for (size_t i = 0; i < m.selected_equations.size(); i++)
+        std::cout << (i ? " " : "") << m.selected_equations[i];
+    if (m.selected_equations.empty())
+        std::cout << "(none)";
+    std::cout << std::endl;
+    std::cout << "  helper_blocks (" << m.helper_block_count << "):     ";
+    for (size_t i = 0; i < m.helper_block_ids.size(); i++)
+        std::cout << (i ? " " : "") << ECProject::glrc_block_label(m.helper_block_ids[i], k, r, z);
+    if (m.helper_block_ids.empty())
+        std::cout << "(none)";
+    std::cout << std::endl;
+    std::cout << "  --- timing (seconds) ---" << std::endl;
+    std::cout << "  equation_select_time:  " << m.ilp_time
+              << "  (ILP / local-then-global planner)" << std::endl;
+    std::cout << "  disk_read_time:          " << m.disk_read_time << std::endl;
+    std::cout << "  network_transfer_time:   " << m.network_time << std::endl;
+    std::cout << "  decode_time:             " << m.decode_time << std::endl;
+    std::cout << "  disk_write_time:         " << m.disk_write_time << std::endl;
+    std::cout << "  total_time:              " << m.total_time << std::endl;
+}
+
+static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config)
+{
+    const int k = config->k;
+    const int r = config->r;
+    const int z = config->z;
+    const int n = k + r + z;
+    const int stripe_num = env_int_or("GLRC_STRIPE_NUM", 1);
+    int fail_count = 0;
+    int trial_count = 0;
+
+    std::cout << "[gLRC] config (n,k,r,z)=(" << n << "," << k << "," << r << "," << z << ")"
+              << " mode=" << config->GlrcRepairMode
+              << " policy=" << config->GlrcEquationPolicy << std::endl;
+
+    if (!read_glrc_test_params(n, fail_count, trial_count))
+        return 1;
+
+    std::cout << "[gLRC] Writing " << stripe_num << " stripe(s)..." << std::endl;
+    for (int i = 0; i < stripe_num; i++)
+    {
+        if (!client.set())
+        {
+            std::cerr << "[gLRC] set() failed at stripe index " << i << std::endl;
+            return 1;
+        }
+    }
+
+    std::vector<int> fixed_failed;
+    const bool use_fixed = parse_failed_blocks_env(std::getenv("GLRC_FAILED_BLOCKS"), n, fixed_failed);
+    if (use_fixed && (int)fixed_failed.size() != fail_count)
+    {
+        std::cerr << "[gLRC] GLRC_FAILED_BLOCKS count must match GLRC_FAIL_COUNT=" << fail_count << std::endl;
+        return 1;
+    }
+
+    std::cout << "\n[gLRC] Running " << trial_count << " random trial(s) with f=" << fail_count
+              << " on stripe 0..." << std::endl;
+
+    std::mt19937 rng(std::random_device{}());
+    std::vector<int> all_blocks(n);
+    std::iota(all_blocks.begin(), all_blocks.end(), 0);
+
+    int success_count = 0;
+    double sum_total = 0.0, sum_ilp = 0.0, sum_read = 0.0, sum_net = 0.0;
+    double sum_decode = 0.0, sum_write = 0.0;
+    double sum_helpers = 0.0;
+
+    for (int t = 0; t < trial_count; t++)
+    {
+        std::vector<int> failed = use_fixed ? fixed_failed : all_blocks;
+        if (!use_fixed)
+        {
+            std::shuffle(failed.begin(), failed.end(), rng);
+            failed.resize(static_cast<size_t>(fail_count));
+            std::sort(failed.begin(), failed.end());
+        }
+
+        ECProject::GlrcMultiRecoveryMetrics m;
+        std::cout << "\n--- trial " << (t + 1) << "/" << trial_count
+                  << " failed_blocks: " << ECProject::glrc_format_block_list(failed, k, r, z)
+                  << std::endl;
+
+        if (!client.multi_block_recovery_breakdown(0, failed, m))
+        {
+            std::cerr << "  FAILED: " << m.message << std::endl;
+            continue;
+        }
+
+        success_count++;
+        sum_total += m.total_time;
+        sum_ilp += m.ilp_time;
+        sum_read += m.disk_read_time;
+        sum_net += m.network_time;
+        sum_decode += m.decode_time;
+        sum_write += m.disk_write_time;
+        sum_helpers += m.helper_block_count;
+
+        print_glrc_trial_metrics(m, k, r, z);
+
+        if (t + 1 < trial_count)
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    std::cout << "\n========== gLRC repair batch summary ==========" << std::endl;
+    std::cout << "  mode=" << config->GlrcRepairMode
+              << " policy=" << config->GlrcEquationPolicy << std::endl;
+    std::cout << "  f=" << fail_count << " trials=" << trial_count
+              << " success=" << success_count << std::endl;
+    if (success_count > 0)
+    {
+        const double cnt = static_cast<double>(success_count);
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "  avg_equation_select_time:  " << (sum_ilp / cnt) << " s" << std::endl;
+        std::cout << "  avg_disk_read_time:        " << (sum_read / cnt) << " s" << std::endl;
+        std::cout << "  avg_network_transfer_time: " << (sum_net / cnt) << " s" << std::endl;
+        std::cout << "  avg_decode_time:           " << (sum_decode / cnt) << " s" << std::endl;
+        std::cout << "  avg_disk_write_time:       " << (sum_write / cnt) << " s" << std::endl;
+        std::cout << "  avg_total_time:            " << (sum_total / cnt) << " s" << std::endl;
+        std::cout << "  avg_helper_blocks:         " << (sum_helpers / cnt) << std::endl;
+    }
+    std::cout << "===============================================" << std::endl;
+
+    return (success_count == trial_count) ? 0 : 1;
+}
 
 int main(int argc, char **argv)
 {
-    char buff[256];
-    getcwd(buff, 256);
-    std::string cwf = std::string(argv[0]);
-    std::string sys_config_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../config/parameterConfiguration.xml";
-    //std::string sys_config_path = "/home/GuanTian/lql/UniLRC/project/config/parameterConfiguration.xml";
-    std::cout << "Current working directory: " << sys_config_path << std::endl;
+    const std::string sys_config_path =
+        resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
+                                            "../../config/parameterConfiguration.xml");
+    std::cout << "Config path: " << sys_config_path << std::endl;
 
     const ECProject::Config *config = ECProject::Config::getInstance(sys_config_path);
 
@@ -42,6 +234,9 @@ int main(int argc, char **argv)
     ECProject::Client client(client_ip, client_port, coordinator_addr, sys_config_path);
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
+    if (config->CodeType == "gLRC")
+        return run_glrc_repair_test(client, config);
+
     std::vector<int> parameters = client.get_parameters();
     int k = parameters[0];
     int r = parameters[1];
@@ -61,6 +256,9 @@ int main(int argc, char **argv)
     }
     else if(parameters[4] == 4){
         code_type = "RS";
+    }
+    else if(parameters[4] == 5){
+        code_type = "gLRC";
     }
     else{
         std::cout << "Code type error" << std::endl;

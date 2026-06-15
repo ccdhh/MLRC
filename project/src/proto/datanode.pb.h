@@ -372,6 +372,7 @@ class RequestResult final :
     kDiskIoEndTimeFieldNumber = 4,
     kGrpcStartTimeFieldNumber = 5,
     kExecSecondsFieldNumber = 6,
+    kDataPortFieldNumber = 7,
   };
   // bool message = 1;
   void clear_message();
@@ -427,6 +428,15 @@ class RequestResult final :
   void _internal_set_exec_seconds(double value);
   public:
 
+  // int32 data_port = 7;
+  void clear_data_port();
+  int32_t data_port() const;
+  void set_data_port(int32_t value);
+  private:
+  int32_t _internal_data_port() const;
+  void _internal_set_data_port(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:datanode_proto.RequestResult)
  private:
   class _Internal;
@@ -441,6 +451,7 @@ class RequestResult final :
     double disk_io_end_time_;
     double grpc_start_time_;
     double exec_seconds_;
+    int32_t data_port_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -981,6 +992,8 @@ class MergeParityInfo final :
   enum : int {
     kBlockKeyFieldNumber = 1,
     kBlockIdFieldNumber = 2,
+    kRecoveryOffsetFieldNumber = 3,
+    kRecoverySizeFieldNumber = 4,
   };
   // string block_key = 1;
   void clear_block_key();
@@ -1005,6 +1018,24 @@ class MergeParityInfo final :
   void _internal_set_block_id(int32_t value);
   public:
 
+  // int32 recovery_offset = 3;
+  void clear_recovery_offset();
+  int32_t recovery_offset() const;
+  void set_recovery_offset(int32_t value);
+  private:
+  int32_t _internal_recovery_offset() const;
+  void _internal_set_recovery_offset(int32_t value);
+  public:
+
+  // int32 recovery_size = 4;
+  void clear_recovery_size();
+  int32_t recovery_size() const;
+  void set_recovery_size(int32_t value);
+  private:
+  int32_t _internal_recovery_size() const;
+  void _internal_set_recovery_size(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:datanode_proto.MergeParityInfo)
  private:
   class _Internal;
@@ -1015,6 +1046,8 @@ class MergeParityInfo final :
   struct Impl_ {
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr block_key_;
     int32_t block_id_;
+    int32_t recovery_offset_;
+    int32_t recovery_size_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -1148,6 +1181,8 @@ class GetInfo final :
     kBlockSizeFieldNumber = 2,
     kBlockIdFieldNumber = 3,
     kProxyPortFieldNumber = 5,
+    kReadOffsetFieldNumber = 6,
+    kReadLengthFieldNumber = 7,
   };
   // string block_key = 1;
   void clear_block_key();
@@ -1204,6 +1239,24 @@ class GetInfo final :
   void _internal_set_proxy_port(int32_t value);
   public:
 
+  // int32 read_offset = 6;
+  void clear_read_offset();
+  int32_t read_offset() const;
+  void set_read_offset(int32_t value);
+  private:
+  int32_t _internal_read_offset() const;
+  void _internal_set_read_offset(int32_t value);
+  public:
+
+  // int32 read_length = 7;
+  void clear_read_length();
+  int32_t read_length() const;
+  void set_read_length(int32_t value);
+  private:
+  int32_t _internal_read_length() const;
+  void _internal_set_read_length(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:datanode_proto.GetInfo)
  private:
   class _Internal;
@@ -1217,6 +1270,8 @@ class GetInfo final :
     int32_t block_size_;
     int32_t block_id_;
     int32_t proxy_port_;
+    int32_t read_offset_;
+    int32_t read_length_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -2122,6 +2177,26 @@ inline void RequestResult::set_exec_seconds(double value) {
   // @@protoc_insertion_point(field_set:datanode_proto.RequestResult.exec_seconds)
 }
 
+// int32 data_port = 7;
+inline void RequestResult::clear_data_port() {
+  _impl_.data_port_ = 0;
+}
+inline int32_t RequestResult::_internal_data_port() const {
+  return _impl_.data_port_;
+}
+inline int32_t RequestResult::data_port() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.RequestResult.data_port)
+  return _internal_data_port();
+}
+inline void RequestResult::_internal_set_data_port(int32_t value) {
+  
+  _impl_.data_port_ = value;
+}
+inline void RequestResult::set_data_port(int32_t value) {
+  _internal_set_data_port(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.RequestResult.data_port)
+}
+
 // -------------------------------------------------------------------
 
 // SetInfo
@@ -2514,6 +2589,46 @@ inline void MergeParityInfo::set_block_id(int32_t value) {
   // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.block_id)
 }
 
+// int32 recovery_offset = 3;
+inline void MergeParityInfo::clear_recovery_offset() {
+  _impl_.recovery_offset_ = 0;
+}
+inline int32_t MergeParityInfo::_internal_recovery_offset() const {
+  return _impl_.recovery_offset_;
+}
+inline int32_t MergeParityInfo::recovery_offset() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.recovery_offset)
+  return _internal_recovery_offset();
+}
+inline void MergeParityInfo::_internal_set_recovery_offset(int32_t value) {
+  
+  _impl_.recovery_offset_ = value;
+}
+inline void MergeParityInfo::set_recovery_offset(int32_t value) {
+  _internal_set_recovery_offset(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_offset)
+}
+
+// int32 recovery_size = 4;
+inline void MergeParityInfo::clear_recovery_size() {
+  _impl_.recovery_size_ = 0;
+}
+inline int32_t MergeParityInfo::_internal_recovery_size() const {
+  return _impl_.recovery_size_;
+}
+inline int32_t MergeParityInfo::recovery_size() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.recovery_size)
+  return _internal_recovery_size();
+}
+inline void MergeParityInfo::_internal_set_recovery_size(int32_t value) {
+  
+  _impl_.recovery_size_ = value;
+}
+inline void MergeParityInfo::set_recovery_size(int32_t value) {
+  _internal_set_recovery_size(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_size)
+}
+
 // -------------------------------------------------------------------
 
 // GetInfo
@@ -2676,6 +2791,46 @@ inline void GetInfo::_internal_set_proxy_port(int32_t value) {
 inline void GetInfo::set_proxy_port(int32_t value) {
   _internal_set_proxy_port(value);
   // @@protoc_insertion_point(field_set:datanode_proto.GetInfo.proxy_port)
+}
+
+// int32 read_offset = 6;
+inline void GetInfo::clear_read_offset() {
+  _impl_.read_offset_ = 0;
+}
+inline int32_t GetInfo::_internal_read_offset() const {
+  return _impl_.read_offset_;
+}
+inline int32_t GetInfo::read_offset() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.GetInfo.read_offset)
+  return _internal_read_offset();
+}
+inline void GetInfo::_internal_set_read_offset(int32_t value) {
+  
+  _impl_.read_offset_ = value;
+}
+inline void GetInfo::set_read_offset(int32_t value) {
+  _internal_set_read_offset(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.GetInfo.read_offset)
+}
+
+// int32 read_length = 7;
+inline void GetInfo::clear_read_length() {
+  _impl_.read_length_ = 0;
+}
+inline int32_t GetInfo::_internal_read_length() const {
+  return _impl_.read_length_;
+}
+inline int32_t GetInfo::read_length() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.GetInfo.read_length)
+  return _internal_read_length();
+}
+inline void GetInfo::_internal_set_read_length(int32_t value) {
+  
+  _impl_.read_length_ = value;
+}
+inline void GetInfo::set_read_length(int32_t value) {
+  _internal_set_read_length(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.GetInfo.read_length)
 }
 
 // -------------------------------------------------------------------

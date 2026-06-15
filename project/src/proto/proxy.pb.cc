@@ -331,13 +331,89 @@ PROTOBUF_CONSTEXPR RecoveryRequest::RecoveryRequest(
   , /*decltype(_impl_.proxyip_)*/{}
   , /*decltype(_impl_.proxyport_)*/{}
   , /*decltype(_impl_._proxyport_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.failed_block_ids_)*/{}
+  , /*decltype(_impl_._failed_block_ids_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.failed_block_keys_)*/{}
+  , /*decltype(_impl_.replaced_node_ips_)*/{}
+  , /*decltype(_impl_.replaced_node_ports_)*/{}
+  , /*decltype(_impl_._replaced_node_ports_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.selected_equations_)*/{}
+  , /*decltype(_impl_.selected_equation_indices_)*/{}
+  , /*decltype(_impl_._selected_equation_indices_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.phase2_peer_proxy_ips_)*/{}
+  , /*decltype(_impl_.phase2_peer_proxy_ports_)*/{}
+  , /*decltype(_impl_._phase2_peer_proxy_ports_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.phase2_peer_partition_ids_)*/{}
+  , /*decltype(_impl_._phase2_peer_partition_ids_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.phase2_peer_shard_begins_)*/{}
+  , /*decltype(_impl_._phase2_peer_shard_begins_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.phase2_peer_shard_counts_)*/{}
+  , /*decltype(_impl_._phase2_peer_shard_counts_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_local_direct_equation_indices_)*/{}
+  , /*decltype(_impl_._pipeline_local_direct_equation_indices_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hop_block_ids_)*/{}
+  , /*decltype(_impl_._pipeline_hop_block_ids_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hop_proxy_ips_)*/{}
+  , /*decltype(_impl_.pipeline_hop_proxy_ports_)*/{}
+  , /*decltype(_impl_._pipeline_hop_proxy_ports_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hop_datanode_ips_)*/{}
+  , /*decltype(_impl_.pipeline_hop_datanode_ports_)*/{}
+  , /*decltype(_impl_._pipeline_hop_datanode_ports_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hop_block_keys_)*/{}
+  , /*decltype(_impl_.pipeline_hop_coefs_)*/{}
+  , /*decltype(_impl_._pipeline_hop_coefs_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_chain_eq_slots_)*/{}
+  , /*decltype(_impl_._pipeline_hub_chain_eq_slots_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_is_chain_tail_flags_)*/{}
+  , /*decltype(_impl_._pipeline_hub_is_chain_tail_flags_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_chain_hub_coefs_)*/{}
+  , /*decltype(_impl_._pipeline_hub_chain_hub_coefs_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_chain_equation_is_local_)*/{}
+  , /*decltype(_impl_._pipeline_hub_chain_equation_is_local_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_chain_local_only_flags_)*/{}
+  , /*decltype(_impl_._pipeline_hub_chain_local_only_flags_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hop_listen_ports_)*/{}
+  , /*decltype(_impl_._pipeline_hop_listen_ports_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.pipeline_hub_listener_ports_)*/{}
+  , /*decltype(_impl_._pipeline_hub_listener_ports_cached_byte_size_)*/{0}
   , /*decltype(_impl_.replaced_node_ip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.failed_block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.pipeline_hub_proxy_ip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.pipeline_local_failed_block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.pipeline_local_replaced_node_ip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.pipeline_hub_block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.replaced_node_port_)*/0
   , /*decltype(_impl_.failed_block_id_)*/0
   , /*decltype(_impl_.cross_rack_num_)*/0
-  , /*decltype(_impl_.is_to_send_block_id_)*/false
   , /*decltype(_impl_.block_id_to_send_)*/0
+  , /*decltype(_impl_.is_to_send_block_id_)*/false
+  , /*decltype(_impl_.glrc_ilp_recovery_)*/false
+  , /*decltype(_impl_.glrc_ilp_phase2_)*/false
+  , /*decltype(_impl_.phase2_do_write_back_)*/false
+  , /*decltype(_impl_.phase2_partition_id_)*/0
+  , /*decltype(_impl_.phase2_shard_count_)*/0
+  , /*decltype(_impl_.phase2_stripe_byte_len_)*/0
+  , /*decltype(_impl_.phase2_shard_begin_)*/0
+  , /*decltype(_impl_.phase2_shard_count_local_)*/0
+  , /*decltype(_impl_.phase2_byte_off_)*/0
+  , /*decltype(_impl_.phase2_byte_len_)*/0
+  , /*decltype(_impl_.phase2_exchange_epoch_)*/0
+  , /*decltype(_impl_.glrc_ilp_pipeline_)*/false
+  , /*decltype(_impl_.pipeline_shard_count_)*/0
+  , /*decltype(_impl_.pipeline_hub_block_id_)*/0
+  , /*decltype(_impl_.pipeline_exchange_epoch_)*/0
+  , /*decltype(_impl_.pipeline_role_)*/0
+  , /*decltype(_impl_.pipeline_chain_id_)*/0
+  , /*decltype(_impl_.pipeline_equation_index_)*/0
+  , /*decltype(_impl_.pipeline_eq_slot_)*/0
+  , /*decltype(_impl_.pipeline_my_hop_index_)*/0
+  , /*decltype(_impl_.pipeline_hub_proxy_port_)*/0
+  , /*decltype(_impl_.pipeline_local_failed_block_id_)*/0
+  , /*decltype(_impl_.pipeline_local_replaced_node_port_)*/0
+  , /*decltype(_impl_.pipeline_chain_hub_is_tail_flag_)*/0
+  , /*decltype(_impl_.pipeline_equation_is_local_)*/0
+  , /*decltype(_impl_.pipeline_my_listen_port_)*/0
+  , /*decltype(_impl_.pipeline_chain_hub_listen_port_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct RecoveryRequestDefaultTypeInternal {
   PROTOBUF_CONSTEXPR RecoveryRequestDefaultTypeInternal()
@@ -681,6 +757,63 @@ const uint32_t TableStruct_proxy_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(pr
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.proxyport_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.is_to_send_block_id_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.block_id_to_send_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.glrc_ilp_recovery_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.failed_block_ids_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.failed_block_keys_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.replaced_node_ips_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.replaced_node_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.selected_equations_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.selected_equation_indices_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.glrc_ilp_phase2_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_partition_id_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_shard_count_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_stripe_byte_len_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_shard_begin_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_shard_count_local_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_byte_off_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_byte_len_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_do_write_back_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_exchange_epoch_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_peer_proxy_ips_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_peer_proxy_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_peer_partition_ids_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_peer_shard_begins_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_peer_shard_counts_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.glrc_ilp_pipeline_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_shard_count_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_block_id_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_local_direct_equation_indices_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_exchange_epoch_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_role_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_chain_id_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_equation_index_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_eq_slot_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_block_ids_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_proxy_ips_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_proxy_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_datanode_ips_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_datanode_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_block_keys_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_coefs_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_my_hop_index_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_proxy_ip_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_proxy_port_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_local_failed_block_id_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_local_failed_block_key_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_local_replaced_node_ip_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_local_replaced_node_port_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_chain_eq_slots_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_is_chain_tail_flags_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_chain_hub_coefs_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_block_key_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_chain_hub_is_tail_flag_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_equation_is_local_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_chain_equation_is_local_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_chain_local_only_flags_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hop_listen_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_my_listen_port_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_chain_hub_listen_port_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_listener_ports_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::proxy_proto::MultipleRecoveryRequest, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -777,12 +910,12 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 157, -1, -1, sizeof(::proxy_proto::PartialDecodingRequest)},
   { 171, -1, -1, sizeof(::proxy_proto::DegradedReadReply)},
   { 188, -1, -1, sizeof(::proxy_proto::RecoveryRequest)},
-  { 207, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
-  { 218, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
-  { 237, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
-  { 256, -1, -1, sizeof(::proxy_proto::SetReply)},
-  { 263, -1, -1, sizeof(::proxy_proto::GetReply)},
-  { 270, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
+  { 264, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
+  { 275, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
+  { 294, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
+  { 313, -1, -1, sizeof(::proxy_proto::SetReply)},
+  { 320, -1, -1, sizeof(::proxy_proto::GetReply)},
+  { 327, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -868,7 +1001,7 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "k_time\030\007 \001(\001\022\033\n\023cross_rack_xor_time\030\010 \001("
   "\001\022\027\n\017grpc_start_time\030\t \001(\001\022\"\n\032data_node_"
   "grpc_notify_time\030\n \001(\001\022!\n\031data_node_grpc"
-  "_start_time\030\013 \001(\001\"\274\002\n\017RecoveryRequest\022\030\n"
+  "_start_time\030\013 \001(\001\"\230\021\n\017RecoveryRequest\022\030\n"
   "\020replaced_node_ip\030\001 \001(\t\022\032\n\022replaced_node"
   "_port\030\002 \001(\005\022\027\n\017failed_block_id\030\003 \001(\005\022\030\n\020"
   "failed_block_key\030\004 \001(\t\022\026\n\016cross_rack_num"
@@ -876,71 +1009,116 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "rt\030\007 \003(\005\022\021\n\tblockkeys\030\010 \003(\t\022\020\n\010blockids\030"
   "\t \003(\005\022\017\n\007proxyip\030\n \003(\t\022\021\n\tproxyport\030\013 \003("
   "\005\022\033\n\023is_to_send_block_id\030\014 \001(\010\022\030\n\020block_"
-  "id_to_send\030\r \001(\005\"\236\001\n\027MultipleRecoveryReq"
-  "uest\022\031\n\021replacing_node_ip\030\001 \001(\t\022\033\n\023repla"
-  "cing_node_port\030\002 \001(\005\022\030\n\020failed_block_ids"
-  "\030\003 \003(\005\022\031\n\021failed_block_keys\030\004 \003(\t\022\026\n\016cro"
-  "ss_rack_num\030\005 \001(\005\"\217\003\n\rRecoveryReply\022\032\n\022d"
-  "isk_io_start_time\030\001 \001(\001\022\030\n\020disk_io_end_t"
-  "ime\030\002 \001(\001\022\032\n\022network_start_time\030\003 \001(\001\022\030\n"
-  "\020network_end_time\030\004 \001(\001\022\031\n\021decode_start_"
-  "time\030\005 \001(\001\022\027\n\017decode_end_time\030\006 \001(\001\022\027\n\017c"
-  "ross_rack_time\030\007 \001(\001\022\033\n\023cross_rack_xor_t"
-  "ime\030\010 \001(\001\022\027\n\017grpc_start_time\030\t \001(\001\022\"\n\032da"
-  "ta_node_grpc_notify_time\030\n \001(\001\022!\n\031data_n"
-  "ode_grpc_start_time\030\013 \001(\001\022#\n\033dest_data_n"
-  "ode_network_time\030\014 \001(\001\022#\n\033dest_data_node"
-  "_disk_io_time\030\r \001(\001\"\230\002\n\031AppendStripeData"
-  "Placement\022\013\n\003key\030\001 \001(\t\022\022\n\ncluster_id\030\002 \001"
-  "(\005\022\021\n\tstripe_id\030\003 \001(\005\022\023\n\013append_size\030\004 \001"
-  "(\004\022\022\n\ndatanodeip\030\005 \003(\t\022\024\n\014datanodeport\030\006"
-  " \003(\005\022\021\n\tblockkeys\030\007 \003(\t\022\020\n\010blockids\030\010 \003("
-  "\005\022\017\n\007offsets\030\t \003(\004\022\r\n\005sizes\030\n \003(\004\022\027\n\017is_"
-  "merge_parity\030\013 \001(\010\022\023\n\013append_mode\030\014 \001(\t\022"
-  "\025\n\ris_serialized\030\r \001(\010\"\034\n\010SetReply\022\020\n\010if"
-  "commit\030\001 \001(\010\"\036\n\010GetReply\022\022\n\ngetsuccess\030\001"
-  " \001(\010\"\261\001\n\021StripeAndBlockIDs\022\021\n\tstripe_id\030"
-  "\001 \001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010clientip\030\003 \001("
-  "\t\022\022\n\nclientport\030\004 \001(\005\022\021\n\tblock_ids\030\005 \003(\005"
-  "\022\022\n\nblock_keys\030\006 \003(\t\022\023\n\013datanodeips\030\007 \003("
-  "\t\022\025\n\rdatanodeports\030\010 \003(\0052\223\n\n\014proxyServic"
-  "e\022D\n\ncheckalive\022\032.proxy_proto.Checkalive"
-  "CMD\032\032.proxy_proto.RequestResult\022L\n\022encod"
-  "eAndSetObject\022\037.proxy_proto.ObjectAndPla"
-  "cement\032\025.proxy_proto.SetReply\022L\n\022decodeA"
-  "ndGetObject\022\037.proxy_proto.ObjectAndPlace"
-  "ment\032\025.proxy_proto.GetReply\022P\n\014degradedR"
-  "ead\022 .proxy_proto.DegradedReadRequest\032\036."
-  "proxy_proto.DegradedReadReply\022S\n\023degrade"
-  "dRead2Client\022\034.proxy_proto.RecoveryReque"
-  "st\032\036.proxy_proto.DegradedReadReply\022Y\n\025de"
-  "gradedReadBreakdown\022 .proxy_proto.Degrad"
-  "edReadRequest\032\036.proxy_proto.DegradedRead"
-  "Reply\022\\\n\034degradedRead2ClientBreakdown\022\034."
-  "proxy_proto.RecoveryRequest\032\036.proxy_prot"
-  "o.DegradedReadReply\022X\n\035degradedReadWithB"
-  "lockStripeID\022 .proxy_proto.DegradedReadR"
-  "equest\032\025.proxy_proto.GetReply\022V\n\017partial"
-  "Decoding\022#.proxy_proto.PartialDecodingRe"
-  "quest\032\036.proxy_proto.DegradedReadReply\022D\n"
-  "\010recovery\022\034.proxy_proto.RecoveryRequest\032"
-  "\032.proxy_proto.RecoveryReply\022M\n\021recoveryB"
-  "reakdown\022\034.proxy_proto.RecoveryRequest\032\032"
-  ".proxy_proto.RecoveryReply\022O\n\020multipleRe"
-  "covery\022$.proxy_proto.MultipleRecoveryReq"
-  "uest\032\025.proxy_proto.GetReply\022\?\n\013deleteBlo"
-  "ck\022\031.proxy_proto.NodeAndBlock\032\025.proxy_pr"
-  "oto.DelReply\022X\n\027scheduleAppend2Datanode\022"
-  "&.proxy_proto.AppendStripeDataPlacement\032"
-  "\025.proxy_proto.SetReply\022J\n\rrelocateBlock\022"
-  "\033.proxy_proto.blockRelocPlan\032\034.proxy_pro"
-  "to.blockRelocReply\022B\n\tgetBlocks\022\036.proxy_"
-  "proto.StripeAndBlockIDs\032\025.proxy_proto.Ge"
-  "tReplyb\006proto3"
+  "id_to_send\030\r \001(\005\022\031\n\021glrc_ilp_recovery\030\016 "
+  "\001(\010\022\030\n\020failed_block_ids\030\017 \003(\005\022\031\n\021failed_"
+  "block_keys\030\020 \003(\t\022\031\n\021replaced_node_ips\030\021 "
+  "\003(\t\022\033\n\023replaced_node_ports\030\022 \003(\005\022\032\n\022sele"
+  "cted_equations\030\023 \003(\t\022!\n\031selected_equatio"
+  "n_indices\030\024 \003(\005\022\027\n\017glrc_ilp_phase2\030\025 \001(\010"
+  "\022\033\n\023phase2_partition_id\030\026 \001(\005\022\032\n\022phase2_"
+  "shard_count\030\027 \001(\005\022\036\n\026phase2_stripe_byte_"
+  "len\030\030 \001(\005\022\032\n\022phase2_shard_begin\030\031 \001(\005\022 \n"
+  "\030phase2_shard_count_local\030\032 \001(\005\022\027\n\017phase"
+  "2_byte_off\030\033 \001(\005\022\027\n\017phase2_byte_len\030\034 \001("
+  "\005\022\034\n\024phase2_do_write_back\030\035 \001(\010\022\035\n\025phase"
+  "2_exchange_epoch\030\036 \001(\005\022\035\n\025phase2_peer_pr"
+  "oxy_ips\030\037 \003(\t\022\037\n\027phase2_peer_proxy_ports"
+  "\030  \003(\005\022!\n\031phase2_peer_partition_ids\030! \003("
+  "\005\022 \n\030phase2_peer_shard_begins\030\" \003(\005\022 \n\030p"
+  "hase2_peer_shard_counts\030# \003(\005\022\031\n\021glrc_il"
+  "p_pipeline\030$ \001(\010\022\034\n\024pipeline_shard_count"
+  "\030% \001(\005\022\035\n\025pipeline_hub_block_id\030& \001(\005\022.\n"
+  "&pipeline_local_direct_equation_indices\030"
+  "\' \003(\005\022\037\n\027pipeline_exchange_epoch\030( \001(\005\022\025"
+  "\n\rpipeline_role\030) \001(\005\022\031\n\021pipeline_chain_"
+  "id\030* \001(\005\022\037\n\027pipeline_equation_index\030+ \001("
+  "\005\022\030\n\020pipeline_eq_slot\030, \001(\005\022\036\n\026pipeline_"
+  "hop_block_ids\030- \003(\005\022\036\n\026pipeline_hop_prox"
+  "y_ips\030. \003(\t\022 \n\030pipeline_hop_proxy_ports\030"
+  "/ \003(\005\022!\n\031pipeline_hop_datanode_ips\0300 \003(\t"
+  "\022#\n\033pipeline_hop_datanode_ports\0301 \003(\005\022\037\n"
+  "\027pipeline_hop_block_keys\0302 \003(\t\022\032\n\022pipeli"
+  "ne_hop_coefs\0303 \003(\005\022\035\n\025pipeline_my_hop_in"
+  "dex\0304 \001(\005\022\035\n\025pipeline_hub_proxy_ip\0305 \001(\t"
+  "\022\037\n\027pipeline_hub_proxy_port\0306 \001(\005\022&\n\036pip"
+  "eline_local_failed_block_id\0307 \001(\005\022\'\n\037pip"
+  "eline_local_failed_block_key\0308 \001(\t\022\'\n\037pi"
+  "peline_local_replaced_node_ip\0309 \001(\t\022)\n!p"
+  "ipeline_local_replaced_node_port\030: \001(\005\022#"
+  "\n\033pipeline_hub_chain_eq_slots\030; \003(\005\022(\n p"
+  "ipeline_hub_is_chain_tail_flags\030< \003(\005\022$\n"
+  "\034pipeline_hub_chain_hub_coefs\030= \003(\005\022\036\n\026p"
+  "ipeline_hub_block_key\030> \001(\t\022\'\n\037pipeline_"
+  "chain_hub_is_tail_flag\030\? \001(\005\022\"\n\032pipeline"
+  "_equation_is_local\030@ \001(\005\022,\n$pipeline_hub"
+  "_chain_equation_is_local\030A \003(\005\022+\n#pipeli"
+  "ne_hub_chain_local_only_flags\030B \003(\005\022!\n\031p"
+  "ipeline_hop_listen_ports\030C \003(\005\022\037\n\027pipeli"
+  "ne_my_listen_port\030D \001(\005\022&\n\036pipeline_chai"
+  "n_hub_listen_port\030E \001(\005\022#\n\033pipeline_hub_"
+  "listener_ports\030F \003(\005\"\236\001\n\027MultipleRecover"
+  "yRequest\022\031\n\021replacing_node_ip\030\001 \001(\t\022\033\n\023r"
+  "eplacing_node_port\030\002 \001(\005\022\030\n\020failed_block"
+  "_ids\030\003 \003(\005\022\031\n\021failed_block_keys\030\004 \003(\t\022\026\n"
+  "\016cross_rack_num\030\005 \001(\005\"\217\003\n\rRecoveryReply\022"
+  "\032\n\022disk_io_start_time\030\001 \001(\001\022\030\n\020disk_io_e"
+  "nd_time\030\002 \001(\001\022\032\n\022network_start_time\030\003 \001("
+  "\001\022\030\n\020network_end_time\030\004 \001(\001\022\031\n\021decode_st"
+  "art_time\030\005 \001(\001\022\027\n\017decode_end_time\030\006 \001(\001\022"
+  "\027\n\017cross_rack_time\030\007 \001(\001\022\033\n\023cross_rack_x"
+  "or_time\030\010 \001(\001\022\027\n\017grpc_start_time\030\t \001(\001\022\""
+  "\n\032data_node_grpc_notify_time\030\n \001(\001\022!\n\031da"
+  "ta_node_grpc_start_time\030\013 \001(\001\022#\n\033dest_da"
+  "ta_node_network_time\030\014 \001(\001\022#\n\033dest_data_"
+  "node_disk_io_time\030\r \001(\001\"\230\002\n\031AppendStripe"
+  "DataPlacement\022\013\n\003key\030\001 \001(\t\022\022\n\ncluster_id"
+  "\030\002 \001(\005\022\021\n\tstripe_id\030\003 \001(\005\022\023\n\013append_size"
+  "\030\004 \001(\004\022\022\n\ndatanodeip\030\005 \003(\t\022\024\n\014datanodepo"
+  "rt\030\006 \003(\005\022\021\n\tblockkeys\030\007 \003(\t\022\020\n\010blockids\030"
+  "\010 \003(\005\022\017\n\007offsets\030\t \003(\004\022\r\n\005sizes\030\n \003(\004\022\027\n"
+  "\017is_merge_parity\030\013 \001(\010\022\023\n\013append_mode\030\014 "
+  "\001(\t\022\025\n\ris_serialized\030\r \001(\010\"\034\n\010SetReply\022\020"
+  "\n\010ifcommit\030\001 \001(\010\"\036\n\010GetReply\022\022\n\ngetsucce"
+  "ss\030\001 \001(\010\"\261\001\n\021StripeAndBlockIDs\022\021\n\tstripe"
+  "_id\030\001 \001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010clientip\030"
+  "\003 \001(\t\022\022\n\nclientport\030\004 \001(\005\022\021\n\tblock_ids\030\005"
+  " \003(\005\022\022\n\nblock_keys\030\006 \003(\t\022\023\n\013datanodeips\030"
+  "\007 \003(\t\022\025\n\rdatanodeports\030\010 \003(\0052\307\t\n\014proxySe"
+  "rvice\022D\n\ncheckalive\022\032.proxy_proto.Checka"
+  "liveCMD\032\032.proxy_proto.RequestResult\022L\n\022e"
+  "ncodeAndSetObject\022\037.proxy_proto.ObjectAn"
+  "dPlacement\032\025.proxy_proto.SetReply\022L\n\022dec"
+  "odeAndGetObject\022\037.proxy_proto.ObjectAndP"
+  "lacement\032\025.proxy_proto.GetReply\022P\n\014degra"
+  "dedRead\022 .proxy_proto.DegradedReadReques"
+  "t\032\036.proxy_proto.DegradedReadReply\022S\n\023deg"
+  "radedRead2Client\022\034.proxy_proto.RecoveryR"
+  "equest\032\036.proxy_proto.DegradedReadReply\022Y"
+  "\n\025degradedReadBreakdown\022 .proxy_proto.De"
+  "gradedReadRequest\032\036.proxy_proto.Degraded"
+  "ReadReply\022\\\n\034degradedRead2ClientBreakdow"
+  "n\022\034.proxy_proto.RecoveryRequest\032\036.proxy_"
+  "proto.DegradedReadReply\022X\n\035degradedReadW"
+  "ithBlockStripeID\022 .proxy_proto.DegradedR"
+  "eadRequest\032\025.proxy_proto.GetReply\022V\n\017par"
+  "tialDecoding\022#.proxy_proto.PartialDecodi"
+  "ngRequest\032\036.proxy_proto.DegradedReadRepl"
+  "y\022D\n\010recovery\022\034.proxy_proto.RecoveryRequ"
+  "est\032\032.proxy_proto.RecoveryReply\022M\n\021recov"
+  "eryBreakdown\022\034.proxy_proto.RecoveryReque"
+  "st\032\032.proxy_proto.RecoveryReply\022O\n\020multip"
+  "leRecovery\022$.proxy_proto.MultipleRecover"
+  "yRequest\032\025.proxy_proto.GetReply\022\?\n\013delet"
+  "eBlock\022\031.proxy_proto.NodeAndBlock\032\025.prox"
+  "y_proto.DelReply\022X\n\027scheduleAppend2Datan"
+  "ode\022&.proxy_proto.AppendStripeDataPlacem"
+  "ent\032\025.proxy_proto.SetReply\022B\n\tgetBlocks\022"
+  "\036.proxy_proto.StripeAndBlockIDs\032\025.proxy_"
+  "proto.GetReplyb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_proxy_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_proxy_2eproto = {
-    false, false, 4974, descriptor_table_protodef_proxy_2eproto,
+    false, false, 6782, descriptor_table_protodef_proxy_2eproto,
     "proxy.proto",
     &descriptor_table_proxy_2eproto_once, nullptr, 0, 23,
     schemas, file_default_instances, TableStruct_proxy_2eproto::offsets,
@@ -6677,13 +6855,89 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
     , decltype(_impl_.proxyip_){from._impl_.proxyip_}
     , decltype(_impl_.proxyport_){from._impl_.proxyport_}
     , /*decltype(_impl_._proxyport_cached_byte_size_)*/{0}
+    , decltype(_impl_.failed_block_ids_){from._impl_.failed_block_ids_}
+    , /*decltype(_impl_._failed_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.failed_block_keys_){from._impl_.failed_block_keys_}
+    , decltype(_impl_.replaced_node_ips_){from._impl_.replaced_node_ips_}
+    , decltype(_impl_.replaced_node_ports_){from._impl_.replaced_node_ports_}
+    , /*decltype(_impl_._replaced_node_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.selected_equations_){from._impl_.selected_equations_}
+    , decltype(_impl_.selected_equation_indices_){from._impl_.selected_equation_indices_}
+    , /*decltype(_impl_._selected_equation_indices_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_proxy_ips_){from._impl_.phase2_peer_proxy_ips_}
+    , decltype(_impl_.phase2_peer_proxy_ports_){from._impl_.phase2_peer_proxy_ports_}
+    , /*decltype(_impl_._phase2_peer_proxy_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_partition_ids_){from._impl_.phase2_peer_partition_ids_}
+    , /*decltype(_impl_._phase2_peer_partition_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_shard_begins_){from._impl_.phase2_peer_shard_begins_}
+    , /*decltype(_impl_._phase2_peer_shard_begins_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_shard_counts_){from._impl_.phase2_peer_shard_counts_}
+    , /*decltype(_impl_._phase2_peer_shard_counts_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_local_direct_equation_indices_){from._impl_.pipeline_local_direct_equation_indices_}
+    , /*decltype(_impl_._pipeline_local_direct_equation_indices_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_block_ids_){from._impl_.pipeline_hop_block_ids_}
+    , /*decltype(_impl_._pipeline_hop_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_proxy_ips_){from._impl_.pipeline_hop_proxy_ips_}
+    , decltype(_impl_.pipeline_hop_proxy_ports_){from._impl_.pipeline_hop_proxy_ports_}
+    , /*decltype(_impl_._pipeline_hop_proxy_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_datanode_ips_){from._impl_.pipeline_hop_datanode_ips_}
+    , decltype(_impl_.pipeline_hop_datanode_ports_){from._impl_.pipeline_hop_datanode_ports_}
+    , /*decltype(_impl_._pipeline_hop_datanode_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_block_keys_){from._impl_.pipeline_hop_block_keys_}
+    , decltype(_impl_.pipeline_hop_coefs_){from._impl_.pipeline_hop_coefs_}
+    , /*decltype(_impl_._pipeline_hop_coefs_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_eq_slots_){from._impl_.pipeline_hub_chain_eq_slots_}
+    , /*decltype(_impl_._pipeline_hub_chain_eq_slots_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_is_chain_tail_flags_){from._impl_.pipeline_hub_is_chain_tail_flags_}
+    , /*decltype(_impl_._pipeline_hub_is_chain_tail_flags_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_hub_coefs_){from._impl_.pipeline_hub_chain_hub_coefs_}
+    , /*decltype(_impl_._pipeline_hub_chain_hub_coefs_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_equation_is_local_){from._impl_.pipeline_hub_chain_equation_is_local_}
+    , /*decltype(_impl_._pipeline_hub_chain_equation_is_local_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_local_only_flags_){from._impl_.pipeline_hub_chain_local_only_flags_}
+    , /*decltype(_impl_._pipeline_hub_chain_local_only_flags_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_listen_ports_){from._impl_.pipeline_hop_listen_ports_}
+    , /*decltype(_impl_._pipeline_hop_listen_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_listener_ports_){from._impl_.pipeline_hub_listener_ports_}
+    , /*decltype(_impl_._pipeline_hub_listener_ports_cached_byte_size_)*/{0}
     , decltype(_impl_.replaced_node_ip_){}
     , decltype(_impl_.failed_block_key_){}
+    , decltype(_impl_.pipeline_hub_proxy_ip_){}
+    , decltype(_impl_.pipeline_local_failed_block_key_){}
+    , decltype(_impl_.pipeline_local_replaced_node_ip_){}
+    , decltype(_impl_.pipeline_hub_block_key_){}
     , decltype(_impl_.replaced_node_port_){}
     , decltype(_impl_.failed_block_id_){}
     , decltype(_impl_.cross_rack_num_){}
-    , decltype(_impl_.is_to_send_block_id_){}
     , decltype(_impl_.block_id_to_send_){}
+    , decltype(_impl_.is_to_send_block_id_){}
+    , decltype(_impl_.glrc_ilp_recovery_){}
+    , decltype(_impl_.glrc_ilp_phase2_){}
+    , decltype(_impl_.phase2_do_write_back_){}
+    , decltype(_impl_.phase2_partition_id_){}
+    , decltype(_impl_.phase2_shard_count_){}
+    , decltype(_impl_.phase2_stripe_byte_len_){}
+    , decltype(_impl_.phase2_shard_begin_){}
+    , decltype(_impl_.phase2_shard_count_local_){}
+    , decltype(_impl_.phase2_byte_off_){}
+    , decltype(_impl_.phase2_byte_len_){}
+    , decltype(_impl_.phase2_exchange_epoch_){}
+    , decltype(_impl_.glrc_ilp_pipeline_){}
+    , decltype(_impl_.pipeline_shard_count_){}
+    , decltype(_impl_.pipeline_hub_block_id_){}
+    , decltype(_impl_.pipeline_exchange_epoch_){}
+    , decltype(_impl_.pipeline_role_){}
+    , decltype(_impl_.pipeline_chain_id_){}
+    , decltype(_impl_.pipeline_equation_index_){}
+    , decltype(_impl_.pipeline_eq_slot_){}
+    , decltype(_impl_.pipeline_my_hop_index_){}
+    , decltype(_impl_.pipeline_hub_proxy_port_){}
+    , decltype(_impl_.pipeline_local_failed_block_id_){}
+    , decltype(_impl_.pipeline_local_replaced_node_port_){}
+    , decltype(_impl_.pipeline_chain_hub_is_tail_flag_){}
+    , decltype(_impl_.pipeline_equation_is_local_){}
+    , decltype(_impl_.pipeline_my_listen_port_){}
+    , decltype(_impl_.pipeline_chain_hub_listen_port_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -6703,9 +6957,41 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
     _this->_impl_.failed_block_key_.Set(from._internal_failed_block_key(), 
       _this->GetArenaForAllocation());
   }
+  _impl_.pipeline_hub_proxy_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_hub_proxy_ip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_pipeline_hub_proxy_ip().empty()) {
+    _this->_impl_.pipeline_hub_proxy_ip_.Set(from._internal_pipeline_hub_proxy_ip(), 
+      _this->GetArenaForAllocation());
+  }
+  _impl_.pipeline_local_failed_block_key_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_local_failed_block_key_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_pipeline_local_failed_block_key().empty()) {
+    _this->_impl_.pipeline_local_failed_block_key_.Set(from._internal_pipeline_local_failed_block_key(), 
+      _this->GetArenaForAllocation());
+  }
+  _impl_.pipeline_local_replaced_node_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_local_replaced_node_ip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_pipeline_local_replaced_node_ip().empty()) {
+    _this->_impl_.pipeline_local_replaced_node_ip_.Set(from._internal_pipeline_local_replaced_node_ip(), 
+      _this->GetArenaForAllocation());
+  }
+  _impl_.pipeline_hub_block_key_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_hub_block_key_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_pipeline_hub_block_key().empty()) {
+    _this->_impl_.pipeline_hub_block_key_.Set(from._internal_pipeline_hub_block_key(), 
+      _this->GetArenaForAllocation());
+  }
   ::memcpy(&_impl_.replaced_node_port_, &from._impl_.replaced_node_port_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.block_id_to_send_) -
-    reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.block_id_to_send_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.pipeline_chain_hub_listen_port_) -
+    reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_chain_hub_listen_port_));
   // @@protoc_insertion_point(copy_constructor:proxy_proto.RecoveryRequest)
 }
 
@@ -6723,13 +7009,89 @@ inline void RecoveryRequest::SharedCtor(
     , decltype(_impl_.proxyip_){arena}
     , decltype(_impl_.proxyport_){arena}
     , /*decltype(_impl_._proxyport_cached_byte_size_)*/{0}
+    , decltype(_impl_.failed_block_ids_){arena}
+    , /*decltype(_impl_._failed_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.failed_block_keys_){arena}
+    , decltype(_impl_.replaced_node_ips_){arena}
+    , decltype(_impl_.replaced_node_ports_){arena}
+    , /*decltype(_impl_._replaced_node_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.selected_equations_){arena}
+    , decltype(_impl_.selected_equation_indices_){arena}
+    , /*decltype(_impl_._selected_equation_indices_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_proxy_ips_){arena}
+    , decltype(_impl_.phase2_peer_proxy_ports_){arena}
+    , /*decltype(_impl_._phase2_peer_proxy_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_partition_ids_){arena}
+    , /*decltype(_impl_._phase2_peer_partition_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_shard_begins_){arena}
+    , /*decltype(_impl_._phase2_peer_shard_begins_cached_byte_size_)*/{0}
+    , decltype(_impl_.phase2_peer_shard_counts_){arena}
+    , /*decltype(_impl_._phase2_peer_shard_counts_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_local_direct_equation_indices_){arena}
+    , /*decltype(_impl_._pipeline_local_direct_equation_indices_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_block_ids_){arena}
+    , /*decltype(_impl_._pipeline_hop_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_proxy_ips_){arena}
+    , decltype(_impl_.pipeline_hop_proxy_ports_){arena}
+    , /*decltype(_impl_._pipeline_hop_proxy_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_datanode_ips_){arena}
+    , decltype(_impl_.pipeline_hop_datanode_ports_){arena}
+    , /*decltype(_impl_._pipeline_hop_datanode_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_block_keys_){arena}
+    , decltype(_impl_.pipeline_hop_coefs_){arena}
+    , /*decltype(_impl_._pipeline_hop_coefs_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_eq_slots_){arena}
+    , /*decltype(_impl_._pipeline_hub_chain_eq_slots_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_is_chain_tail_flags_){arena}
+    , /*decltype(_impl_._pipeline_hub_is_chain_tail_flags_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_hub_coefs_){arena}
+    , /*decltype(_impl_._pipeline_hub_chain_hub_coefs_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_equation_is_local_){arena}
+    , /*decltype(_impl_._pipeline_hub_chain_equation_is_local_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_chain_local_only_flags_){arena}
+    , /*decltype(_impl_._pipeline_hub_chain_local_only_flags_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hop_listen_ports_){arena}
+    , /*decltype(_impl_._pipeline_hop_listen_ports_cached_byte_size_)*/{0}
+    , decltype(_impl_.pipeline_hub_listener_ports_){arena}
+    , /*decltype(_impl_._pipeline_hub_listener_ports_cached_byte_size_)*/{0}
     , decltype(_impl_.replaced_node_ip_){}
     , decltype(_impl_.failed_block_key_){}
+    , decltype(_impl_.pipeline_hub_proxy_ip_){}
+    , decltype(_impl_.pipeline_local_failed_block_key_){}
+    , decltype(_impl_.pipeline_local_replaced_node_ip_){}
+    , decltype(_impl_.pipeline_hub_block_key_){}
     , decltype(_impl_.replaced_node_port_){0}
     , decltype(_impl_.failed_block_id_){0}
     , decltype(_impl_.cross_rack_num_){0}
-    , decltype(_impl_.is_to_send_block_id_){false}
     , decltype(_impl_.block_id_to_send_){0}
+    , decltype(_impl_.is_to_send_block_id_){false}
+    , decltype(_impl_.glrc_ilp_recovery_){false}
+    , decltype(_impl_.glrc_ilp_phase2_){false}
+    , decltype(_impl_.phase2_do_write_back_){false}
+    , decltype(_impl_.phase2_partition_id_){0}
+    , decltype(_impl_.phase2_shard_count_){0}
+    , decltype(_impl_.phase2_stripe_byte_len_){0}
+    , decltype(_impl_.phase2_shard_begin_){0}
+    , decltype(_impl_.phase2_shard_count_local_){0}
+    , decltype(_impl_.phase2_byte_off_){0}
+    , decltype(_impl_.phase2_byte_len_){0}
+    , decltype(_impl_.phase2_exchange_epoch_){0}
+    , decltype(_impl_.glrc_ilp_pipeline_){false}
+    , decltype(_impl_.pipeline_shard_count_){0}
+    , decltype(_impl_.pipeline_hub_block_id_){0}
+    , decltype(_impl_.pipeline_exchange_epoch_){0}
+    , decltype(_impl_.pipeline_role_){0}
+    , decltype(_impl_.pipeline_chain_id_){0}
+    , decltype(_impl_.pipeline_equation_index_){0}
+    , decltype(_impl_.pipeline_eq_slot_){0}
+    , decltype(_impl_.pipeline_my_hop_index_){0}
+    , decltype(_impl_.pipeline_hub_proxy_port_){0}
+    , decltype(_impl_.pipeline_local_failed_block_id_){0}
+    , decltype(_impl_.pipeline_local_replaced_node_port_){0}
+    , decltype(_impl_.pipeline_chain_hub_is_tail_flag_){0}
+    , decltype(_impl_.pipeline_equation_is_local_){0}
+    , decltype(_impl_.pipeline_my_listen_port_){0}
+    , decltype(_impl_.pipeline_chain_hub_listen_port_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.replaced_node_ip_.InitDefault();
@@ -6739,6 +7101,22 @@ inline void RecoveryRequest::SharedCtor(
   _impl_.failed_block_key_.InitDefault();
   #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
     _impl_.failed_block_key_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.pipeline_hub_proxy_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_hub_proxy_ip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.pipeline_local_failed_block_key_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_local_failed_block_key_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.pipeline_local_replaced_node_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_local_replaced_node_ip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.pipeline_hub_block_key_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.pipeline_hub_block_key_.Set("", GetArenaForAllocation());
   #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
 }
 
@@ -6759,8 +7137,38 @@ inline void RecoveryRequest::SharedDtor() {
   _impl_.blockids_.~RepeatedField();
   _impl_.proxyip_.~RepeatedPtrField();
   _impl_.proxyport_.~RepeatedField();
+  _impl_.failed_block_ids_.~RepeatedField();
+  _impl_.failed_block_keys_.~RepeatedPtrField();
+  _impl_.replaced_node_ips_.~RepeatedPtrField();
+  _impl_.replaced_node_ports_.~RepeatedField();
+  _impl_.selected_equations_.~RepeatedPtrField();
+  _impl_.selected_equation_indices_.~RepeatedField();
+  _impl_.phase2_peer_proxy_ips_.~RepeatedPtrField();
+  _impl_.phase2_peer_proxy_ports_.~RepeatedField();
+  _impl_.phase2_peer_partition_ids_.~RepeatedField();
+  _impl_.phase2_peer_shard_begins_.~RepeatedField();
+  _impl_.phase2_peer_shard_counts_.~RepeatedField();
+  _impl_.pipeline_local_direct_equation_indices_.~RepeatedField();
+  _impl_.pipeline_hop_block_ids_.~RepeatedField();
+  _impl_.pipeline_hop_proxy_ips_.~RepeatedPtrField();
+  _impl_.pipeline_hop_proxy_ports_.~RepeatedField();
+  _impl_.pipeline_hop_datanode_ips_.~RepeatedPtrField();
+  _impl_.pipeline_hop_datanode_ports_.~RepeatedField();
+  _impl_.pipeline_hop_block_keys_.~RepeatedPtrField();
+  _impl_.pipeline_hop_coefs_.~RepeatedField();
+  _impl_.pipeline_hub_chain_eq_slots_.~RepeatedField();
+  _impl_.pipeline_hub_is_chain_tail_flags_.~RepeatedField();
+  _impl_.pipeline_hub_chain_hub_coefs_.~RepeatedField();
+  _impl_.pipeline_hub_chain_equation_is_local_.~RepeatedField();
+  _impl_.pipeline_hub_chain_local_only_flags_.~RepeatedField();
+  _impl_.pipeline_hop_listen_ports_.~RepeatedField();
+  _impl_.pipeline_hub_listener_ports_.~RepeatedField();
   _impl_.replaced_node_ip_.Destroy();
   _impl_.failed_block_key_.Destroy();
+  _impl_.pipeline_hub_proxy_ip_.Destroy();
+  _impl_.pipeline_local_failed_block_key_.Destroy();
+  _impl_.pipeline_local_replaced_node_ip_.Destroy();
+  _impl_.pipeline_hub_block_key_.Destroy();
 }
 
 void RecoveryRequest::SetCachedSize(int size) const {
@@ -6779,11 +7187,41 @@ void RecoveryRequest::Clear() {
   _impl_.blockids_.Clear();
   _impl_.proxyip_.Clear();
   _impl_.proxyport_.Clear();
+  _impl_.failed_block_ids_.Clear();
+  _impl_.failed_block_keys_.Clear();
+  _impl_.replaced_node_ips_.Clear();
+  _impl_.replaced_node_ports_.Clear();
+  _impl_.selected_equations_.Clear();
+  _impl_.selected_equation_indices_.Clear();
+  _impl_.phase2_peer_proxy_ips_.Clear();
+  _impl_.phase2_peer_proxy_ports_.Clear();
+  _impl_.phase2_peer_partition_ids_.Clear();
+  _impl_.phase2_peer_shard_begins_.Clear();
+  _impl_.phase2_peer_shard_counts_.Clear();
+  _impl_.pipeline_local_direct_equation_indices_.Clear();
+  _impl_.pipeline_hop_block_ids_.Clear();
+  _impl_.pipeline_hop_proxy_ips_.Clear();
+  _impl_.pipeline_hop_proxy_ports_.Clear();
+  _impl_.pipeline_hop_datanode_ips_.Clear();
+  _impl_.pipeline_hop_datanode_ports_.Clear();
+  _impl_.pipeline_hop_block_keys_.Clear();
+  _impl_.pipeline_hop_coefs_.Clear();
+  _impl_.pipeline_hub_chain_eq_slots_.Clear();
+  _impl_.pipeline_hub_is_chain_tail_flags_.Clear();
+  _impl_.pipeline_hub_chain_hub_coefs_.Clear();
+  _impl_.pipeline_hub_chain_equation_is_local_.Clear();
+  _impl_.pipeline_hub_chain_local_only_flags_.Clear();
+  _impl_.pipeline_hop_listen_ports_.Clear();
+  _impl_.pipeline_hub_listener_ports_.Clear();
   _impl_.replaced_node_ip_.ClearToEmpty();
   _impl_.failed_block_key_.ClearToEmpty();
+  _impl_.pipeline_hub_proxy_ip_.ClearToEmpty();
+  _impl_.pipeline_local_failed_block_key_.ClearToEmpty();
+  _impl_.pipeline_local_replaced_node_ip_.ClearToEmpty();
+  _impl_.pipeline_hub_block_key_.ClearToEmpty();
   ::memset(&_impl_.replaced_node_port_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.block_id_to_send_) -
-      reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.block_id_to_send_));
+      reinterpret_cast<char*>(&_impl_.pipeline_chain_hub_listen_port_) -
+      reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_chain_hub_listen_port_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -6931,6 +7369,576 @@ const char* RecoveryRequest::_InternalParse(const char* ptr, ::_pbi::ParseContex
         } else
           goto handle_unusual;
         continue;
+      // bool glrc_ilp_recovery = 14;
+      case 14:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 112)) {
+          _impl_.glrc_ilp_recovery_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 failed_block_ids = 15;
+      case 15:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 122)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_failed_block_ids(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 120) {
+          _internal_add_failed_block_ids(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string failed_block_keys = 16;
+      case 16:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 130)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_failed_block_keys();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.failed_block_keys"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<130>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string replaced_node_ips = 17;
+      case 17:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 138)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_replaced_node_ips();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.replaced_node_ips"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<138>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 replaced_node_ports = 18;
+      case 18:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 146)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_replaced_node_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 144) {
+          _internal_add_replaced_node_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string selected_equations = 19;
+      case 19:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 154)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_selected_equations();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.selected_equations"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<154>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 selected_equation_indices = 20;
+      case 20:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 162)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_selected_equation_indices(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 160) {
+          _internal_add_selected_equation_indices(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool glrc_ilp_phase2 = 21;
+      case 21:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 168)) {
+          _impl_.glrc_ilp_phase2_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_partition_id = 22;
+      case 22:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 176)) {
+          _impl_.phase2_partition_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_shard_count = 23;
+      case 23:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 184)) {
+          _impl_.phase2_shard_count_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_stripe_byte_len = 24;
+      case 24:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 192)) {
+          _impl_.phase2_stripe_byte_len_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_shard_begin = 25;
+      case 25:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 200)) {
+          _impl_.phase2_shard_begin_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_shard_count_local = 26;
+      case 26:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 208)) {
+          _impl_.phase2_shard_count_local_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_byte_off = 27;
+      case 27:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 216)) {
+          _impl_.phase2_byte_off_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_byte_len = 28;
+      case 28:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 224)) {
+          _impl_.phase2_byte_len_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool phase2_do_write_back = 29;
+      case 29:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 232)) {
+          _impl_.phase2_do_write_back_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 phase2_exchange_epoch = 30;
+      case 30:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 240)) {
+          _impl_.phase2_exchange_epoch_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string phase2_peer_proxy_ips = 31;
+      case 31:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 250)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_phase2_peer_proxy_ips();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.phase2_peer_proxy_ips"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<250>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 phase2_peer_proxy_ports = 32;
+      case 32:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 2)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_phase2_peer_proxy_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 0) {
+          _internal_add_phase2_peer_proxy_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 phase2_peer_partition_ids = 33;
+      case 33:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_phase2_peer_partition_ids(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 8) {
+          _internal_add_phase2_peer_partition_ids(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 phase2_peer_shard_begins = 34;
+      case 34:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 18)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_phase2_peer_shard_begins(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 16) {
+          _internal_add_phase2_peer_shard_begins(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 phase2_peer_shard_counts = 35;
+      case 35:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 26)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_phase2_peer_shard_counts(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 24) {
+          _internal_add_phase2_peer_shard_counts(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool glrc_ilp_pipeline = 36;
+      case 36:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 32)) {
+          _impl_.glrc_ilp_pipeline_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_shard_count = 37;
+      case 37:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 40)) {
+          _impl_.pipeline_shard_count_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_hub_block_id = 38;
+      case 38:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 48)) {
+          _impl_.pipeline_hub_block_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_local_direct_equation_indices = 39;
+      case 39:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 58)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_local_direct_equation_indices(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 56) {
+          _internal_add_pipeline_local_direct_equation_indices(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_exchange_epoch = 40;
+      case 40:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
+          _impl_.pipeline_exchange_epoch_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_role = 41;
+      case 41:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 72)) {
+          _impl_.pipeline_role_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_chain_id = 42;
+      case 42:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 80)) {
+          _impl_.pipeline_chain_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_equation_index = 43;
+      case 43:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 88)) {
+          _impl_.pipeline_equation_index_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_eq_slot = 44;
+      case 44:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 96)) {
+          _impl_.pipeline_eq_slot_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hop_block_ids = 45;
+      case 45:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 106)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hop_block_ids(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 104) {
+          _internal_add_pipeline_hop_block_ids(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string pipeline_hop_proxy_ips = 46;
+      case 46:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 114)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_pipeline_hop_proxy_ips();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_hop_proxy_ips"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<370>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hop_proxy_ports = 47;
+      case 47:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 122)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hop_proxy_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 120) {
+          _internal_add_pipeline_hop_proxy_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string pipeline_hop_datanode_ips = 48;
+      case 48:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 130)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_pipeline_hop_datanode_ips();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_hop_datanode_ips"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<386>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hop_datanode_ports = 49;
+      case 49:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 138)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hop_datanode_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 136) {
+          _internal_add_pipeline_hop_datanode_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string pipeline_hop_block_keys = 50;
+      case 50:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 146)) {
+          ptr -= 2;
+          do {
+            ptr += 2;
+            auto str = _internal_add_pipeline_hop_block_keys();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_hop_block_keys"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<402>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hop_coefs = 51;
+      case 51:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 154)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hop_coefs(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 152) {
+          _internal_add_pipeline_hop_coefs(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_my_hop_index = 52;
+      case 52:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 160)) {
+          _impl_.pipeline_my_hop_index_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string pipeline_hub_proxy_ip = 53;
+      case 53:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 170)) {
+          auto str = _internal_mutable_pipeline_hub_proxy_ip();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_hub_proxy_ip"));
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_hub_proxy_port = 54;
+      case 54:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 176)) {
+          _impl_.pipeline_hub_proxy_port_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_local_failed_block_id = 55;
+      case 55:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 184)) {
+          _impl_.pipeline_local_failed_block_id_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string pipeline_local_failed_block_key = 56;
+      case 56:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 194)) {
+          auto str = _internal_mutable_pipeline_local_failed_block_key();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_local_failed_block_key"));
+        } else
+          goto handle_unusual;
+        continue;
+      // string pipeline_local_replaced_node_ip = 57;
+      case 57:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 202)) {
+          auto str = _internal_mutable_pipeline_local_replaced_node_ip();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_local_replaced_node_ip"));
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_local_replaced_node_port = 58;
+      case 58:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 208)) {
+          _impl_.pipeline_local_replaced_node_port_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_chain_eq_slots = 59;
+      case 59:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 218)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_chain_eq_slots(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 216) {
+          _internal_add_pipeline_hub_chain_eq_slots(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_is_chain_tail_flags = 60;
+      case 60:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 226)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_is_chain_tail_flags(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 224) {
+          _internal_add_pipeline_hub_is_chain_tail_flags(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_chain_hub_coefs = 61;
+      case 61:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 234)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_chain_hub_coefs(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 232) {
+          _internal_add_pipeline_hub_chain_hub_coefs(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string pipeline_hub_block_key = 62;
+      case 62:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 242)) {
+          auto str = _internal_mutable_pipeline_hub_block_key();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.pipeline_hub_block_key"));
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_chain_hub_is_tail_flag = 63;
+      case 63:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 248)) {
+          _impl_.pipeline_chain_hub_is_tail_flag_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_equation_is_local = 64;
+      case 64:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 0)) {
+          _impl_.pipeline_equation_is_local_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_chain_equation_is_local = 65;
+      case 65:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_chain_equation_is_local(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 8) {
+          _internal_add_pipeline_hub_chain_equation_is_local(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_chain_local_only_flags = 66;
+      case 66:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 18)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_chain_local_only_flags(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 16) {
+          _internal_add_pipeline_hub_chain_local_only_flags(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hop_listen_ports = 67;
+      case 67:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 26)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hop_listen_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 24) {
+          _internal_add_pipeline_hop_listen_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_my_listen_port = 68;
+      case 68:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 32)) {
+          _impl_.pipeline_my_listen_port_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_chain_hub_listen_port = 69;
+      case 69:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 40)) {
+          _impl_.pipeline_chain_hub_listen_port_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 pipeline_hub_listener_ports = 70;
+      case 70:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 50)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_pipeline_hub_listener_ports(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 48) {
+          _internal_add_pipeline_hub_listener_ports(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
       default:
         goto handle_unusual;
     }  // switch
@@ -7067,6 +8075,449 @@ uint8_t* RecoveryRequest::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteInt32ToArray(13, this->_internal_block_id_to_send(), target);
   }
 
+  // bool glrc_ilp_recovery = 14;
+  if (this->_internal_glrc_ilp_recovery() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(14, this->_internal_glrc_ilp_recovery(), target);
+  }
+
+  // repeated int32 failed_block_ids = 15;
+  {
+    int byte_size = _impl_._failed_block_ids_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          15, _internal_failed_block_ids(), byte_size, target);
+    }
+  }
+
+  // repeated string failed_block_keys = 16;
+  for (int i = 0, n = this->_internal_failed_block_keys_size(); i < n; i++) {
+    const auto& s = this->_internal_failed_block_keys(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.failed_block_keys");
+    target = stream->WriteString(16, s, target);
+  }
+
+  // repeated string replaced_node_ips = 17;
+  for (int i = 0, n = this->_internal_replaced_node_ips_size(); i < n; i++) {
+    const auto& s = this->_internal_replaced_node_ips(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.replaced_node_ips");
+    target = stream->WriteString(17, s, target);
+  }
+
+  // repeated int32 replaced_node_ports = 18;
+  {
+    int byte_size = _impl_._replaced_node_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          18, _internal_replaced_node_ports(), byte_size, target);
+    }
+  }
+
+  // repeated string selected_equations = 19;
+  for (int i = 0, n = this->_internal_selected_equations_size(); i < n; i++) {
+    const auto& s = this->_internal_selected_equations(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.selected_equations");
+    target = stream->WriteString(19, s, target);
+  }
+
+  // repeated int32 selected_equation_indices = 20;
+  {
+    int byte_size = _impl_._selected_equation_indices_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          20, _internal_selected_equation_indices(), byte_size, target);
+    }
+  }
+
+  // bool glrc_ilp_phase2 = 21;
+  if (this->_internal_glrc_ilp_phase2() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(21, this->_internal_glrc_ilp_phase2(), target);
+  }
+
+  // int32 phase2_partition_id = 22;
+  if (this->_internal_phase2_partition_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(22, this->_internal_phase2_partition_id(), target);
+  }
+
+  // int32 phase2_shard_count = 23;
+  if (this->_internal_phase2_shard_count() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(23, this->_internal_phase2_shard_count(), target);
+  }
+
+  // int32 phase2_stripe_byte_len = 24;
+  if (this->_internal_phase2_stripe_byte_len() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(24, this->_internal_phase2_stripe_byte_len(), target);
+  }
+
+  // int32 phase2_shard_begin = 25;
+  if (this->_internal_phase2_shard_begin() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(25, this->_internal_phase2_shard_begin(), target);
+  }
+
+  // int32 phase2_shard_count_local = 26;
+  if (this->_internal_phase2_shard_count_local() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(26, this->_internal_phase2_shard_count_local(), target);
+  }
+
+  // int32 phase2_byte_off = 27;
+  if (this->_internal_phase2_byte_off() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(27, this->_internal_phase2_byte_off(), target);
+  }
+
+  // int32 phase2_byte_len = 28;
+  if (this->_internal_phase2_byte_len() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(28, this->_internal_phase2_byte_len(), target);
+  }
+
+  // bool phase2_do_write_back = 29;
+  if (this->_internal_phase2_do_write_back() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(29, this->_internal_phase2_do_write_back(), target);
+  }
+
+  // int32 phase2_exchange_epoch = 30;
+  if (this->_internal_phase2_exchange_epoch() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(30, this->_internal_phase2_exchange_epoch(), target);
+  }
+
+  // repeated string phase2_peer_proxy_ips = 31;
+  for (int i = 0, n = this->_internal_phase2_peer_proxy_ips_size(); i < n; i++) {
+    const auto& s = this->_internal_phase2_peer_proxy_ips(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.phase2_peer_proxy_ips");
+    target = stream->WriteString(31, s, target);
+  }
+
+  // repeated int32 phase2_peer_proxy_ports = 32;
+  {
+    int byte_size = _impl_._phase2_peer_proxy_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          32, _internal_phase2_peer_proxy_ports(), byte_size, target);
+    }
+  }
+
+  // repeated int32 phase2_peer_partition_ids = 33;
+  {
+    int byte_size = _impl_._phase2_peer_partition_ids_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          33, _internal_phase2_peer_partition_ids(), byte_size, target);
+    }
+  }
+
+  // repeated int32 phase2_peer_shard_begins = 34;
+  {
+    int byte_size = _impl_._phase2_peer_shard_begins_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          34, _internal_phase2_peer_shard_begins(), byte_size, target);
+    }
+  }
+
+  // repeated int32 phase2_peer_shard_counts = 35;
+  {
+    int byte_size = _impl_._phase2_peer_shard_counts_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          35, _internal_phase2_peer_shard_counts(), byte_size, target);
+    }
+  }
+
+  // bool glrc_ilp_pipeline = 36;
+  if (this->_internal_glrc_ilp_pipeline() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(36, this->_internal_glrc_ilp_pipeline(), target);
+  }
+
+  // int32 pipeline_shard_count = 37;
+  if (this->_internal_pipeline_shard_count() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(37, this->_internal_pipeline_shard_count(), target);
+  }
+
+  // int32 pipeline_hub_block_id = 38;
+  if (this->_internal_pipeline_hub_block_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(38, this->_internal_pipeline_hub_block_id(), target);
+  }
+
+  // repeated int32 pipeline_local_direct_equation_indices = 39;
+  {
+    int byte_size = _impl_._pipeline_local_direct_equation_indices_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          39, _internal_pipeline_local_direct_equation_indices(), byte_size, target);
+    }
+  }
+
+  // int32 pipeline_exchange_epoch = 40;
+  if (this->_internal_pipeline_exchange_epoch() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(40, this->_internal_pipeline_exchange_epoch(), target);
+  }
+
+  // int32 pipeline_role = 41;
+  if (this->_internal_pipeline_role() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(41, this->_internal_pipeline_role(), target);
+  }
+
+  // int32 pipeline_chain_id = 42;
+  if (this->_internal_pipeline_chain_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(42, this->_internal_pipeline_chain_id(), target);
+  }
+
+  // int32 pipeline_equation_index = 43;
+  if (this->_internal_pipeline_equation_index() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(43, this->_internal_pipeline_equation_index(), target);
+  }
+
+  // int32 pipeline_eq_slot = 44;
+  if (this->_internal_pipeline_eq_slot() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(44, this->_internal_pipeline_eq_slot(), target);
+  }
+
+  // repeated int32 pipeline_hop_block_ids = 45;
+  {
+    int byte_size = _impl_._pipeline_hop_block_ids_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          45, _internal_pipeline_hop_block_ids(), byte_size, target);
+    }
+  }
+
+  // repeated string pipeline_hop_proxy_ips = 46;
+  for (int i = 0, n = this->_internal_pipeline_hop_proxy_ips_size(); i < n; i++) {
+    const auto& s = this->_internal_pipeline_hop_proxy_ips(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_hop_proxy_ips");
+    target = stream->WriteString(46, s, target);
+  }
+
+  // repeated int32 pipeline_hop_proxy_ports = 47;
+  {
+    int byte_size = _impl_._pipeline_hop_proxy_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          47, _internal_pipeline_hop_proxy_ports(), byte_size, target);
+    }
+  }
+
+  // repeated string pipeline_hop_datanode_ips = 48;
+  for (int i = 0, n = this->_internal_pipeline_hop_datanode_ips_size(); i < n; i++) {
+    const auto& s = this->_internal_pipeline_hop_datanode_ips(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_hop_datanode_ips");
+    target = stream->WriteString(48, s, target);
+  }
+
+  // repeated int32 pipeline_hop_datanode_ports = 49;
+  {
+    int byte_size = _impl_._pipeline_hop_datanode_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          49, _internal_pipeline_hop_datanode_ports(), byte_size, target);
+    }
+  }
+
+  // repeated string pipeline_hop_block_keys = 50;
+  for (int i = 0, n = this->_internal_pipeline_hop_block_keys_size(); i < n; i++) {
+    const auto& s = this->_internal_pipeline_hop_block_keys(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_hop_block_keys");
+    target = stream->WriteString(50, s, target);
+  }
+
+  // repeated int32 pipeline_hop_coefs = 51;
+  {
+    int byte_size = _impl_._pipeline_hop_coefs_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          51, _internal_pipeline_hop_coefs(), byte_size, target);
+    }
+  }
+
+  // int32 pipeline_my_hop_index = 52;
+  if (this->_internal_pipeline_my_hop_index() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(52, this->_internal_pipeline_my_hop_index(), target);
+  }
+
+  // string pipeline_hub_proxy_ip = 53;
+  if (!this->_internal_pipeline_hub_proxy_ip().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_pipeline_hub_proxy_ip().data(), static_cast<int>(this->_internal_pipeline_hub_proxy_ip().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_hub_proxy_ip");
+    target = stream->WriteStringMaybeAliased(
+        53, this->_internal_pipeline_hub_proxy_ip(), target);
+  }
+
+  // int32 pipeline_hub_proxy_port = 54;
+  if (this->_internal_pipeline_hub_proxy_port() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(54, this->_internal_pipeline_hub_proxy_port(), target);
+  }
+
+  // int32 pipeline_local_failed_block_id = 55;
+  if (this->_internal_pipeline_local_failed_block_id() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(55, this->_internal_pipeline_local_failed_block_id(), target);
+  }
+
+  // string pipeline_local_failed_block_key = 56;
+  if (!this->_internal_pipeline_local_failed_block_key().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_pipeline_local_failed_block_key().data(), static_cast<int>(this->_internal_pipeline_local_failed_block_key().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_local_failed_block_key");
+    target = stream->WriteStringMaybeAliased(
+        56, this->_internal_pipeline_local_failed_block_key(), target);
+  }
+
+  // string pipeline_local_replaced_node_ip = 57;
+  if (!this->_internal_pipeline_local_replaced_node_ip().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_pipeline_local_replaced_node_ip().data(), static_cast<int>(this->_internal_pipeline_local_replaced_node_ip().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_local_replaced_node_ip");
+    target = stream->WriteStringMaybeAliased(
+        57, this->_internal_pipeline_local_replaced_node_ip(), target);
+  }
+
+  // int32 pipeline_local_replaced_node_port = 58;
+  if (this->_internal_pipeline_local_replaced_node_port() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(58, this->_internal_pipeline_local_replaced_node_port(), target);
+  }
+
+  // repeated int32 pipeline_hub_chain_eq_slots = 59;
+  {
+    int byte_size = _impl_._pipeline_hub_chain_eq_slots_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          59, _internal_pipeline_hub_chain_eq_slots(), byte_size, target);
+    }
+  }
+
+  // repeated int32 pipeline_hub_is_chain_tail_flags = 60;
+  {
+    int byte_size = _impl_._pipeline_hub_is_chain_tail_flags_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          60, _internal_pipeline_hub_is_chain_tail_flags(), byte_size, target);
+    }
+  }
+
+  // repeated int32 pipeline_hub_chain_hub_coefs = 61;
+  {
+    int byte_size = _impl_._pipeline_hub_chain_hub_coefs_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          61, _internal_pipeline_hub_chain_hub_coefs(), byte_size, target);
+    }
+  }
+
+  // string pipeline_hub_block_key = 62;
+  if (!this->_internal_pipeline_hub_block_key().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_pipeline_hub_block_key().data(), static_cast<int>(this->_internal_pipeline_hub_block_key().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.pipeline_hub_block_key");
+    target = stream->WriteStringMaybeAliased(
+        62, this->_internal_pipeline_hub_block_key(), target);
+  }
+
+  // int32 pipeline_chain_hub_is_tail_flag = 63;
+  if (this->_internal_pipeline_chain_hub_is_tail_flag() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(63, this->_internal_pipeline_chain_hub_is_tail_flag(), target);
+  }
+
+  // int32 pipeline_equation_is_local = 64;
+  if (this->_internal_pipeline_equation_is_local() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(64, this->_internal_pipeline_equation_is_local(), target);
+  }
+
+  // repeated int32 pipeline_hub_chain_equation_is_local = 65;
+  {
+    int byte_size = _impl_._pipeline_hub_chain_equation_is_local_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          65, _internal_pipeline_hub_chain_equation_is_local(), byte_size, target);
+    }
+  }
+
+  // repeated int32 pipeline_hub_chain_local_only_flags = 66;
+  {
+    int byte_size = _impl_._pipeline_hub_chain_local_only_flags_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          66, _internal_pipeline_hub_chain_local_only_flags(), byte_size, target);
+    }
+  }
+
+  // repeated int32 pipeline_hop_listen_ports = 67;
+  {
+    int byte_size = _impl_._pipeline_hop_listen_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          67, _internal_pipeline_hop_listen_ports(), byte_size, target);
+    }
+  }
+
+  // int32 pipeline_my_listen_port = 68;
+  if (this->_internal_pipeline_my_listen_port() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(68, this->_internal_pipeline_my_listen_port(), target);
+  }
+
+  // int32 pipeline_chain_hub_listen_port = 69;
+  if (this->_internal_pipeline_chain_hub_listen_port() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(69, this->_internal_pipeline_chain_hub_listen_port(), target);
+  }
+
+  // repeated int32 pipeline_hub_listener_ports = 70;
+  {
+    int byte_size = _impl_._pipeline_hub_listener_ports_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          70, _internal_pipeline_hub_listener_ports(), byte_size, target);
+    }
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -7149,6 +8600,328 @@ size_t RecoveryRequest::ByteSizeLong() const {
     total_size += data_size;
   }
 
+  // repeated int32 failed_block_ids = 15;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.failed_block_ids_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._failed_block_ids_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string failed_block_keys = 16;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.failed_block_keys_.size());
+  for (int i = 0, n = _impl_.failed_block_keys_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.failed_block_keys_.Get(i));
+  }
+
+  // repeated string replaced_node_ips = 17;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.replaced_node_ips_.size());
+  for (int i = 0, n = _impl_.replaced_node_ips_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.replaced_node_ips_.Get(i));
+  }
+
+  // repeated int32 replaced_node_ports = 18;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.replaced_node_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._replaced_node_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string selected_equations = 19;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.selected_equations_.size());
+  for (int i = 0, n = _impl_.selected_equations_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.selected_equations_.Get(i));
+  }
+
+  // repeated int32 selected_equation_indices = 20;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.selected_equation_indices_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._selected_equation_indices_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string phase2_peer_proxy_ips = 31;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.phase2_peer_proxy_ips_.size());
+  for (int i = 0, n = _impl_.phase2_peer_proxy_ips_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.phase2_peer_proxy_ips_.Get(i));
+  }
+
+  // repeated int32 phase2_peer_proxy_ports = 32;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.phase2_peer_proxy_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._phase2_peer_proxy_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 phase2_peer_partition_ids = 33;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.phase2_peer_partition_ids_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._phase2_peer_partition_ids_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 phase2_peer_shard_begins = 34;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.phase2_peer_shard_begins_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._phase2_peer_shard_begins_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 phase2_peer_shard_counts = 35;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.phase2_peer_shard_counts_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._phase2_peer_shard_counts_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_local_direct_equation_indices = 39;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_local_direct_equation_indices_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_local_direct_equation_indices_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hop_block_ids = 45;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hop_block_ids_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hop_block_ids_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string pipeline_hop_proxy_ips = 46;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.pipeline_hop_proxy_ips_.size());
+  for (int i = 0, n = _impl_.pipeline_hop_proxy_ips_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.pipeline_hop_proxy_ips_.Get(i));
+  }
+
+  // repeated int32 pipeline_hop_proxy_ports = 47;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hop_proxy_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hop_proxy_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string pipeline_hop_datanode_ips = 48;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.pipeline_hop_datanode_ips_.size());
+  for (int i = 0, n = _impl_.pipeline_hop_datanode_ips_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.pipeline_hop_datanode_ips_.Get(i));
+  }
+
+  // repeated int32 pipeline_hop_datanode_ports = 49;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hop_datanode_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hop_datanode_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated string pipeline_hop_block_keys = 50;
+  total_size += 2 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.pipeline_hop_block_keys_.size());
+  for (int i = 0, n = _impl_.pipeline_hop_block_keys_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.pipeline_hop_block_keys_.Get(i));
+  }
+
+  // repeated int32 pipeline_hop_coefs = 51;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hop_coefs_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hop_coefs_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_chain_eq_slots = 59;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_chain_eq_slots_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_chain_eq_slots_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_is_chain_tail_flags = 60;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_is_chain_tail_flags_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_is_chain_tail_flags_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_chain_hub_coefs = 61;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_chain_hub_coefs_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_chain_hub_coefs_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_chain_equation_is_local = 65;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_chain_equation_is_local_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_chain_equation_is_local_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_chain_local_only_flags = 66;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_chain_local_only_flags_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_chain_local_only_flags_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hop_listen_ports = 67;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hop_listen_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hop_listen_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 pipeline_hub_listener_ports = 70;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.pipeline_hub_listener_ports_);
+    if (data_size > 0) {
+      total_size += 2 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._pipeline_hub_listener_ports_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
   // string replaced_node_ip = 1;
   if (!this->_internal_replaced_node_ip().empty()) {
     total_size += 1 +
@@ -7161,6 +8934,34 @@ size_t RecoveryRequest::ByteSizeLong() const {
     total_size += 1 +
       ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
         this->_internal_failed_block_key());
+  }
+
+  // string pipeline_hub_proxy_ip = 53;
+  if (!this->_internal_pipeline_hub_proxy_ip().empty()) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_pipeline_hub_proxy_ip());
+  }
+
+  // string pipeline_local_failed_block_key = 56;
+  if (!this->_internal_pipeline_local_failed_block_key().empty()) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_pipeline_local_failed_block_key());
+  }
+
+  // string pipeline_local_replaced_node_ip = 57;
+  if (!this->_internal_pipeline_local_replaced_node_ip().empty()) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_pipeline_local_replaced_node_ip());
+  }
+
+  // string pipeline_hub_block_key = 62;
+  if (!this->_internal_pipeline_hub_block_key().empty()) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_pipeline_hub_block_key());
   }
 
   // int32 replaced_node_port = 2;
@@ -7178,14 +8979,195 @@ size_t RecoveryRequest::ByteSizeLong() const {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_cross_rack_num());
   }
 
+  // int32 block_id_to_send = 13;
+  if (this->_internal_block_id_to_send() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_block_id_to_send());
+  }
+
   // bool is_to_send_block_id = 12;
   if (this->_internal_is_to_send_block_id() != 0) {
     total_size += 1 + 1;
   }
 
-  // int32 block_id_to_send = 13;
-  if (this->_internal_block_id_to_send() != 0) {
-    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_block_id_to_send());
+  // bool glrc_ilp_recovery = 14;
+  if (this->_internal_glrc_ilp_recovery() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // bool glrc_ilp_phase2 = 21;
+  if (this->_internal_glrc_ilp_phase2() != 0) {
+    total_size += 2 + 1;
+  }
+
+  // bool phase2_do_write_back = 29;
+  if (this->_internal_phase2_do_write_back() != 0) {
+    total_size += 2 + 1;
+  }
+
+  // int32 phase2_partition_id = 22;
+  if (this->_internal_phase2_partition_id() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_partition_id());
+  }
+
+  // int32 phase2_shard_count = 23;
+  if (this->_internal_phase2_shard_count() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_shard_count());
+  }
+
+  // int32 phase2_stripe_byte_len = 24;
+  if (this->_internal_phase2_stripe_byte_len() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_stripe_byte_len());
+  }
+
+  // int32 phase2_shard_begin = 25;
+  if (this->_internal_phase2_shard_begin() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_shard_begin());
+  }
+
+  // int32 phase2_shard_count_local = 26;
+  if (this->_internal_phase2_shard_count_local() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_shard_count_local());
+  }
+
+  // int32 phase2_byte_off = 27;
+  if (this->_internal_phase2_byte_off() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_byte_off());
+  }
+
+  // int32 phase2_byte_len = 28;
+  if (this->_internal_phase2_byte_len() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_byte_len());
+  }
+
+  // int32 phase2_exchange_epoch = 30;
+  if (this->_internal_phase2_exchange_epoch() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_phase2_exchange_epoch());
+  }
+
+  // bool glrc_ilp_pipeline = 36;
+  if (this->_internal_glrc_ilp_pipeline() != 0) {
+    total_size += 2 + 1;
+  }
+
+  // int32 pipeline_shard_count = 37;
+  if (this->_internal_pipeline_shard_count() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_shard_count());
+  }
+
+  // int32 pipeline_hub_block_id = 38;
+  if (this->_internal_pipeline_hub_block_id() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_hub_block_id());
+  }
+
+  // int32 pipeline_exchange_epoch = 40;
+  if (this->_internal_pipeline_exchange_epoch() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_exchange_epoch());
+  }
+
+  // int32 pipeline_role = 41;
+  if (this->_internal_pipeline_role() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_role());
+  }
+
+  // int32 pipeline_chain_id = 42;
+  if (this->_internal_pipeline_chain_id() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_chain_id());
+  }
+
+  // int32 pipeline_equation_index = 43;
+  if (this->_internal_pipeline_equation_index() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_equation_index());
+  }
+
+  // int32 pipeline_eq_slot = 44;
+  if (this->_internal_pipeline_eq_slot() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_eq_slot());
+  }
+
+  // int32 pipeline_my_hop_index = 52;
+  if (this->_internal_pipeline_my_hop_index() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_my_hop_index());
+  }
+
+  // int32 pipeline_hub_proxy_port = 54;
+  if (this->_internal_pipeline_hub_proxy_port() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_hub_proxy_port());
+  }
+
+  // int32 pipeline_local_failed_block_id = 55;
+  if (this->_internal_pipeline_local_failed_block_id() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_local_failed_block_id());
+  }
+
+  // int32 pipeline_local_replaced_node_port = 58;
+  if (this->_internal_pipeline_local_replaced_node_port() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_local_replaced_node_port());
+  }
+
+  // int32 pipeline_chain_hub_is_tail_flag = 63;
+  if (this->_internal_pipeline_chain_hub_is_tail_flag() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_chain_hub_is_tail_flag());
+  }
+
+  // int32 pipeline_equation_is_local = 64;
+  if (this->_internal_pipeline_equation_is_local() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_equation_is_local());
+  }
+
+  // int32 pipeline_my_listen_port = 68;
+  if (this->_internal_pipeline_my_listen_port() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_my_listen_port());
+  }
+
+  // int32 pipeline_chain_hub_listen_port = 69;
+  if (this->_internal_pipeline_chain_hub_listen_port() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_chain_hub_listen_port());
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -7212,11 +9194,49 @@ void RecoveryRequest::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   _this->_impl_.blockids_.MergeFrom(from._impl_.blockids_);
   _this->_impl_.proxyip_.MergeFrom(from._impl_.proxyip_);
   _this->_impl_.proxyport_.MergeFrom(from._impl_.proxyport_);
+  _this->_impl_.failed_block_ids_.MergeFrom(from._impl_.failed_block_ids_);
+  _this->_impl_.failed_block_keys_.MergeFrom(from._impl_.failed_block_keys_);
+  _this->_impl_.replaced_node_ips_.MergeFrom(from._impl_.replaced_node_ips_);
+  _this->_impl_.replaced_node_ports_.MergeFrom(from._impl_.replaced_node_ports_);
+  _this->_impl_.selected_equations_.MergeFrom(from._impl_.selected_equations_);
+  _this->_impl_.selected_equation_indices_.MergeFrom(from._impl_.selected_equation_indices_);
+  _this->_impl_.phase2_peer_proxy_ips_.MergeFrom(from._impl_.phase2_peer_proxy_ips_);
+  _this->_impl_.phase2_peer_proxy_ports_.MergeFrom(from._impl_.phase2_peer_proxy_ports_);
+  _this->_impl_.phase2_peer_partition_ids_.MergeFrom(from._impl_.phase2_peer_partition_ids_);
+  _this->_impl_.phase2_peer_shard_begins_.MergeFrom(from._impl_.phase2_peer_shard_begins_);
+  _this->_impl_.phase2_peer_shard_counts_.MergeFrom(from._impl_.phase2_peer_shard_counts_);
+  _this->_impl_.pipeline_local_direct_equation_indices_.MergeFrom(from._impl_.pipeline_local_direct_equation_indices_);
+  _this->_impl_.pipeline_hop_block_ids_.MergeFrom(from._impl_.pipeline_hop_block_ids_);
+  _this->_impl_.pipeline_hop_proxy_ips_.MergeFrom(from._impl_.pipeline_hop_proxy_ips_);
+  _this->_impl_.pipeline_hop_proxy_ports_.MergeFrom(from._impl_.pipeline_hop_proxy_ports_);
+  _this->_impl_.pipeline_hop_datanode_ips_.MergeFrom(from._impl_.pipeline_hop_datanode_ips_);
+  _this->_impl_.pipeline_hop_datanode_ports_.MergeFrom(from._impl_.pipeline_hop_datanode_ports_);
+  _this->_impl_.pipeline_hop_block_keys_.MergeFrom(from._impl_.pipeline_hop_block_keys_);
+  _this->_impl_.pipeline_hop_coefs_.MergeFrom(from._impl_.pipeline_hop_coefs_);
+  _this->_impl_.pipeline_hub_chain_eq_slots_.MergeFrom(from._impl_.pipeline_hub_chain_eq_slots_);
+  _this->_impl_.pipeline_hub_is_chain_tail_flags_.MergeFrom(from._impl_.pipeline_hub_is_chain_tail_flags_);
+  _this->_impl_.pipeline_hub_chain_hub_coefs_.MergeFrom(from._impl_.pipeline_hub_chain_hub_coefs_);
+  _this->_impl_.pipeline_hub_chain_equation_is_local_.MergeFrom(from._impl_.pipeline_hub_chain_equation_is_local_);
+  _this->_impl_.pipeline_hub_chain_local_only_flags_.MergeFrom(from._impl_.pipeline_hub_chain_local_only_flags_);
+  _this->_impl_.pipeline_hop_listen_ports_.MergeFrom(from._impl_.pipeline_hop_listen_ports_);
+  _this->_impl_.pipeline_hub_listener_ports_.MergeFrom(from._impl_.pipeline_hub_listener_ports_);
   if (!from._internal_replaced_node_ip().empty()) {
     _this->_internal_set_replaced_node_ip(from._internal_replaced_node_ip());
   }
   if (!from._internal_failed_block_key().empty()) {
     _this->_internal_set_failed_block_key(from._internal_failed_block_key());
+  }
+  if (!from._internal_pipeline_hub_proxy_ip().empty()) {
+    _this->_internal_set_pipeline_hub_proxy_ip(from._internal_pipeline_hub_proxy_ip());
+  }
+  if (!from._internal_pipeline_local_failed_block_key().empty()) {
+    _this->_internal_set_pipeline_local_failed_block_key(from._internal_pipeline_local_failed_block_key());
+  }
+  if (!from._internal_pipeline_local_replaced_node_ip().empty()) {
+    _this->_internal_set_pipeline_local_replaced_node_ip(from._internal_pipeline_local_replaced_node_ip());
+  }
+  if (!from._internal_pipeline_hub_block_key().empty()) {
+    _this->_internal_set_pipeline_hub_block_key(from._internal_pipeline_hub_block_key());
   }
   if (from._internal_replaced_node_port() != 0) {
     _this->_internal_set_replaced_node_port(from._internal_replaced_node_port());
@@ -7227,11 +9247,92 @@ void RecoveryRequest::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   if (from._internal_cross_rack_num() != 0) {
     _this->_internal_set_cross_rack_num(from._internal_cross_rack_num());
   }
+  if (from._internal_block_id_to_send() != 0) {
+    _this->_internal_set_block_id_to_send(from._internal_block_id_to_send());
+  }
   if (from._internal_is_to_send_block_id() != 0) {
     _this->_internal_set_is_to_send_block_id(from._internal_is_to_send_block_id());
   }
-  if (from._internal_block_id_to_send() != 0) {
-    _this->_internal_set_block_id_to_send(from._internal_block_id_to_send());
+  if (from._internal_glrc_ilp_recovery() != 0) {
+    _this->_internal_set_glrc_ilp_recovery(from._internal_glrc_ilp_recovery());
+  }
+  if (from._internal_glrc_ilp_phase2() != 0) {
+    _this->_internal_set_glrc_ilp_phase2(from._internal_glrc_ilp_phase2());
+  }
+  if (from._internal_phase2_do_write_back() != 0) {
+    _this->_internal_set_phase2_do_write_back(from._internal_phase2_do_write_back());
+  }
+  if (from._internal_phase2_partition_id() != 0) {
+    _this->_internal_set_phase2_partition_id(from._internal_phase2_partition_id());
+  }
+  if (from._internal_phase2_shard_count() != 0) {
+    _this->_internal_set_phase2_shard_count(from._internal_phase2_shard_count());
+  }
+  if (from._internal_phase2_stripe_byte_len() != 0) {
+    _this->_internal_set_phase2_stripe_byte_len(from._internal_phase2_stripe_byte_len());
+  }
+  if (from._internal_phase2_shard_begin() != 0) {
+    _this->_internal_set_phase2_shard_begin(from._internal_phase2_shard_begin());
+  }
+  if (from._internal_phase2_shard_count_local() != 0) {
+    _this->_internal_set_phase2_shard_count_local(from._internal_phase2_shard_count_local());
+  }
+  if (from._internal_phase2_byte_off() != 0) {
+    _this->_internal_set_phase2_byte_off(from._internal_phase2_byte_off());
+  }
+  if (from._internal_phase2_byte_len() != 0) {
+    _this->_internal_set_phase2_byte_len(from._internal_phase2_byte_len());
+  }
+  if (from._internal_phase2_exchange_epoch() != 0) {
+    _this->_internal_set_phase2_exchange_epoch(from._internal_phase2_exchange_epoch());
+  }
+  if (from._internal_glrc_ilp_pipeline() != 0) {
+    _this->_internal_set_glrc_ilp_pipeline(from._internal_glrc_ilp_pipeline());
+  }
+  if (from._internal_pipeline_shard_count() != 0) {
+    _this->_internal_set_pipeline_shard_count(from._internal_pipeline_shard_count());
+  }
+  if (from._internal_pipeline_hub_block_id() != 0) {
+    _this->_internal_set_pipeline_hub_block_id(from._internal_pipeline_hub_block_id());
+  }
+  if (from._internal_pipeline_exchange_epoch() != 0) {
+    _this->_internal_set_pipeline_exchange_epoch(from._internal_pipeline_exchange_epoch());
+  }
+  if (from._internal_pipeline_role() != 0) {
+    _this->_internal_set_pipeline_role(from._internal_pipeline_role());
+  }
+  if (from._internal_pipeline_chain_id() != 0) {
+    _this->_internal_set_pipeline_chain_id(from._internal_pipeline_chain_id());
+  }
+  if (from._internal_pipeline_equation_index() != 0) {
+    _this->_internal_set_pipeline_equation_index(from._internal_pipeline_equation_index());
+  }
+  if (from._internal_pipeline_eq_slot() != 0) {
+    _this->_internal_set_pipeline_eq_slot(from._internal_pipeline_eq_slot());
+  }
+  if (from._internal_pipeline_my_hop_index() != 0) {
+    _this->_internal_set_pipeline_my_hop_index(from._internal_pipeline_my_hop_index());
+  }
+  if (from._internal_pipeline_hub_proxy_port() != 0) {
+    _this->_internal_set_pipeline_hub_proxy_port(from._internal_pipeline_hub_proxy_port());
+  }
+  if (from._internal_pipeline_local_failed_block_id() != 0) {
+    _this->_internal_set_pipeline_local_failed_block_id(from._internal_pipeline_local_failed_block_id());
+  }
+  if (from._internal_pipeline_local_replaced_node_port() != 0) {
+    _this->_internal_set_pipeline_local_replaced_node_port(from._internal_pipeline_local_replaced_node_port());
+  }
+  if (from._internal_pipeline_chain_hub_is_tail_flag() != 0) {
+    _this->_internal_set_pipeline_chain_hub_is_tail_flag(from._internal_pipeline_chain_hub_is_tail_flag());
+  }
+  if (from._internal_pipeline_equation_is_local() != 0) {
+    _this->_internal_set_pipeline_equation_is_local(from._internal_pipeline_equation_is_local());
+  }
+  if (from._internal_pipeline_my_listen_port() != 0) {
+    _this->_internal_set_pipeline_my_listen_port(from._internal_pipeline_my_listen_port());
+  }
+  if (from._internal_pipeline_chain_hub_listen_port() != 0) {
+    _this->_internal_set_pipeline_chain_hub_listen_port(from._internal_pipeline_chain_hub_listen_port());
   }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
@@ -7258,6 +9359,32 @@ void RecoveryRequest::InternalSwap(RecoveryRequest* other) {
   _impl_.blockids_.InternalSwap(&other->_impl_.blockids_);
   _impl_.proxyip_.InternalSwap(&other->_impl_.proxyip_);
   _impl_.proxyport_.InternalSwap(&other->_impl_.proxyport_);
+  _impl_.failed_block_ids_.InternalSwap(&other->_impl_.failed_block_ids_);
+  _impl_.failed_block_keys_.InternalSwap(&other->_impl_.failed_block_keys_);
+  _impl_.replaced_node_ips_.InternalSwap(&other->_impl_.replaced_node_ips_);
+  _impl_.replaced_node_ports_.InternalSwap(&other->_impl_.replaced_node_ports_);
+  _impl_.selected_equations_.InternalSwap(&other->_impl_.selected_equations_);
+  _impl_.selected_equation_indices_.InternalSwap(&other->_impl_.selected_equation_indices_);
+  _impl_.phase2_peer_proxy_ips_.InternalSwap(&other->_impl_.phase2_peer_proxy_ips_);
+  _impl_.phase2_peer_proxy_ports_.InternalSwap(&other->_impl_.phase2_peer_proxy_ports_);
+  _impl_.phase2_peer_partition_ids_.InternalSwap(&other->_impl_.phase2_peer_partition_ids_);
+  _impl_.phase2_peer_shard_begins_.InternalSwap(&other->_impl_.phase2_peer_shard_begins_);
+  _impl_.phase2_peer_shard_counts_.InternalSwap(&other->_impl_.phase2_peer_shard_counts_);
+  _impl_.pipeline_local_direct_equation_indices_.InternalSwap(&other->_impl_.pipeline_local_direct_equation_indices_);
+  _impl_.pipeline_hop_block_ids_.InternalSwap(&other->_impl_.pipeline_hop_block_ids_);
+  _impl_.pipeline_hop_proxy_ips_.InternalSwap(&other->_impl_.pipeline_hop_proxy_ips_);
+  _impl_.pipeline_hop_proxy_ports_.InternalSwap(&other->_impl_.pipeline_hop_proxy_ports_);
+  _impl_.pipeline_hop_datanode_ips_.InternalSwap(&other->_impl_.pipeline_hop_datanode_ips_);
+  _impl_.pipeline_hop_datanode_ports_.InternalSwap(&other->_impl_.pipeline_hop_datanode_ports_);
+  _impl_.pipeline_hop_block_keys_.InternalSwap(&other->_impl_.pipeline_hop_block_keys_);
+  _impl_.pipeline_hop_coefs_.InternalSwap(&other->_impl_.pipeline_hop_coefs_);
+  _impl_.pipeline_hub_chain_eq_slots_.InternalSwap(&other->_impl_.pipeline_hub_chain_eq_slots_);
+  _impl_.pipeline_hub_is_chain_tail_flags_.InternalSwap(&other->_impl_.pipeline_hub_is_chain_tail_flags_);
+  _impl_.pipeline_hub_chain_hub_coefs_.InternalSwap(&other->_impl_.pipeline_hub_chain_hub_coefs_);
+  _impl_.pipeline_hub_chain_equation_is_local_.InternalSwap(&other->_impl_.pipeline_hub_chain_equation_is_local_);
+  _impl_.pipeline_hub_chain_local_only_flags_.InternalSwap(&other->_impl_.pipeline_hub_chain_local_only_flags_);
+  _impl_.pipeline_hop_listen_ports_.InternalSwap(&other->_impl_.pipeline_hop_listen_ports_);
+  _impl_.pipeline_hub_listener_ports_.InternalSwap(&other->_impl_.pipeline_hub_listener_ports_);
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
       &_impl_.replaced_node_ip_, lhs_arena,
       &other->_impl_.replaced_node_ip_, rhs_arena
@@ -7266,9 +9393,25 @@ void RecoveryRequest::InternalSwap(RecoveryRequest* other) {
       &_impl_.failed_block_key_, lhs_arena,
       &other->_impl_.failed_block_key_, rhs_arena
   );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.pipeline_hub_proxy_ip_, lhs_arena,
+      &other->_impl_.pipeline_hub_proxy_ip_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.pipeline_local_failed_block_key_, lhs_arena,
+      &other->_impl_.pipeline_local_failed_block_key_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.pipeline_local_replaced_node_ip_, lhs_arena,
+      &other->_impl_.pipeline_local_replaced_node_ip_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.pipeline_hub_block_key_, lhs_arena,
+      &other->_impl_.pipeline_hub_block_key_, rhs_arena
+  );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.block_id_to_send_)
-      + sizeof(RecoveryRequest::_impl_.block_id_to_send_)
+      PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.pipeline_chain_hub_listen_port_)
+      + sizeof(RecoveryRequest::_impl_.pipeline_chain_hub_listen_port_)
       - PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.replaced_node_port_)>(
           reinterpret_cast<char*>(&_impl_.replaced_node_port_),
           reinterpret_cast<char*>(&other->_impl_.replaced_node_port_));

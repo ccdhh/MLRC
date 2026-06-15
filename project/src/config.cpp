@@ -1,6 +1,10 @@
 #include "config.h"
+#include "link_bandwidth.h"
 #include "tinyxml2.h"
+#include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <cstdlib>
 
 namespace ECProject
 {
@@ -17,7 +21,7 @@ namespace ECProject
   {
     assert(BlockSize % UnitSize == 0 && "Error: BlockSize must be divisible by UnitSize");
     assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE" || AppendMode == "EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
-    assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC" || CodeType == "RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, or UniformLRC");
+    assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC" || CodeType == "gLRC" || CodeType == "RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, UniformLRC, gLRC, or RS");
     assert(DatanodeNumPerCluster > 0 && "Error: DatanodeNumPerCluster must be greater than 0");
     assert(ClusterNum > 0 && "Error: ClusterNum must be greater than 0");
     if (CodeType == "UniLRC")
@@ -40,11 +44,23 @@ namespace ECProject
       assert(DatanodeNumPerCluster > r && "Error: DatanodeNumPerCluster must be greater than r");
       assert(ClusterNum > ((((k + r) / z + 1) / (r + 1) + (bool)(((k + r) / z + 1) % (r + 1))) * ((k + r) % z)) + (((k + r) / z) / (r + 1) + (bool)(((k + r) / z) % (r + 1))) * (z - ((k + r) % z)) && "Error: ClusterNum must be greater than ((((k + r) / z + 1) / (r + 1) + (bool)(((k + r) / z + 1) % (r + 1))) * ((k + r) % z)) + (((k + r) / z) / (r + 1) + (bool)(((k + r) / z) % (r + 1))) * (z - ((k + r) % z))");
     }
+    if (CodeType == "gLRC")
+    {
+      assert(z > 0 && "Error: z must be positive for gLRC");
+      int q_max = (k + r + z - 1) / z;
+      int global_payload = (k + r) - (z - 1) * q_max;
+      assert(global_payload >= r &&
+             "Error: gLRC global group must hold all r global parities");
+      int max_blocks_per_group = std::max(q_max + 1, global_payload + 1);
+      assert(DatanodeNumPerCluster > max_blocks_per_group &&
+             "Error: DatanodeNumPerCluster must fit the largest gLRC placement group");
+      assert(ClusterNum >= z && "Error: ClusterNum must be at least z for gLRC");
+    }
     if (CodeType == "RS")
     {
       int n = k + r;
 
-      assert(DatanodeNumPerCluster >= 1 && "Error: DatanodeNumPerCluster must be >= 1 for RS code");
+      assert(DatanodeNumPerCluster  >= 1 && "Error: DatanodeNumPerCluster must be >= 1 for RS code");
 
       assert(ClusterNum * DatanodeNumPerCluster >= n && "Error: ClusterNum * DatanodeNumPerCluster must be >= (k + r) for RS code");
     }
@@ -81,10 +97,23 @@ namespace ECProject
       UnitSize = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("BlockSize"))
       BlockSize = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("NodeBlockBandwidthMBps"))
+      NodeBlockBandwidthMBps = std::stod(elem->GetText());
     if (auto elem = root->FirstChildElement("z"))
       z = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("CodeType"))
       CodeType = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcRepairMode"))
+      GlrcRepairMode = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcEquationPolicy"))
+      GlrcEquationPolicy = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcShardCount"))
+      GlrcShardCount = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcPhase2WriteBack"))
+    {
+      std::string v = elem->GetText();
+      GlrcPhase2WriteBack = !(v == "0" || v == "false" || v == "FALSE");
+    }
     if (CodeType == "UniLRC")
     {
       if (auto elem = root->FirstChildElement("alpha"))
@@ -119,16 +148,29 @@ namespace ECProject
       CoordinatorPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
       AppendMode = std::string(elem->GetText());
-    N = get_N(); // 获得N
+    N = get_N(); // N
     get_num_arry();
   }
 
   void Config::printConfigs() const
   {
+    const char *quiet = std::getenv("DDRT_QUIET_CONFIG");
+    if (quiet && quiet[0] != '\0' && quiet[0] != '0')
+      return;
+
     std::cout << "Configuration Parameters:" << std::endl;
     std::cout << "  AlignedSize: " << AlignedSize << " bytes" << std::endl;
     std::cout << "  UnitSize: " << UnitSize << " bytes" << std::endl;
     std::cout << "  BlockSize: " << BlockSize << " bytes" << std::endl;
+    if (NodeBlockBandwidthMBps > 0.0)
+    {
+      std::cout << "  NodeBlockBandwidthMBps: " << NodeBlockBandwidthMBps << " MB/s" << std::endl;
+      std::cout << "    proxy: shared ingress (N helpers -> ~N*BlockSize/BW total read time)" << std::endl;
+      std::cout << "    datanode: per-node ingress on recovery write-back" << std::endl;
+      std::cout << "  SingleBlockTransferTime: "
+                << node_block_transfer_seconds(BlockSize, NodeBlockBandwidthMBps) << " s/block at full link"
+                << std::endl;
+    }
     std::cout << "  alpha: " << (int)alpha << std::endl;
     std::cout << "  z: " << (int)z << std::endl;
     std::cout << "  n: " << n << std::endl;
@@ -141,6 +183,13 @@ namespace ECProject
     std::cout << "  CoordinatorPort: " << CoordinatorPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
+    if (CodeType == "gLRC")
+    {
+      std::cout << "  GlrcRepairMode: " << GlrcRepairMode << std::endl;
+      std::cout << "  GlrcEquationPolicy: " << GlrcEquationPolicy << std::endl;
+      std::cout << "  GlrcShardCount: " << GlrcShardCount << std::endl;
+      std::cout << "  GlrcPhase2WriteBack: " << (GlrcPhase2WriteBack ? "true" : "false") << std::endl;
+    }
   }
   int Config::get_N()
   {

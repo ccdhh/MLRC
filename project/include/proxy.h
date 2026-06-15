@@ -12,13 +12,21 @@
 #include <grpcpp/grpcpp.h>
 #include <thread>
 #include <semaphore.h>
+#include <memory>
+#include <unordered_map>
 #include <config.h>
+#include <link_bandwidth.h>
 #include <toolbox.h>
 #include <queue>
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
 {
+  /** Last error from glrcIlpPhase2Recovery on this thread (for gRPC status). */
+  std::string glrc_phase2_take_last_error();
+  /** Last error from glrcIlpPipelineRecovery on this thread (for gRPC status). */
+  std::string glrc_pipeline_take_last_error();
+
   class ProxyImpl final
       : public proxy_proto::proxyService::Service,
         public std::enable_shared_from_this<ECProject::ProxyImpl>
@@ -97,11 +105,6 @@ namespace ECProject
         grpc::ServerContext *context,
         const proxy_proto::NodeAndBlock *node_and_block,
         proxy_proto::DelReply *response) override;
-    // block relocation for stripe merge
-    grpc::Status relocateBlock(
-        grpc::ServerContext *context,
-        const proxy_proto::blockRelocPlan *plan,
-        proxy_proto::blockRelocReply *response) override;
     // get stripe
     grpc::Status getBlocks(
         grpc::ServerContext *context,
@@ -124,11 +127,51 @@ namespace ECProject
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
     bool RecoveryToDatanode(const char *block_key, int block_id, const char *buf, const char *ip, int port);
     bool RecoveryToDatanodeBreakdown(const char *block_key, int block_id, const char *buf, const char *ip, int port, double *network_time, double *disk_io_time);
+    bool RecoveryToDatanodeStripeBreakdown(const char *block_key, int block_id, const char *buf, const char *ip, int port,
+                                           int recovery_offset, int recovery_size, double *network_time,
+                                           double *disk_io_time);
     void get_from_node(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index);
     void get_from_node_breakdown(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index, 
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
+    void initIngressBandwidth();
+    bool GetFromDatanodeStripeRangeBreakdown(const std::string &key, char *value, size_t full_block_size,
+                                             int read_offset, int read_length, const char *ip, const int port,
+                                             double *disk_io_start_time, double *disk_io_end_time,
+                                             double *network_start_time, double *network_end_time,
+                                             double *grpc_notify_time, double *grpc_start_time,
+                                             SharedBandwidthLimiter *block_bandwidth = nullptr);
+    void get_from_node_stripe_range_breakdown(const std::string &block_key, char *block_value, size_t full_block_size,
+                                              int read_offset, int read_length, const char *datanode_ip,
+                                              const int datanode_port, bool *status, int index,
+                                              double *disk_io_start_time, double *disk_io_end_time,
+                                              double *network_start_time, double *network_end_time,
+                                              double *grpc_notify_time, double *grpc_start_time,
+                                              SharedBandwidthLimiter *block_bandwidth);
+    struct Phase2BlockDuplexBw
+    {
+      SharedBandwidthLimiter *ingress = nullptr;
+      SharedBandwidthLimiter *egress = nullptr;
+    };
+    Phase2BlockDuplexBw phase2BlockDuplexBandwidth(int repair_block_id, int exchange_epoch);
+    bool glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recovery_request,
+                               proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                   proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                    proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                          proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                          proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                            proxy_proto::RecoveryReply *response);
 
   private:
+    std::mutex m_glrc_phase2_mutex;
+    int m_phase2_block_bw_epoch = -1;
+    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_ingress_bw;
+    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_egress_bw;
+    std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
     std::mutex m_mutex;
     std::condition_variable cv;
     bool init_coordinator();
@@ -156,6 +199,7 @@ namespace ECProject
     {
       m_proxyImpl_ptr.m_sys_config = ECProject::Config::getInstance(sys_config_path);
       m_proxyImpl_ptr.m_toolbox = ECProject::ToolBox::getInstance();
+      m_proxyImpl_ptr.initIngressBandwidth();
     }
     void Run()
     {
@@ -165,6 +209,10 @@ namespace ECProject
       std::cout << "proxy_ip_port:" << proxy_ip_port << std::endl;
       builder.AddListeningPort(proxy_ip_port, grpc::InsecureServerCredentials());
       builder.RegisterService(&m_proxyImpl_ptr);
+      // Pipeline repair may run several concurrent recoveryBreakdown RPCs on one proxy (multi-chain hops).
+      builder.SetSyncServerOption(grpc::ServerBuilder::NUM_CQS, 8);
+      builder.SetSyncServerOption(grpc::ServerBuilder::MIN_POLLERS, 4);
+      builder.SetSyncServerOption(grpc::ServerBuilder::MAX_POLLERS, 32);
       std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
       server->Wait();
     }

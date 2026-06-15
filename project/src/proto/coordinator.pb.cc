@@ -333,11 +333,24 @@ struct DegradedReadReplyDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 DegradedReadReplyDefaultTypeInternal _DegradedReadReply_default_instance_;
 PROTOBUF_CONSTEXPR RecoveryReply::RecoveryReply(
     ::_pbi::ConstantInitialized): _impl_{
-    /*decltype(_impl_.disk_read_time_)*/0
+    /*decltype(_impl_.selected_equations_)*/{}
+  , /*decltype(_impl_.helper_block_ids_)*/{}
+  , /*decltype(_impl_._helper_block_ids_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.partition_shard_counts_)*/{}
+  , /*decltype(_impl_._partition_shard_counts_cached_byte_size_)*/{0}
+  , /*decltype(_impl_.message_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.repair_mode_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.equation_policy_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.disk_read_time_)*/0
   , /*decltype(_impl_.network_time_)*/0
   , /*decltype(_impl_.decode_time_)*/0
   , /*decltype(_impl_.disk_write_time_)*/0
   , /*decltype(_impl_.grpc_start_time_)*/0
+  , /*decltype(_impl_.total_time_)*/0
+  , /*decltype(_impl_.ilp_time_)*/0
+  , /*decltype(_impl_.helper_block_count_)*/0
+  , /*decltype(_impl_.success_)*/false
+  , /*decltype(_impl_.max_partition_shard_count_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct RecoveryReplyDefaultTypeInternal {
   PROTOBUF_CONSTEXPR RecoveryReplyDefaultTypeInternal()
@@ -605,6 +618,17 @@ const uint32_t TableStruct_coordinator_2eproto::offsets[] PROTOBUF_SECTION_VARIA
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.decode_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.disk_write_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.grpc_start_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.total_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.ilp_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.helper_block_count_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.selected_equations_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.helper_block_ids_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.success_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.message_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.repair_mode_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.equation_policy_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.partition_shard_counts_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.max_partition_shard_count_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePos, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -666,10 +690,10 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 162, -1, -1, sizeof(::coordinator_proto::RepBlockNum)},
   { 169, -1, -1, sizeof(::coordinator_proto::DegradedReadReply)},
   { 179, -1, -1, sizeof(::coordinator_proto::RecoveryReply)},
-  { 190, -1, -1, sizeof(::coordinator_proto::StripePos)},
-  { 198, -1, -1, sizeof(::coordinator_proto::StripePosListAndClient)},
-  { 207, -1, -1, sizeof(::coordinator_proto::MergeRequest)},
-  { 217, -1, -1, sizeof(::coordinator_proto::MergeReply)},
+  { 201, -1, -1, sizeof(::coordinator_proto::StripePos)},
+  { 209, -1, -1, sizeof(::coordinator_proto::StripePosListAndClient)},
+  { 218, -1, -1, sizeof(::coordinator_proto::MergeRequest)},
+  { 228, -1, -1, sizeof(::coordinator_proto::MergeReply)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -740,84 +764,91 @@ const char descriptor_table_protodef_coordinator_2eproto[] PROTOBUF_SECTION_VARI
   "ipe_ids\030\001 \003(\005\" \n\013RepBlockNum\022\021\n\tblock_nu"
   "m\030\001 \001(\005\"m\n\021DegradedReadReply\022\024\n\014disk_io_"
   "time\030\001 \001(\001\022\024\n\014network_time\030\002 \001(\001\022\023\n\013deco"
-  "de_time\030\003 \001(\001\022\027\n\017grpc_start_time\030\004 \001(\001\"\204"
-  "\001\n\rRecoveryReply\022\026\n\016disk_read_time\030\001 \001(\001"
+  "de_time\030\003 \001(\001\022\027\n\017grpc_start_time\030\004 \001(\001\"\217"
+  "\003\n\rRecoveryReply\022\026\n\016disk_read_time\030\001 \001(\001"
   "\022\024\n\014network_time\030\002 \001(\001\022\023\n\013decode_time\030\003 "
   "\001(\001\022\027\n\017disk_write_time\030\004 \001(\001\022\027\n\017grpc_sta"
-  "rt_time\030\005 \001(\001\"+\n\tStripePos\022\021\n\tstripe_id\030"
-  "\001 \001(\005\022\013\n\003pos\030\002 \001(\005\"k\n\026StripePosListAndCl"
-  "ient\022+\n\005items\030\001 \003(\0132\034.coordinator_proto."
-  "StripePos\022\020\n\010clientip\030\002 \001(\t\022\022\n\nclientpor"
-  "t\030\003 \001(\005\"d\n\014MergeRequest\022\023\n\013stripe_id_a\030\001"
-  " \001(\005\022\023\n\013stripe_id_b\030\002 \001(\005\022\023\n\013merge_round"
-  "\030\003 \001(\005\022\025\n\rnew_stripe_id\030\004 \001(\005\"s\n\nMergeRe"
-  "ply\022\017\n\007success\030\001 \001(\010\022\025\n\rnew_stripe_id\030\002 "
-  "\001(\005\022\036\n\026data_migration_seconds\030\003 \001(\001\022\035\n\025p"
-  "arity_update_seconds\030\004 \001(\0012\343\022\n\022coordinat"
-  "orService\022k\n\025sayHelloToCoordinator\022\'.coo"
-  "rdinator_proto.RequestToCoordinator\032\'.co"
-  "ordinator_proto.ReplyFromCoordinator\"\000\022`"
-  "\n\ncheckalive\022\'.coordinator_proto.Request"
-  "ToCoordinator\032\'.coordinator_proto.ReplyF"
-  "romCoordinator\"\000\022V\n\014setParameter\022\034.coord"
-  "inator_proto.Parameter\032&.coordinator_pro"
-  "to.RepIfSetParaSuccess\"\000\022d\n\024uploadOrigin"
-  "KeyValue\022%.coordinator_proto.RequestProx"
-  "yIPPort\032#.coordinator_proto.ReplyProxyIP"
-  "Port\"\000\022a\n\021reportCommitAbort\022!.coordinato"
-  "r_proto.CommitAbortKey\032\'.coordinator_pro"
-  "to.ReplyFromCoordinator\"\000\022V\n\020checkCommit"
-  "Abort\022\037.coordinator_proto.AskIfSuccess\032\037"
-  ".coordinator_proto.RepIfSuccess\"\000\022`\n\016upl"
-  "oadSetValue\022%.coordinator_proto.RequestP"
-  "roxyIPPort\032%.coordinator_proto.ReplyProx"
-  "yIPsPorts\"\000\022c\n\021uploadSubsetValue\022%.coord"
-  "inator_proto.RequestProxyIPPort\032%.coordi"
-  "nator_proto.ReplyProxyIPsPorts\"\000\022c\n\021uplo"
-  "adAppendValue\022%.coordinator_proto.Reques"
-  "tProxyIPPort\032%.coordinator_proto.ReplyPr"
-  "oxyIPsPorts\"\000\022S\n\010getValue\022!.coordinator_"
-  "proto.KeyAndClientIP\032\".coordinator_proto"
-  ".RepIfGetSuccess\"\000\022W\n\tgetStripe\022!.coordi"
-  "nator_proto.KeyAndClientIP\032%.coordinator"
-  "_proto.ReplyProxyIPsPorts\"\000\022\\\n\tgetBlocks"
-  "\022&.coordinator_proto.BlockIDsAndClientIP"
-  "\032%.coordinator_proto.ReplyProxyIPsPorts\""
-  "\000\022j\n\024getBlocksByStripePos\022).coordinator_"
-  "proto.StripePosListAndClient\032%.coordinat"
-  "or_proto.ReplyProxyIPsPorts\"\000\022h\n\025getDegr"
-  "adedReadBlocks\022&.coordinator_proto.Block"
-  "IDsAndClientIP\032%.coordinator_proto.Reply"
-  "ProxyIPsPorts\"\000\022a\n\024getDegradedReadBlock\022"
-  "!.coordinator_proto.KeyAndClientIP\032$.coo"
-  "rdinator_proto.DegradedReadReply\"\000\022j\n\035ge"
-  "tDegradedReadBlockBreakdown\022!.coordinato"
-  "r_proto.KeyAndClientIP\032$.coordinator_pro"
-  "to.DegradedReadReply\"\000\022T\n\013getRecovery\022!."
-  "coordinator_proto.KeyAndClientIP\032 .coord"
-  "inator_proto.RecoveryReply\"\000\022]\n\024getRecov"
-  "eryBreakdown\022!.coordinator_proto.KeyAndC"
-  "lientIP\032 .coordinator_proto.RecoveryRepl"
-  "y\"\000\022Y\n\020fullNodeRecovery\022#.coordinator_pr"
-  "oto.NodeIdFromClient\032\036.coordinator_proto"
-  ".RepBlockNum\"\000\022j\n\022multiBlockRecovery\0220.c"
-  "oordinator_proto.StripeIdAndBlockIDsFrom"
-  "Client\032 .coordinator_proto.RecoveryReply"
-  "\"\000\022N\n\010delByKey\022 .coordinator_proto.KeyFr"
-  "omClient\032\036.coordinator_proto.RepIfDeling"
-  "\"\000\022V\n\013delByStripe\022%.coordinator_proto.St"
-  "ripeIdFromClient\032\036.coordinator_proto.Rep"
-  "IfDeling\"\000\022P\n\014mergeStripes\022\037.coordinator"
-  "_proto.MergeRequest\032\035.coordinator_proto."
-  "MergeReply\"\000\022Y\n\013listStripes\022\'.coordinato"
-  "r_proto.RequestToCoordinator\032\037.coordinat"
-  "or_proto.RepStripeIds\"\000\022W\n\ndecodeTest\022!."
-  "coordinator_proto.KeyAndClientIP\032$.coord"
-  "inator_proto.DegradedReadReply\"\000b\006proto3"
+  "rt_time\030\005 \001(\001\022\022\n\ntotal_time\030\006 \001(\001\022\020\n\010ilp"
+  "_time\030\007 \001(\001\022\032\n\022helper_block_count\030\010 \001(\005\022"
+  "\032\n\022selected_equations\030\t \003(\t\022\030\n\020helper_bl"
+  "ock_ids\030\n \003(\005\022\017\n\007success\030\013 \001(\010\022\017\n\007messag"
+  "e\030\014 \001(\t\022\023\n\013repair_mode\030\r \001(\t\022\027\n\017equation"
+  "_policy\030\016 \001(\t\022\036\n\026partition_shard_counts\030"
+  "\017 \003(\005\022!\n\031max_partition_shard_count\030\020 \001(\005"
+  "\"+\n\tStripePos\022\021\n\tstripe_id\030\001 \001(\005\022\013\n\003pos\030"
+  "\002 \001(\005\"k\n\026StripePosListAndClient\022+\n\005items"
+  "\030\001 \003(\0132\034.coordinator_proto.StripePos\022\020\n\010"
+  "clientip\030\002 \001(\t\022\022\n\nclientport\030\003 \001(\005\"d\n\014Me"
+  "rgeRequest\022\023\n\013stripe_id_a\030\001 \001(\005\022\023\n\013strip"
+  "e_id_b\030\002 \001(\005\022\023\n\013merge_round\030\003 \001(\005\022\025\n\rnew"
+  "_stripe_id\030\004 \001(\005\"s\n\nMergeReply\022\017\n\007succes"
+  "s\030\001 \001(\010\022\025\n\rnew_stripe_id\030\002 \001(\005\022\036\n\026data_m"
+  "igration_seconds\030\003 \001(\001\022\035\n\025parity_update_"
+  "seconds\030\004 \001(\0012\343\022\n\022coordinatorService\022k\n\025"
+  "sayHelloToCoordinator\022\'.coordinator_prot"
+  "o.RequestToCoordinator\032\'.coordinator_pro"
+  "to.ReplyFromCoordinator\"\000\022`\n\ncheckalive\022"
+  "\'.coordinator_proto.RequestToCoordinator"
+  "\032\'.coordinator_proto.ReplyFromCoordinato"
+  "r\"\000\022V\n\014setParameter\022\034.coordinator_proto."
+  "Parameter\032&.coordinator_proto.RepIfSetPa"
+  "raSuccess\"\000\022d\n\024uploadOriginKeyValue\022%.co"
+  "ordinator_proto.RequestProxyIPPort\032#.coo"
+  "rdinator_proto.ReplyProxyIPPort\"\000\022a\n\021rep"
+  "ortCommitAbort\022!.coordinator_proto.Commi"
+  "tAbortKey\032\'.coordinator_proto.ReplyFromC"
+  "oordinator\"\000\022V\n\020checkCommitAbort\022\037.coord"
+  "inator_proto.AskIfSuccess\032\037.coordinator_"
+  "proto.RepIfSuccess\"\000\022`\n\016uploadSetValue\022%"
+  ".coordinator_proto.RequestProxyIPPort\032%."
+  "coordinator_proto.ReplyProxyIPsPorts\"\000\022c"
+  "\n\021uploadSubsetValue\022%.coordinator_proto."
+  "RequestProxyIPPort\032%.coordinator_proto.R"
+  "eplyProxyIPsPorts\"\000\022c\n\021uploadAppendValue"
+  "\022%.coordinator_proto.RequestProxyIPPort\032"
+  "%.coordinator_proto.ReplyProxyIPsPorts\"\000"
+  "\022S\n\010getValue\022!.coordinator_proto.KeyAndC"
+  "lientIP\032\".coordinator_proto.RepIfGetSucc"
+  "ess\"\000\022W\n\tgetStripe\022!.coordinator_proto.K"
+  "eyAndClientIP\032%.coordinator_proto.ReplyP"
+  "roxyIPsPorts\"\000\022\\\n\tgetBlocks\022&.coordinato"
+  "r_proto.BlockIDsAndClientIP\032%.coordinato"
+  "r_proto.ReplyProxyIPsPorts\"\000\022j\n\024getBlock"
+  "sByStripePos\022).coordinator_proto.StripeP"
+  "osListAndClient\032%.coordinator_proto.Repl"
+  "yProxyIPsPorts\"\000\022h\n\025getDegradedReadBlock"
+  "s\022&.coordinator_proto.BlockIDsAndClientI"
+  "P\032%.coordinator_proto.ReplyProxyIPsPorts"
+  "\"\000\022a\n\024getDegradedReadBlock\022!.coordinator"
+  "_proto.KeyAndClientIP\032$.coordinator_prot"
+  "o.DegradedReadReply\"\000\022j\n\035getDegradedRead"
+  "BlockBreakdown\022!.coordinator_proto.KeyAn"
+  "dClientIP\032$.coordinator_proto.DegradedRe"
+  "adReply\"\000\022T\n\013getRecovery\022!.coordinator_p"
+  "roto.KeyAndClientIP\032 .coordinator_proto."
+  "RecoveryReply\"\000\022]\n\024getRecoveryBreakdown\022"
+  "!.coordinator_proto.KeyAndClientIP\032 .coo"
+  "rdinator_proto.RecoveryReply\"\000\022Y\n\020fullNo"
+  "deRecovery\022#.coordinator_proto.NodeIdFro"
+  "mClient\032\036.coordinator_proto.RepBlockNum\""
+  "\000\022j\n\022multiBlockRecovery\0220.coordinator_pr"
+  "oto.StripeIdAndBlockIDsFromClient\032 .coor"
+  "dinator_proto.RecoveryReply\"\000\022N\n\010delByKe"
+  "y\022 .coordinator_proto.KeyFromClient\032\036.co"
+  "ordinator_proto.RepIfDeling\"\000\022V\n\013delBySt"
+  "ripe\022%.coordinator_proto.StripeIdFromCli"
+  "ent\032\036.coordinator_proto.RepIfDeling\"\000\022P\n"
+  "\014mergeStripes\022\037.coordinator_proto.MergeR"
+  "equest\032\035.coordinator_proto.MergeReply\"\000\022"
+  "Y\n\013listStripes\022\'.coordinator_proto.Reque"
+  "stToCoordinator\032\037.coordinator_proto.RepS"
+  "tripeIds\"\000\022W\n\ndecodeTest\022!.coordinator_p"
+  "roto.KeyAndClientIP\032$.coordinator_proto."
+  "DegradedReadReply\"\000b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_coordinator_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_coordinator_2eproto = {
-    false, false, 4480, descriptor_table_protodef_coordinator_2eproto,
+    false, false, 4747, descriptor_table_protodef_coordinator_2eproto,
     "coordinator.proto",
     &descriptor_table_coordinator_2eproto_once, nullptr, 0, 26,
     schemas, file_default_instances, TableStruct_coordinator_2eproto::offsets,
@@ -5868,17 +5899,54 @@ RecoveryReply::RecoveryReply(const RecoveryReply& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   RecoveryReply* const _this = this; (void)_this;
   new (&_impl_) Impl_{
-      decltype(_impl_.disk_read_time_){}
+      decltype(_impl_.selected_equations_){from._impl_.selected_equations_}
+    , decltype(_impl_.helper_block_ids_){from._impl_.helper_block_ids_}
+    , /*decltype(_impl_._helper_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.partition_shard_counts_){from._impl_.partition_shard_counts_}
+    , /*decltype(_impl_._partition_shard_counts_cached_byte_size_)*/{0}
+    , decltype(_impl_.message_){}
+    , decltype(_impl_.repair_mode_){}
+    , decltype(_impl_.equation_policy_){}
+    , decltype(_impl_.disk_read_time_){}
     , decltype(_impl_.network_time_){}
     , decltype(_impl_.decode_time_){}
     , decltype(_impl_.disk_write_time_){}
     , decltype(_impl_.grpc_start_time_){}
+    , decltype(_impl_.total_time_){}
+    , decltype(_impl_.ilp_time_){}
+    , decltype(_impl_.helper_block_count_){}
+    , decltype(_impl_.success_){}
+    , decltype(_impl_.max_partition_shard_count_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
+  _impl_.message_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.message_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_message().empty()) {
+    _this->_impl_.message_.Set(from._internal_message(), 
+      _this->GetArenaForAllocation());
+  }
+  _impl_.repair_mode_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.repair_mode_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_repair_mode().empty()) {
+    _this->_impl_.repair_mode_.Set(from._internal_repair_mode(), 
+      _this->GetArenaForAllocation());
+  }
+  _impl_.equation_policy_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.equation_policy_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_equation_policy().empty()) {
+    _this->_impl_.equation_policy_.Set(from._internal_equation_policy(), 
+      _this->GetArenaForAllocation());
+  }
   ::memcpy(&_impl_.disk_read_time_, &from._impl_.disk_read_time_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.grpc_start_time_) -
-    reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.grpc_start_time_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.max_partition_shard_count_) -
+    reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.max_partition_shard_count_));
   // @@protoc_insertion_point(copy_constructor:coordinator_proto.RecoveryReply)
 }
 
@@ -5887,13 +5955,38 @@ inline void RecoveryReply::SharedCtor(
   (void)arena;
   (void)is_message_owned;
   new (&_impl_) Impl_{
-      decltype(_impl_.disk_read_time_){0}
+      decltype(_impl_.selected_equations_){arena}
+    , decltype(_impl_.helper_block_ids_){arena}
+    , /*decltype(_impl_._helper_block_ids_cached_byte_size_)*/{0}
+    , decltype(_impl_.partition_shard_counts_){arena}
+    , /*decltype(_impl_._partition_shard_counts_cached_byte_size_)*/{0}
+    , decltype(_impl_.message_){}
+    , decltype(_impl_.repair_mode_){}
+    , decltype(_impl_.equation_policy_){}
+    , decltype(_impl_.disk_read_time_){0}
     , decltype(_impl_.network_time_){0}
     , decltype(_impl_.decode_time_){0}
     , decltype(_impl_.disk_write_time_){0}
     , decltype(_impl_.grpc_start_time_){0}
+    , decltype(_impl_.total_time_){0}
+    , decltype(_impl_.ilp_time_){0}
+    , decltype(_impl_.helper_block_count_){0}
+    , decltype(_impl_.success_){false}
+    , decltype(_impl_.max_partition_shard_count_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
+  _impl_.message_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.message_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.repair_mode_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.repair_mode_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.equation_policy_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.equation_policy_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
 }
 
 RecoveryReply::~RecoveryReply() {
@@ -5907,6 +6000,12 @@ RecoveryReply::~RecoveryReply() {
 
 inline void RecoveryReply::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
+  _impl_.selected_equations_.~RepeatedPtrField();
+  _impl_.helper_block_ids_.~RepeatedField();
+  _impl_.partition_shard_counts_.~RepeatedField();
+  _impl_.message_.Destroy();
+  _impl_.repair_mode_.Destroy();
+  _impl_.equation_policy_.Destroy();
 }
 
 void RecoveryReply::SetCachedSize(int size) const {
@@ -5919,9 +6018,15 @@ void RecoveryReply::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
+  _impl_.selected_equations_.Clear();
+  _impl_.helper_block_ids_.Clear();
+  _impl_.partition_shard_counts_.Clear();
+  _impl_.message_.ClearToEmpty();
+  _impl_.repair_mode_.ClearToEmpty();
+  _impl_.equation_policy_.ClearToEmpty();
   ::memset(&_impl_.disk_read_time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.grpc_start_time_) -
-      reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.grpc_start_time_));
+      reinterpret_cast<char*>(&_impl_.max_partition_shard_count_) -
+      reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.max_partition_shard_count_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -5968,6 +6073,113 @@ const char* RecoveryReply::_InternalParse(const char* ptr, ::_pbi::ParseContext*
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 41)) {
           _impl_.grpc_start_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
           ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double total_time = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 49)) {
+          _impl_.total_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double ilp_time = 7;
+      case 7:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 57)) {
+          _impl_.ilp_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 helper_block_count = 8;
+      case 8:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
+          _impl_.helper_block_count_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated string selected_equations = 9;
+      case 9:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 74)) {
+          ptr -= 1;
+          do {
+            ptr += 1;
+            auto str = _internal_add_selected_equations();
+            ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+            CHK_(ptr);
+            CHK_(::_pbi::VerifyUTF8(str, "coordinator_proto.RecoveryReply.selected_equations"));
+            if (!ctx->DataAvailable(ptr)) break;
+          } while (::PROTOBUF_NAMESPACE_ID::internal::ExpectTag<74>(ptr));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 helper_block_ids = 10;
+      case 10:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 82)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_helper_block_ids(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 80) {
+          _internal_add_helper_block_ids(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // bool success = 11;
+      case 11:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 88)) {
+          _impl_.success_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string message = 12;
+      case 12:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 98)) {
+          auto str = _internal_mutable_message();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "coordinator_proto.RecoveryReply.message"));
+        } else
+          goto handle_unusual;
+        continue;
+      // string repair_mode = 13;
+      case 13:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 106)) {
+          auto str = _internal_mutable_repair_mode();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "coordinator_proto.RecoveryReply.repair_mode"));
+        } else
+          goto handle_unusual;
+        continue;
+      // string equation_policy = 14;
+      case 14:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 114)) {
+          auto str = _internal_mutable_equation_policy();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "coordinator_proto.RecoveryReply.equation_policy"));
+        } else
+          goto handle_unusual;
+        continue;
+      // repeated int32 partition_shard_counts = 15;
+      case 15:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 122)) {
+          ptr = ::PROTOBUF_NAMESPACE_ID::internal::PackedInt32Parser(_internal_mutable_partition_shard_counts(), ptr, ctx);
+          CHK_(ptr);
+        } else if (static_cast<uint8_t>(tag) == 120) {
+          _internal_add_partition_shard_counts(::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr));
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 max_partition_shard_count = 16;
+      case 16:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 128)) {
+          _impl_.max_partition_shard_count_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
         } else
           goto handle_unusual;
         continue;
@@ -6050,6 +6262,102 @@ uint8_t* RecoveryReply::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteDoubleToArray(5, this->_internal_grpc_start_time(), target);
   }
 
+  // double total_time = 6;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_total_time = this->_internal_total_time();
+  uint64_t raw_total_time;
+  memcpy(&raw_total_time, &tmp_total_time, sizeof(tmp_total_time));
+  if (raw_total_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(6, this->_internal_total_time(), target);
+  }
+
+  // double ilp_time = 7;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_ilp_time = this->_internal_ilp_time();
+  uint64_t raw_ilp_time;
+  memcpy(&raw_ilp_time, &tmp_ilp_time, sizeof(tmp_ilp_time));
+  if (raw_ilp_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(7, this->_internal_ilp_time(), target);
+  }
+
+  // int32 helper_block_count = 8;
+  if (this->_internal_helper_block_count() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(8, this->_internal_helper_block_count(), target);
+  }
+
+  // repeated string selected_equations = 9;
+  for (int i = 0, n = this->_internal_selected_equations_size(); i < n; i++) {
+    const auto& s = this->_internal_selected_equations(i);
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      s.data(), static_cast<int>(s.length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "coordinator_proto.RecoveryReply.selected_equations");
+    target = stream->WriteString(9, s, target);
+  }
+
+  // repeated int32 helper_block_ids = 10;
+  {
+    int byte_size = _impl_._helper_block_ids_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          10, _internal_helper_block_ids(), byte_size, target);
+    }
+  }
+
+  // bool success = 11;
+  if (this->_internal_success() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteBoolToArray(11, this->_internal_success(), target);
+  }
+
+  // string message = 12;
+  if (!this->_internal_message().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_message().data(), static_cast<int>(this->_internal_message().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "coordinator_proto.RecoveryReply.message");
+    target = stream->WriteStringMaybeAliased(
+        12, this->_internal_message(), target);
+  }
+
+  // string repair_mode = 13;
+  if (!this->_internal_repair_mode().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_repair_mode().data(), static_cast<int>(this->_internal_repair_mode().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "coordinator_proto.RecoveryReply.repair_mode");
+    target = stream->WriteStringMaybeAliased(
+        13, this->_internal_repair_mode(), target);
+  }
+
+  // string equation_policy = 14;
+  if (!this->_internal_equation_policy().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_equation_policy().data(), static_cast<int>(this->_internal_equation_policy().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "coordinator_proto.RecoveryReply.equation_policy");
+    target = stream->WriteStringMaybeAliased(
+        14, this->_internal_equation_policy(), target);
+  }
+
+  // repeated int32 partition_shard_counts = 15;
+  {
+    int byte_size = _impl_._partition_shard_counts_cached_byte_size_.load(std::memory_order_relaxed);
+    if (byte_size > 0) {
+      target = stream->WriteInt32Packed(
+          15, _internal_partition_shard_counts(), byte_size, target);
+    }
+  }
+
+  // int32 max_partition_shard_count = 16;
+  if (this->_internal_max_partition_shard_count() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(16, this->_internal_max_partition_shard_count(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -6065,6 +6373,63 @@ size_t RecoveryReply::ByteSizeLong() const {
   uint32_t cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
+
+  // repeated string selected_equations = 9;
+  total_size += 1 *
+      ::PROTOBUF_NAMESPACE_ID::internal::FromIntSize(_impl_.selected_equations_.size());
+  for (int i = 0, n = _impl_.selected_equations_.size(); i < n; i++) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+      _impl_.selected_equations_.Get(i));
+  }
+
+  // repeated int32 helper_block_ids = 10;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.helper_block_ids_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._helper_block_ids_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // repeated int32 partition_shard_counts = 15;
+  {
+    size_t data_size = ::_pbi::WireFormatLite::
+      Int32Size(this->_impl_.partition_shard_counts_);
+    if (data_size > 0) {
+      total_size += 1 +
+        ::_pbi::WireFormatLite::Int32Size(static_cast<int32_t>(data_size));
+    }
+    int cached_size = ::_pbi::ToCachedSize(data_size);
+    _impl_._partition_shard_counts_cached_byte_size_.store(cached_size,
+                                    std::memory_order_relaxed);
+    total_size += data_size;
+  }
+
+  // string message = 12;
+  if (!this->_internal_message().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_message());
+  }
+
+  // string repair_mode = 13;
+  if (!this->_internal_repair_mode().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_repair_mode());
+  }
+
+  // string equation_policy = 14;
+  if (!this->_internal_equation_policy().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_equation_policy());
+  }
 
   // double disk_read_time = 1;
   static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
@@ -6111,6 +6476,41 @@ size_t RecoveryReply::ByteSizeLong() const {
     total_size += 1 + 8;
   }
 
+  // double total_time = 6;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_total_time = this->_internal_total_time();
+  uint64_t raw_total_time;
+  memcpy(&raw_total_time, &tmp_total_time, sizeof(tmp_total_time));
+  if (raw_total_time != 0) {
+    total_size += 1 + 8;
+  }
+
+  // double ilp_time = 7;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_ilp_time = this->_internal_ilp_time();
+  uint64_t raw_ilp_time;
+  memcpy(&raw_ilp_time, &tmp_ilp_time, sizeof(tmp_ilp_time));
+  if (raw_ilp_time != 0) {
+    total_size += 1 + 8;
+  }
+
+  // int32 helper_block_count = 8;
+  if (this->_internal_helper_block_count() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_helper_block_count());
+  }
+
+  // bool success = 11;
+  if (this->_internal_success() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // int32 max_partition_shard_count = 16;
+  if (this->_internal_max_partition_shard_count() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_max_partition_shard_count());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -6129,6 +6529,18 @@ void RecoveryReply::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
+  _this->_impl_.selected_equations_.MergeFrom(from._impl_.selected_equations_);
+  _this->_impl_.helper_block_ids_.MergeFrom(from._impl_.helper_block_ids_);
+  _this->_impl_.partition_shard_counts_.MergeFrom(from._impl_.partition_shard_counts_);
+  if (!from._internal_message().empty()) {
+    _this->_internal_set_message(from._internal_message());
+  }
+  if (!from._internal_repair_mode().empty()) {
+    _this->_internal_set_repair_mode(from._internal_repair_mode());
+  }
+  if (!from._internal_equation_policy().empty()) {
+    _this->_internal_set_equation_policy(from._internal_equation_policy());
+  }
   static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
   double tmp_disk_read_time = from._internal_disk_read_time();
   uint64_t raw_disk_read_time;
@@ -6164,6 +6576,29 @@ void RecoveryReply::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   if (raw_grpc_start_time != 0) {
     _this->_internal_set_grpc_start_time(from._internal_grpc_start_time());
   }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_total_time = from._internal_total_time();
+  uint64_t raw_total_time;
+  memcpy(&raw_total_time, &tmp_total_time, sizeof(tmp_total_time));
+  if (raw_total_time != 0) {
+    _this->_internal_set_total_time(from._internal_total_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_ilp_time = from._internal_ilp_time();
+  uint64_t raw_ilp_time;
+  memcpy(&raw_ilp_time, &tmp_ilp_time, sizeof(tmp_ilp_time));
+  if (raw_ilp_time != 0) {
+    _this->_internal_set_ilp_time(from._internal_ilp_time());
+  }
+  if (from._internal_helper_block_count() != 0) {
+    _this->_internal_set_helper_block_count(from._internal_helper_block_count());
+  }
+  if (from._internal_success() != 0) {
+    _this->_internal_set_success(from._internal_success());
+  }
+  if (from._internal_max_partition_shard_count() != 0) {
+    _this->_internal_set_max_partition_shard_count(from._internal_max_partition_shard_count());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -6180,10 +6615,27 @@ bool RecoveryReply::IsInitialized() const {
 
 void RecoveryReply::InternalSwap(RecoveryReply* other) {
   using std::swap;
+  auto* lhs_arena = GetArenaForAllocation();
+  auto* rhs_arena = other->GetArenaForAllocation();
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  _impl_.selected_equations_.InternalSwap(&other->_impl_.selected_equations_);
+  _impl_.helper_block_ids_.InternalSwap(&other->_impl_.helper_block_ids_);
+  _impl_.partition_shard_counts_.InternalSwap(&other->_impl_.partition_shard_counts_);
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.message_, lhs_arena,
+      &other->_impl_.message_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.repair_mode_, lhs_arena,
+      &other->_impl_.repair_mode_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.equation_policy_, lhs_arena,
+      &other->_impl_.equation_policy_, rhs_arena
+  );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.grpc_start_time_)
-      + sizeof(RecoveryReply::_impl_.grpc_start_time_)
+      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.max_partition_shard_count_)
+      + sizeof(RecoveryReply::_impl_.max_partition_shard_count_)
       - PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.disk_read_time_)>(
           reinterpret_cast<char*>(&_impl_.disk_read_time_),
           reinterpret_cast<char*>(&other->_impl_.disk_read_time_));

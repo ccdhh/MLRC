@@ -1,4 +1,5 @@
 #include "datanode.h"
+#include "runtime_paths.h"
 
 int main(int argc, char **argv)
 {
@@ -19,11 +20,9 @@ int main(int argc, char **argv)
     std::string ip_and_port(argv[1]);
     // std::string ip = ip_and_port.substr(0, ip_and_port.find(":"));
     // int port = std::stoi(ip_and_port.substr(ip_and_port.find(":") + 1, ip_and_port.size()));
-    char buff[256];
-    getcwd(buff, 256);
-    std::string cwf = std::string(argv[0]);
-    std::string sys_config_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../config/parameterConfiguration.xml";
-    // std::string sys_config_path = "/home/GuanTian/lql/UniLRC/project/config/parameterConfiguration.xml";
+    const std::string sys_config_path =
+        resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
+                                            "../../config/parameterConfiguration.xml");
     ECProject::DataNode datanode(ip_and_port, sys_config_path);
     datanode.Run();
     return 0;

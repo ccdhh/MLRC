@@ -65,6 +65,8 @@ namespace ECProject
     std::string node_ip;
     int node_port;
     int cluster_id;
+    std::string repair_proxy_ip;
+    int repair_proxy_port = 0;
     std::unordered_map<int, int> stripes;
     Node(int node_id, const std::string node_ip, int node_port, int cluster_id) : node_id(node_id), node_ip(node_ip), node_port(node_port), cluster_id(cluster_id) {}
     Node() = default;

@@ -1,4 +1,6 @@
 #include "proxy.h"
+#include "runtime_paths.h"
+#include <csignal>
 
 int main(int argc, char **argv)
 {
@@ -15,6 +17,7 @@ int main(int argc, char **argv)
     // setsid();
 
     std::string ip_and_port(argv[1]);
+    std::signal(SIGPIPE, SIG_IGN);
     if (true)
     {
         umask(0);
@@ -23,14 +26,12 @@ int main(int argc, char **argv)
         // close(STDERR_FILENO);
     }
 
-    char buff[256];
-    getcwd(buff, 256);
-    std::string cwf = std::string(argv[0]);
-    std::string config_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../config/clusterInformation.xml";
-    std::string sys_config_path = std::string(buff) + cwf.substr(1, cwf.rfind('/') - 1) + "/../../config/parameterConfiguration.xml";
-
-    // std::string config_path = "/home/GuanTian/lql/UniLRC/project/config/test_clusterInformation.xml";
-    // std::string sys_config_path = "/home/GuanTian/lql/UniLRC/project/config/parameterConfiguration.xml";
+    const std::string config_path =
+        resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
+                                            "../../config/clusterInformation.xml");
+    const std::string sys_config_path =
+        resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
+                                            "../../config/parameterConfiguration.xml");
     std::cout << "Cluster config path: " << config_path << std::endl;
     std::cout << "Sys config path: " << sys_config_path << std::endl;
 
