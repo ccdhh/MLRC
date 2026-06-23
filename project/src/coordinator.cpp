@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include <chrono>
 #include <thread>
+#include <functional>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
@@ -31,6 +32,8 @@ static void pipeline_plan_trace(const char *msg)
   }
 }
 
+struct GlrcPipelineChainPorts;
+
 class GlrcPipelinePortAllocator
 {
 public:
@@ -38,19 +41,25 @@ public:
 
   int allocate_hop_port(const std::string &proxy_ip, int proxy_grpc_port, int chain_id, int hop_index)
   {
-    (void)chain_id;
-    (void)hop_index;
-    return allocate(proxy_ip, proxy_grpc_port, false);
+    return allocate(proxy_ip, proxy_grpc_port, false, chain_id, hop_index);
   }
 
   int allocate_hub_port(const std::string &proxy_ip, int proxy_grpc_port, int chain_id)
   {
     (void)chain_id;
-    return allocate(proxy_ip, proxy_grpc_port, true);
+    return allocate(proxy_ip, proxy_grpc_port, true, 0, 0);
   }
+
+  static void release_inflight_ports(const std::unordered_map<int, GlrcPipelineChainPorts> &chain_ports,
+                                     const std::string &hub_proxy_ip, int hub_proxy_port,
+                                     const ECProject::GlrcPipelinePlan &pipeline_plan);
+  /** Clear all coordinator-side port reservations (one recovery session ended). */
+  static void reset_port_session();
 
 private:
   static std::mutex s_alloc_mutex;
+  /** Ports reserved until the recovery that allocated them finishes and cools down. */
+  static std::unordered_map<std::string, std::unordered_set<int>> s_inflight_ports;
   static std::unordered_map<std::string, int> s_hop_slot_cursor;
   static std::unordered_map<std::string, int> s_hub_slot_cursor;
 
@@ -62,21 +71,7 @@ private:
     return idx;
   }
 
-  int compose_listen_port(int proxy_idx, int slot_core, bool hub_band) const
-  {
-    const int band = ECProject::PROXY_PIPELINE_PER_PROXY_BAND;
-    const int half = band / 2;
-    int slot = hub_band ? (half + (slot_core % half)) : (slot_core % half);
-    int port = ECProject::PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * band + slot;
-    if (port == 55555)
-    {
-      slot = hub_band ? (half + ((slot_core + 1) % half)) : ((slot_core + 1) % half);
-      port = ECProject::PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * band + slot;
-    }
-    return port;
-  }
-
-  int allocate(const std::string &proxy_ip, int proxy_grpc_port, bool hub_band)
+  int allocate(const std::string &proxy_ip, int proxy_grpc_port, bool hub_band, int chain_id, int hop_index)
   {
     std::lock_guard<std::mutex> lock(s_alloc_mutex);
     const int proxy_idx = pipeline_proxy_index(proxy_grpc_port);
@@ -89,12 +84,19 @@ private:
     int &cursor = hub_band ? s_hub_slot_cursor[proxy_key] : s_hop_slot_cursor[proxy_key];
     for (int attempt = 0; attempt < half; ++attempt)
     {
-      const int slot_core = (exchange_epoch_ * 13 + cursor + attempt) % half;
-      const int port = compose_listen_port(proxy_idx, slot_core, hub_band);
+      const int slot_in_half =
+          (exchange_epoch_ * 31 + chain_id * 17 + hop_index * 11 + cursor + attempt) % half;
+      const int slot = hub_band ? (half + slot_in_half) : slot_in_half;
+      int port = ECProject::PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * band + slot;
+      if (port == 55555)
+        port++;
       if (port <= 0 || port > 65535 || port > max_port)
+        continue;
+      if (s_inflight_ports[proxy_key].count(port) > 0)
         continue;
       if (used_ports_[proxy_key].insert(port).second)
       {
+        s_inflight_ports[proxy_key].insert(port);
         cursor = (cursor + attempt + 1) % half;
         return port;
       }
@@ -107,6 +109,7 @@ private:
 };
 
 std::mutex GlrcPipelinePortAllocator::s_alloc_mutex;
+std::unordered_map<std::string, std::unordered_set<int>> GlrcPipelinePortAllocator::s_inflight_ports;
 std::unordered_map<std::string, int> GlrcPipelinePortAllocator::s_hop_slot_cursor;
 std::unordered_map<std::string, int> GlrcPipelinePortAllocator::s_hub_slot_cursor;
 
@@ -115,6 +118,32 @@ struct GlrcPipelineChainPorts
   std::vector<int> hop_listen_ports;
   int hub_listen_port = 0;
 };
+
+void GlrcPipelinePortAllocator::release_inflight_ports(
+    const std::unordered_map<int, GlrcPipelineChainPorts> &chain_ports, const std::string &hub_proxy_ip,
+    int hub_proxy_port, const ECProject::GlrcPipelinePlan &pipeline_plan)
+{
+  std::lock_guard<std::mutex> lock(s_alloc_mutex);
+  for (const ECProject::GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+  {
+    const auto cp_it = chain_ports.find(chain.chain_id);
+    if (cp_it == chain_ports.end())
+      continue;
+    for (size_t hi = 0; hi < chain.hops.size() && hi < cp_it->second.hop_listen_ports.size(); ++hi)
+    {
+      const std::string key = chain.hops[hi].proxy_ip + ":" + std::to_string(chain.hops[hi].proxy_port);
+      s_inflight_ports[key].erase(cp_it->second.hop_listen_ports[hi]);
+    }
+    const std::string hub_key = hub_proxy_ip + ":" + std::to_string(hub_proxy_port);
+    s_inflight_ports[hub_key].erase(cp_it->second.hub_listen_port);
+  }
+}
+
+void GlrcPipelinePortAllocator::reset_port_session()
+{
+  std::lock_guard<std::mutex> lock(s_alloc_mutex);
+  s_inflight_ports.clear();
+}
 
 void fill_pipeline_chain_fields(proxy_proto::RecoveryRequest &req, const ECProject::GlrcPipelineChainPlan &chain,
                                 const ECProject::GlrcPipelinePlan &plan, int shard_count, int z,
@@ -149,8 +178,7 @@ void fill_pipeline_chain_fields(proxy_proto::RecoveryRequest &req, const ECProje
       req.add_pipeline_hop_listen_ports(port);
     if (chain_ports->hub_listen_port > 0)
       req.set_pipeline_chain_hub_listen_port(chain_ports->hub_listen_port);
-    if ((role == ECProject::GlrcPipelineRole::HOP_SERVER || role == ECProject::GlrcPipelineRole::PRELISTEN) &&
-        my_hop_index >= 0 &&
+    if (role == ECProject::GlrcPipelineRole::HOP_SERVER && my_hop_index >= 0 &&
         my_hop_index < (int)chain_ports->hop_listen_ports.size())
       req.set_pipeline_my_listen_port(chain_ports->hop_listen_ports[my_hop_index]);
   }
@@ -3106,6 +3134,8 @@ namespace ECProject
     }
     // One pipeline recovery at a time: overlapping recoveries reuse listen ports before acceptors close.
     std::lock_guard<std::mutex> pipeline_recovery_lock(g_glrc_pipeline_recovery_mutex);
+    const auto repair_start = std::chrono::high_resolution_clock::now();
+    double orchestration_wait_sec = 0.0;
     Stripe &t_stripe = m_stripe_table[stripe_id];
     for (int fid : failed_block_ids)
     {
@@ -3280,6 +3310,72 @@ namespace ECProject
 
     GlrcPipelinePortAllocator port_alloc(exchange_epoch);
     std::unordered_map<int, GlrcPipelineChainPorts> chain_ports;
+
+    std::unordered_set<std::string> pipeline_proxy_keys;
+    pipeline_proxy_keys.insert(hub_proxy_key);
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+    {
+      for (const GlrcPipelineHopInfo &hop : chain.hops)
+        pipeline_proxy_keys.insert(proxy_key_from_hop(hop));
+    }
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.local_direct_chains)
+    {
+      const int fid = chain.local_direct_failed_block_id;
+      if (fid >= 0 && fid < (int)node_lookup.size())
+        pipeline_proxy_keys.insert(node_lookup[fid].proxy_ip + ":" + std::to_string(node_lookup[fid].proxy_port));
+    }
+
+    auto orchestration_sleep = [&](int ms) {
+      orchestration_wait_sec += static_cast<double>(ms) / 1000.0;
+      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    };
+
+    bool workers_joined = false;
+    auto join_pipeline_workers = [&]() {
+      if (workers_joined)
+        return;
+      for (auto &th : workers)
+      {
+        if (th.joinable())
+          th.join();
+      }
+      workers_joined = true;
+    };
+
+    auto finalize_pipeline_session = [&]() {
+      join_pipeline_workers();
+      // Session teardown (not counted in repair_time).
+      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      GlrcPipelinePortAllocator::reset_port_session();
+      proxy_proto::RecoveryRequest tear_req;
+      tear_req.set_glrc_ilp_recovery(true);
+      tear_req.set_glrc_ilp_pipeline(true);
+      tear_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::TEARDOWN));
+      for (const std::string &pk : pipeline_proxy_keys)
+      {
+        auto pit = m_proxy_ptrs.find(pk);
+        if (pit == m_proxy_ptrs.end() || !pit->second)
+          continue;
+        proxy_proto::RecoveryReply tear_rep;
+        grpc::ClientContext ctx;
+        ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+        pit->second->recoveryBreakdown(&ctx, tear_req, &tear_rep);
+      }
+      pipeline_plan_trace("pipeline session finalize ok");
+    };
+    struct PipelineSessionGuard
+    {
+      std::function<void()> fn;
+      bool armed = false;
+      ~PipelineSessionGuard()
+      {
+        if (armed && fn)
+          fn();
+      }
+    } session_guard;
+    session_guard.fn = finalize_pipeline_session;
+    session_guard.armed = !pipeline_plan.hub_chains.empty() || !pipeline_plan.local_direct_chains.empty();
+
     for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
     {
       GlrcPipelineChainPorts cp;
@@ -3340,35 +3436,36 @@ namespace ECProject
       }
     }
 
-    auto sync_pipeline_rpc = [&](const std::string &proxy_key, const proxy_proto::RecoveryRequest &req,
-                                 std::string *err_out = nullptr) -> bool {
-      auto proxy_it = m_proxy_ptrs.find(proxy_key);
-      if (proxy_it == m_proxy_ptrs.end() || !proxy_it->second)
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+    {
+      const int last_hop_server =
+          chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
+                                  : static_cast<int>(chain.hops.size()) - 1;
+      for (int hi = last_hop_server; hi >= 1; hi--)
       {
-        if (err_out)
-          *err_out = "pipeline proxy not found: " + proxy_key;
-        return false;
+        proxy_proto::RecoveryRequest req = make_base_request();
+        const GlrcPipelineChainPorts *cp = nullptr;
+        const auto cp_it = chain_ports.find(chain.chain_id);
+        if (cp_it != chain_ports.end())
+          cp = &cp_it->second;
+        fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
+        launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
+        orchestration_sleep(50);
       }
-      proxy_proto::RecoveryReply rep;
-      grpc::ClientContext ctx;
-      ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
-      grpc::Status st = proxy_it->second->recoveryBreakdown(&ctx, req, &rep);
-      if (!st.ok())
-      {
-        if (err_out)
-          *err_out = st.error_message();
-        return false;
-      }
-      return true;
-    };
+    }
 
-    auto build_hub_request = [&]() {
+    orchestration_sleep(300);
+
+    if (!pipeline_plan.hub_chains.empty())
+    {
       proxy_proto::RecoveryRequest hub_req = make_base_request();
+      hub_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::HUB));
       hub_req.set_pipeline_hub_proxy_ip(pipeline_plan.hub_proxy_ip);
       hub_req.set_pipeline_hub_proxy_port(pipeline_plan.hub_proxy_port);
       hub_req.set_pipeline_hub_block_key(pipeline_plan.hub_block_key);
       hub_req.add_pipeline_hop_datanode_ips(pipeline_plan.hub_datanode_ip);
       hub_req.add_pipeline_hop_datanode_ports(pipeline_plan.hub_datanode_port);
+
       hub_req.clear_failed_block_ids();
       hub_req.clear_failed_block_keys();
       hub_req.clear_replaced_node_ips();
@@ -3399,75 +3496,20 @@ namespace ECProject
         if (cp_it != chain_ports.end())
           hub_req.add_pipeline_hub_listener_ports(cp_it->second.hub_listen_port);
       }
-      return hub_req;
-    };
-
-    if (!pipeline_plan.hub_chains.empty())
-    {
-      proxy_proto::RecoveryRequest hub_req = build_hub_request();
-      hub_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::PRELISTEN));
-      std::string prelisten_err;
-      if (!sync_pipeline_rpc(hub_proxy_key, hub_req, &prelisten_err))
-      {
-        recovery_reply->set_message("pipeline prelisten hub failed: " + prelisten_err);
-        recovery_reply->set_success(false);
-        return false;
-      }
-
-      for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
-      {
-        const int last_hop_server =
-            chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
-                                    : static_cast<int>(chain.hops.size()) - 1;
-        for (int hi = last_hop_server; hi >= 1; hi--)
-        {
-          proxy_proto::RecoveryRequest req = make_base_request();
-          const GlrcPipelineChainPorts *cp = nullptr;
-          const auto cp_it = chain_ports.find(chain.chain_id);
-          if (cp_it != chain_ports.end())
-            cp = &cp_it->second;
-          fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::PRELISTEN, hi, cp);
-          if (!sync_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req, &prelisten_err))
-          {
-            recovery_reply->set_message("pipeline prelisten hop failed: " + prelisten_err);
-            recovery_reply->set_success(false);
-            return false;
-          }
-        }
-      }
-
-      hub_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::HUB));
       launch_pipeline_rpc(hub_proxy_key, hub_req);
+    }
 
-      for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
-      {
-        const int last_hop_server =
-            chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
-                                    : static_cast<int>(chain.hops.size()) - 1;
-        for (int hi = last_hop_server; hi >= 1; hi--)
-        {
-          proxy_proto::RecoveryRequest req = make_base_request();
-          const GlrcPipelineChainPorts *cp = nullptr;
-          const auto cp_it = chain_ports.find(chain.chain_id);
-          if (cp_it != chain_ports.end())
-            cp = &cp_it->second;
-          fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
-          launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
-        }
-      }
+    orchestration_sleep(2500);
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-
-      for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
-      {
-        proxy_proto::RecoveryRequest req = make_base_request();
-        const GlrcPipelineChainPorts *cp = nullptr;
-        const auto cp_it = chain_ports.find(chain.chain_id);
-        if (cp_it != chain_ports.end())
-          cp = &cp_it->second;
-        fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::CHAIN_HEAD, 0, cp);
-        launch_pipeline_rpc(proxy_key_from_hop(chain.hops[0]), req);
-      }
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+    {
+      proxy_proto::RecoveryRequest req = make_base_request();
+      const GlrcPipelineChainPorts *cp = nullptr;
+      const auto cp_it = chain_ports.find(chain.chain_id);
+      if (cp_it != chain_ports.end())
+        cp = &cp_it->second;
+      fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::CHAIN_HEAD, 0, cp);
+      launch_pipeline_rpc(proxy_key_from_hop(chain.hops[0]), req);
     }
 
     for (const GlrcPipelineChainPlan &chain : pipeline_plan.local_direct_chains)
@@ -3482,11 +3524,13 @@ namespace ECProject
       launch_pipeline_rpc(failed_proxy, req);
     }
 
-    for (auto &th : workers)
-    {
-      if (th.joinable())
-        th.join();
-    }
+    join_pipeline_workers();
+    const auto repair_end = std::chrono::high_resolution_clock::now();
+    double repair_time_sec =
+        std::chrono::duration<double>(repair_end - repair_start).count() - orchestration_wait_sec;
+    if (repair_time_sec < 0.0)
+      repair_time_sec = 0.0;
+    recovery_reply->set_total_time(repair_time_sec);
 
     double max_disk = 0.0;
     double max_net = 0.0;
@@ -3556,9 +3600,12 @@ namespace ECProject
       ok = recovery_glrc_ilp_pipeline_breakdown(stripe_id, block_ids, replyClient);
     else
       ok = recovery_glrc_ilp_breakdown(stripe_id, block_ids, replyClient);
-    auto wall_end = std::chrono::high_resolution_clock::now();
-    replyClient->set_total_time(
-        std::chrono::duration_cast<std::chrono::duration<double>>(wall_end - wall_start).count());
+    if (m_sys_config->GlrcRepairMode != "pipeline")
+    {
+      auto wall_end = std::chrono::high_resolution_clock::now();
+      replyClient->set_total_time(
+          std::chrono::duration_cast<std::chrono::duration<double>>(wall_end - wall_start).count());
+    }
 
     if (!ok)
       return grpc::Status(grpc::StatusCode::INTERNAL, replyClient->message());

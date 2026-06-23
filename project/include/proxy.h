@@ -165,8 +165,8 @@ namespace ECProject
                                           proxy_proto::RecoveryReply *response);
     bool glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRequest *recovery_request,
                                             proxy_proto::RecoveryReply *response);
-    bool glrcIlpPipelinePrelistenRecovery(const proxy_proto::RecoveryRequest *recovery_request,
-                                          proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                         proxy_proto::RecoveryReply *response);
 
   private:
     std::mutex m_glrc_phase2_mutex;

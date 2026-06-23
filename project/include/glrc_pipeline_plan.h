@@ -13,8 +13,8 @@ namespace ECProject
     CHAIN_HEAD = 1,
     HOP_SERVER = 2,
     LOCAL_DIRECT = 3,
-    /** Bind listen port(s) synchronously; full role RPC reuses registry acceptor. */
-    PRELISTEN = 4
+    /** Release listen-port tracking after a recovery; no data transfer. */
+    TEARDOWN = 4
   };
 
   struct GlrcPipelineHopInfo

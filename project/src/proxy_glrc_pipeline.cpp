@@ -75,72 +75,6 @@ void close_pipeline_acceptor(asio::ip::tcp::acceptor &acceptor);
 bool open_pipeline_acceptor(asio::io_context &io, int listen_port, asio::ip::tcp::acceptor &acceptor,
                             asio::error_code &ec);
 
-struct PipelineRegistryAcceptor
-{
-  std::shared_ptr<asio::io_context> io;
-  std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
-};
-
-static std::mutex g_pipeline_registry_mu;
-static std::unordered_map<int, PipelineRegistryAcceptor> g_pipeline_registry;
-
-bool store_pipeline_registry_acceptor(int listen_port, PipelineRegistryAcceptor entry)
-{
-  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
-  if (g_pipeline_registry.count(listen_port) > 0)
-    return false;
-  g_pipeline_registry.emplace(listen_port, std::move(entry));
-  return true;
-}
-
-bool take_pipeline_registry_acceptor(int listen_port, PipelineRegistryAcceptor &out)
-{
-  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
-  const auto it = g_pipeline_registry.find(listen_port);
-  if (it == g_pipeline_registry.end())
-    return false;
-  out = std::move(it->second);
-  g_pipeline_registry.erase(it);
-  return true;
-}
-
-void discard_pipeline_registry_acceptor(int listen_port)
-{
-  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
-  const auto it = g_pipeline_registry.find(listen_port);
-  if (it == g_pipeline_registry.end())
-    return;
-  close_pipeline_acceptor(*it->second.acceptor);
-  g_pipeline_registry.erase(it);
-}
-
-void clear_pipeline_registry_all()
-{
-  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
-  for (auto &kv : g_pipeline_registry)
-    close_pipeline_acceptor(*kv.second.acceptor);
-  g_pipeline_registry.clear();
-}
-
-bool bind_pipeline_listen_port(int listen_port, PipelineRegistryAcceptor &out, asio::error_code &ec,
-                               bool into_registry)
-{
-  out.io = std::make_shared<asio::io_context>();
-  out.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*out.io);
-  if (!open_pipeline_acceptor(*out.io, listen_port, *out.acceptor, ec))
-    return false;
-  if (into_registry)
-  {
-    if (!store_pipeline_registry_acceptor(listen_port, out))
-    {
-      close_pipeline_acceptor(*out.acceptor);
-      ec = asio::error::address_in_use;
-      return false;
-    }
-  }
-  return true;
-}
-
 void pipeline_trace(const char *msg)
 {
   FILE *f = fopen("/users/chendh/DdlRT/logs/pipeline_trace.log", "a");
@@ -591,6 +525,15 @@ bool read_local_stripe(ProxyImpl *self, const std::string &key, const std::strin
   return ok;
 }
 
+void clear_glrc_pipeline_session_state()
+{
+  {
+    std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
+    g_pipeline_active_listen_ports.clear();
+  }
+  g_glrc_pipeline_last_error.clear();
+}
+
 } // namespace
 
 std::string glrc_pipeline_take_last_error()
@@ -604,8 +547,6 @@ bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *reco
                                         proxy_proto::RecoveryReply *response)
 {
   const int role = recovery_request->pipeline_role();
-  if (role == static_cast<int>(GlrcPipelineRole::PRELISTEN))
-    return glrcIlpPipelinePrelistenRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::HUB))
     return glrcIlpPipelineHubRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::CHAIN_HEAD))
@@ -614,69 +555,19 @@ bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *reco
     return glrcIlpPipelineHopServerRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::LOCAL_DIRECT))
     return glrcIlpPipelineLocalDirectRecovery(recovery_request, response);
+  if (role == static_cast<int>(GlrcPipelineRole::TEARDOWN))
+    return glrcIlpPipelineTeardownRecovery(recovery_request, response);
   set_pipeline_error("invalid pipeline_role");
   return false;
 }
 
-bool ProxyImpl::glrcIlpPipelinePrelistenRecovery(const proxy_proto::RecoveryRequest *recovery_request,
-                                                 proxy_proto::RecoveryReply *response)
+bool ProxyImpl::glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                                proxy_proto::RecoveryReply *response)
 {
-  (void)response;
-  const int epoch = recovery_request->pipeline_exchange_epoch();
-  {
-    static std::mutex s_clear_mu;
-    static int s_last_cleared_epoch = -1;
-    std::lock_guard<std::mutex> lock(s_clear_mu);
-    if (epoch != s_last_cleared_epoch)
-    {
-      clear_pipeline_registry_all();
-      s_last_cleared_epoch = epoch;
-    }
-  }
-
-  const int my_idx = recovery_request->pipeline_my_hop_index();
-  if (my_idx > 0 && recovery_request->pipeline_my_listen_port() > 0)
-  {
-    const int chain_id = recovery_request->pipeline_chain_id();
-    const int listen_port = resolve_my_hop_bind_port(recovery_request, m_port, epoch, chain_id, my_idx);
-    PipelineRegistryAcceptor entry;
-    asio::error_code ec;
-    if (!bind_pipeline_listen_port(listen_port, entry, ec, true))
-    {
-      set_pipeline_error("prelisten hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
-      return false;
-    }
-    char tb[128];
-    snprintf(tb, sizeof(tb), "prelisten hop chain=%d hop=%d port=%d", chain_id, my_idx, listen_port);
-    pipeline_trace(tb);
-    return true;
-  }
-
-  const int hub_chain_n = recovery_request->pipeline_hub_chain_eq_slots_size();
-  if (hub_chain_n <= 0)
-  {
-    set_pipeline_error("prelisten missing hop or hub metadata");
-    return false;
-  }
-
-  for (int ci = 0; ci < hub_chain_n; ci++)
-  {
-    if (recovery_request->pipeline_hub_chain_local_only_flags_size() > ci &&
-        recovery_request->pipeline_hub_chain_local_only_flags(ci) != 0)
-      continue;
-    const int eq_slot = recovery_request->pipeline_hub_chain_eq_slots(ci);
-    const int listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, eq_slot);
-    PipelineRegistryAcceptor entry;
-    asio::error_code ec;
-    if (!bind_pipeline_listen_port(listen_port, entry, ec, true))
-    {
-      set_pipeline_error("prelisten hub bind failed port=" + std::to_string(listen_port) + " " + ec.message());
-      return false;
-    }
-    char tb[96];
-    snprintf(tb, sizeof(tb), "prelisten hub chain=%d port=%d", ci, listen_port);
-    pipeline_trace(tb);
-  }
+  (void)recovery_request;
+  clear_glrc_pipeline_session_state();
+  response->Clear();
+  pipeline_trace("pipeline session teardown");
   return true;
 }
 
@@ -952,33 +843,14 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
             << " hop=" << my_idx
             << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
             << " port=" << listen_port << std::endl;
-
-  PipelineRegistryAcceptor reg_entry;
-  asio::io_context stack_io;
-  asio::ip::tcp::acceptor stack_acceptor(stack_io);
-  asio::io_context *work_io = &stack_io;
-  asio::ip::tcp::acceptor *acceptor_ptr = &stack_acceptor;
-  std::shared_ptr<asio::io_context> shared_io;
-  std::shared_ptr<asio::ip::tcp::acceptor> shared_acceptor;
-
-  if (take_pipeline_registry_acceptor(listen_port, reg_entry))
+  asio::io_context io;
+  asio::error_code ec;
+  asio::ip::tcp::acceptor acceptor(io);
+  if (!open_pipeline_acceptor(io, listen_port, acceptor, ec))
   {
-    shared_io = std::move(reg_entry.io);
-    shared_acceptor = std::move(reg_entry.acceptor);
-    work_io = shared_io.get();
-    acceptor_ptr = shared_acceptor.get();
-    pipeline_trace("hop reused prelisten acceptor");
+    set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
+    return false;
   }
-  else
-  {
-    asio::error_code ec;
-    if (!open_pipeline_acceptor(stack_io, listen_port, stack_acceptor, ec))
-    {
-      set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
-      return false;
-    }
-  }
-
   struct PipelineAcceptorGuard
   {
     asio::ip::tcp::acceptor *acceptor = nullptr;
@@ -987,7 +859,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       if (acceptor)
         close_pipeline_acceptor(*acceptor);
     }
-  } acceptor_guard{acceptor_ptr};
+  } acceptor_guard{&acceptor};
 
   double min_disk = 0.0, max_disk = 0.0, min_net = 0.0, max_net = 0.0;
   auto update_min = [](double &slot, double v) {
@@ -1001,8 +873,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
 
   const bool connects_to_hub = pipeline_hop_connects_to_hub(recovery_request, my_idx, hops_n);
 
-  asio::error_code ec;
-  asio::ip::tcp::socket out_socket(*work_io);
+  asio::ip::tcp::socket out_socket(io);
   if (connects_to_hub)
   {
     const std::string hub_ip = recovery_request->pipeline_hub_proxy_ip();
@@ -1024,8 +895,8 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hop_server downstream ready chain=" << chain_id
             << " hop=" << my_idx << std::endl;
 
-  asio::ip::tcp::socket in_socket(*work_io);
-  if (!accept_pipeline_socket(*acceptor_ptr, in_socket, ec, 45))
+  asio::ip::tcp::socket in_socket(io);
+  if (!accept_pipeline_socket(acceptor, in_socket, ec, 45))
   {
     close_pipeline_socket(out_socket);
     set_pipeline_error("pipeline hop accept failed: " + ec.message());
@@ -1212,7 +1083,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   free(block_buf);
   close_pipeline_socket(in_socket);
   close_pipeline_socket(out_socket);
-  close_pipeline_acceptor(*acceptor_ptr);
+  close_pipeline_acceptor(acceptor);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -1453,14 +1324,6 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     HubPreboundAcceptor pb;
     pb.ci = ci;
     pb.listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, ctxs[ci].eq_slot);
-    PipelineRegistryAcceptor reg_entry;
-    if (take_pipeline_registry_acceptor(pb.listen_port, reg_entry))
-    {
-      pb.io = std::move(reg_entry.io);
-      pb.acceptor = std::move(reg_entry.acceptor);
-      prebound_acceptors.emplace(ci, std::move(pb));
-      continue;
-    }
     pb.io = std::make_shared<asio::io_context>();
     pb.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*pb.io);
     asio::error_code bind_ec;
@@ -1786,6 +1649,9 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     if (th.joinable())
       th.join();
   }
+  for (auto &kv : prebound_acceptors)
+    close_pipeline_acceptor(*kv.second.acceptor);
+  prebound_acceptors.clear();
 
   if (hub_failed.load())
   {

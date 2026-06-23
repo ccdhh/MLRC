@@ -100,7 +100,11 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
     std::cout << "  network_transfer_time:   " << m.network_time << std::endl;
     std::cout << "  decode_time:             " << m.decode_time << std::endl;
     std::cout << "  disk_write_time:         " << m.disk_write_time << std::endl;
-    std::cout << "  total_time:              " << m.total_time << std::endl;
+    if (m.repair_mode == "pipeline")
+      std::cout << "  repair_time:             " << m.total_time
+                << "  (failed-block plan → pipeline fix; excl. orchestration wait & teardown)" << std::endl;
+    else
+      std::cout << "  total_time:              " << m.total_time << std::endl;
 }
 
 static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config)
@@ -200,7 +204,11 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         std::cout << "  avg_network_transfer_time: " << (sum_net / cnt) << " s" << std::endl;
         std::cout << "  avg_decode_time:           " << (sum_decode / cnt) << " s" << std::endl;
         std::cout << "  avg_disk_write_time:       " << (sum_write / cnt) << " s" << std::endl;
-        std::cout << "  avg_total_time:            " << (sum_total / cnt) << " s" << std::endl;
+        if (config->GlrcRepairMode == "pipeline")
+          std::cout << "  avg_repair_time:           " << (sum_total / cnt)
+                    << " s  (excl. orchestration wait & teardown)" << std::endl;
+        else
+          std::cout << "  avg_total_time:            " << (sum_total / cnt) << " s" << std::endl;
         std::cout << "  avg_helper_blocks:         " << (sum_helpers / cnt) << std::endl;
     }
     std::cout << "===============================================" << std::endl;

@@ -233,7 +233,7 @@ message RecoveryRequest{
   int32 pipeline_hub_block_id = 38;
   repeated int32 pipeline_local_direct_equation_indices = 39;
   int32 pipeline_exchange_epoch = 40;
-  /** 0=hub, 1=chain_head, 2=hop_server, 3=local_direct, 4=prelisten (bind only) */
+  /** 0=hub, 1=chain_head, 2=hop_server, 3=local_direct, 4=teardown */
   int32 pipeline_role = 41;
   int32 pipeline_chain_id = 42;
   int32 pipeline_equation_index = 43;
