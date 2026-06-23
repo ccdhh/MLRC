@@ -2771,6 +2771,7 @@ namespace ECProject
       recovery_reply->set_success(false);
       return false;
     }
+    const auto repair_start = std::chrono::high_resolution_clock::now();
     Stripe &t_stripe = m_stripe_table[stripe_id];
     for (int fid : failed_block_ids)
     {
@@ -2888,6 +2889,9 @@ namespace ECProject
     recovery_reply->set_repair_mode("phase1");
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
+    const auto repair_end = std::chrono::high_resolution_clock::now();
+    recovery_reply->set_total_time(
+        std::chrono::duration<double>(repair_end - repair_start).count());
     std::cout << "[Coordinator] gLRC ILP Phase1 recovery of stripe " << stripe_id << " success via "
               << chosen_proxy << std::endl;
     return true;
@@ -2903,6 +2907,7 @@ namespace ECProject
       recovery_reply->set_success(false);
       return false;
     }
+    const auto repair_start = std::chrono::high_resolution_clock::now();
     Stripe &t_stripe = m_stripe_table[stripe_id];
     for (int fid : failed_block_ids)
     {
@@ -3118,6 +3123,9 @@ namespace ECProject
     recovery_reply->set_disk_write_time(sum_write_disk);
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
+    const auto repair_end = std::chrono::high_resolution_clock::now();
+    recovery_reply->set_total_time(
+        std::chrono::duration<double>(repair_end - repair_start).count());
     std::cout << "[Coordinator] gLRC ILP Phase2 recovery stripe " << stripe_id << " success" << std::endl;
     return true;
   }
@@ -3600,12 +3608,6 @@ namespace ECProject
       ok = recovery_glrc_ilp_pipeline_breakdown(stripe_id, block_ids, replyClient);
     else
       ok = recovery_glrc_ilp_breakdown(stripe_id, block_ids, replyClient);
-    if (m_sys_config->GlrcRepairMode != "pipeline")
-    {
-      auto wall_end = std::chrono::high_resolution_clock::now();
-      replyClient->set_total_time(
-          std::chrono::duration_cast<std::chrono::duration<double>>(wall_end - wall_start).count());
-    }
 
     if (!ok)
       return grpc::Status(grpc::StatusCode::INTERNAL, replyClient->message());

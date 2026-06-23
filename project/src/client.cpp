@@ -1529,12 +1529,8 @@ namespace ECProject
 
     if (metrics.success)
     {
-      std::cout << "[Client] gLRC recovery OK stripe=" << stripe_id;
-      if (metrics.repair_mode == "pipeline")
-        std::cout << " repair_time=" << metrics.total_time << "s";
-      else
-        std::cout << " total=" << metrics.total_time << "s";
-      std::cout << std::endl;
+      std::cout << "[Client] gLRC recovery OK stripe=" << stripe_id
+                << " repair_time=" << metrics.total_time << "s" << std::endl;
     }
     else
     {
