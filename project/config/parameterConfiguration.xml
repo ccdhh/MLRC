@@ -7,8 +7,8 @@
             适合 f=1 或作为 baseline；所有 helper 流量经过 anchor 对应 datanode 的 proxy。
     phase2  按 GlrcShardCount 分片；每个失败块 partition 在各自 datanode 的 repair proxy 上
             并行执行（部分读 + 分片解码 + proxy 间 exchange）。f>1 时各 partition 带宽独立。
-    pipeline 按 GlrcShardCount 分片；多方程链并行，链内 W=1 逐分片流水，Hub 为参与方程最多的
-            survivor proxy；local 单失败块可 local-direct 不经 Hub。
+    pipeline 按 GlrcShardCount 分片；多方程链并行，链内 GlrcPipelineWindow 控制 in-flight 分片（真 pipeline），
+            Hub 为参与方程最多的 survivor proxy；local 单失败块可 local-direct 不经 Hub。
 
   【维度 2】方程选择 — GlrcEquationPolicy（选哪些修复方程）
     local-then-global  Ceph 风格：优先 local XOR，不足再用 global Cauchy 方程。
@@ -22,7 +22,8 @@
     C3: phase2 + ilp-min-helper
 
   其他 gLRC 相关项：
-    GlrcShardCount      仅 phase2 生效；BlockSize 必须能被其整除。
+    GlrcShardCount      分片数；BlockSize 必须能被其整除。
+    GlrcPipelineWindow  pipeline 链上 in-flight 分片窗口 W；0=与 GlrcShardCount 相同（全流水）；1=串行 W=1。
     GlrcPhase2WriteBack phase2 是否在修复后写回 datanode（重复随机试验可设 false）。
     NodeBlockBandwidthMBps  每个 repair proxy / datanode 的链路限速（MB/s）；0 表示不限速。
                             拓扑须为「每 datanode 一个 repair proxy」（见 clusterInformation.xml）。
@@ -43,6 +44,7 @@
     <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 
     <GlrcShardCount>16</GlrcShardCount>
+    <GlrcPipelineWindow>0</GlrcPipelineWindow>
     <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
 
     <DatanodeNumPerCluster>15</DatanodeNumPerCluster>

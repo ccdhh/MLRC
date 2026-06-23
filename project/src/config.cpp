@@ -109,6 +109,8 @@ namespace ECProject
       GlrcEquationPolicy = std::string(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcShardCount"))
       GlrcShardCount = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcPipelineWindow"))
+      GlrcPipelineWindow = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcPhase2WriteBack"))
     {
       std::string v = elem->GetText();
@@ -165,8 +167,8 @@ namespace ECProject
     if (NodeBlockBandwidthMBps > 0.0)
     {
       std::cout << "  NodeBlockBandwidthMBps: " << NodeBlockBandwidthMBps << " MB/s" << std::endl;
-      std::cout << "    proxy: shared ingress (N helpers -> ~N*BlockSize/BW total read time)" << std::endl;
-      std::cout << "    datanode: per-node ingress on recovery write-back" << std::endl;
+      std::cout << "    per-node ingress + egress (symmetric fixed link rate)" << std::endl;
+      std::cout << "    proxy/datanode: SharedBandwidthLimiter on TCP read/write paths" << std::endl;
       std::cout << "  SingleBlockTransferTime: "
                 << node_block_transfer_seconds(BlockSize, NodeBlockBandwidthMBps) << " s/block at full link"
                 << std::endl;
@@ -188,6 +190,8 @@ namespace ECProject
       std::cout << "  GlrcRepairMode: " << GlrcRepairMode << std::endl;
       std::cout << "  GlrcEquationPolicy: " << GlrcEquationPolicy << std::endl;
       std::cout << "  GlrcShardCount: " << GlrcShardCount << std::endl;
+      std::cout << "  GlrcPipelineWindow: " << GlrcPipelineWindow
+                << (GlrcPipelineWindow == 0 ? " (full pipeline, W=GlrcShardCount)" : "") << std::endl;
       std::cout << "  GlrcPhase2WriteBack: " << (GlrcPhase2WriteBack ? "true" : "false") << std::endl;
     }
   }

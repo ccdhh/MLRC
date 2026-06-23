@@ -12,13 +12,22 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <memory>
+#include <condition_variable>
 #include <mutex>
+#include <optional>
+#include <queue>
 #include <string>
 #include <thread>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/socket.h>
+#ifndef SO_REUSEPORT
+#define SO_REUSEPORT 15
+#endif
 #endif
 
 namespace ECProject
@@ -60,6 +69,77 @@ struct PipelineStreamEndHeader
 
 thread_local std::string g_glrc_pipeline_last_error;
 static std::mutex g_pipeline_bind_mutex;
+static std::unordered_set<int> g_pipeline_active_listen_ports;
+
+void close_pipeline_acceptor(asio::ip::tcp::acceptor &acceptor);
+bool open_pipeline_acceptor(asio::io_context &io, int listen_port, asio::ip::tcp::acceptor &acceptor,
+                            asio::error_code &ec);
+
+struct PipelineRegistryAcceptor
+{
+  std::shared_ptr<asio::io_context> io;
+  std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
+};
+
+static std::mutex g_pipeline_registry_mu;
+static std::unordered_map<int, PipelineRegistryAcceptor> g_pipeline_registry;
+
+bool store_pipeline_registry_acceptor(int listen_port, PipelineRegistryAcceptor entry)
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
+  if (g_pipeline_registry.count(listen_port) > 0)
+    return false;
+  g_pipeline_registry.emplace(listen_port, std::move(entry));
+  return true;
+}
+
+bool take_pipeline_registry_acceptor(int listen_port, PipelineRegistryAcceptor &out)
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
+  const auto it = g_pipeline_registry.find(listen_port);
+  if (it == g_pipeline_registry.end())
+    return false;
+  out = std::move(it->second);
+  g_pipeline_registry.erase(it);
+  return true;
+}
+
+void discard_pipeline_registry_acceptor(int listen_port)
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
+  const auto it = g_pipeline_registry.find(listen_port);
+  if (it == g_pipeline_registry.end())
+    return;
+  close_pipeline_acceptor(*it->second.acceptor);
+  g_pipeline_registry.erase(it);
+}
+
+void clear_pipeline_registry_all()
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_registry_mu);
+  for (auto &kv : g_pipeline_registry)
+    close_pipeline_acceptor(*kv.second.acceptor);
+  g_pipeline_registry.clear();
+}
+
+bool bind_pipeline_listen_port(int listen_port, PipelineRegistryAcceptor &out, asio::error_code &ec,
+                               bool into_registry)
+{
+  out.io = std::make_shared<asio::io_context>();
+  out.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*out.io);
+  if (!open_pipeline_acceptor(*out.io, listen_port, *out.acceptor, ec))
+    return false;
+  if (into_registry)
+  {
+    if (!store_pipeline_registry_acceptor(listen_port, out))
+    {
+      close_pipeline_acceptor(*out.acceptor);
+      ec = asio::error::address_in_use;
+      return false;
+    }
+  }
+  return true;
+}
 
 void pipeline_trace(const char *msg)
 {
@@ -77,35 +157,115 @@ void set_pipeline_error(const std::string &msg)
   pipeline_trace(msg.c_str());
 }
 
+int resolve_pipeline_window(const Config *cfg, int shard_count)
+{
+  if (shard_count <= 0)
+    return 1;
+  if (cfg == nullptr)
+    return shard_count;
+  const int w = cfg->GlrcPipelineWindow;
+  if (w == 0)
+    return shard_count;
+  if (w <= 1)
+    return 1;
+  return std::min(w, shard_count);
+}
+
+struct PipelineQueuedShard
+{
+  int shard_id = -1;
+  std::vector<unsigned char> payload;
+  bool end_of_stream = false;
+  int end_shard_count = 0;
+};
+
+class PipelineBoundedQueue
+{
+public:
+  explicit PipelineBoundedQueue(size_t capacity) : capacity_(capacity > 0 ? capacity : 1) {}
+
+  void push(PipelineQueuedShard item)
+  {
+    std::unique_lock<std::mutex> lock(mu_);
+    not_full_.wait(lock, [&] { return closed_ || q_.size() < capacity_; });
+    if (closed_)
+      return;
+    q_.push(std::move(item));
+    not_empty_.notify_one();
+  }
+
+  bool pop(PipelineQueuedShard &out)
+  {
+    std::unique_lock<std::mutex> lock(mu_);
+    not_empty_.wait(lock, [&] { return closed_ || !q_.empty(); });
+    if (q_.empty())
+      return false;
+    out = std::move(q_.front());
+    q_.pop();
+    not_full_.notify_one();
+    return true;
+  }
+
+  void close()
+  {
+    std::lock_guard<std::mutex> lock(mu_);
+    closed_ = true;
+    not_empty_.notify_all();
+    not_full_.notify_all();
+  }
+
+private:
+  size_t capacity_;
+  std::queue<PipelineQueuedShard> q_;
+  std::mutex mu_;
+  std::condition_variable not_full_;
+  std::condition_variable not_empty_;
+  bool closed_ = false;
+};
+
 int pipeline_proxy_index(int proxy_grpc_port)
 {
   const int idx = (proxy_grpc_port - PROXY_GRPC_BASE) / PROXY_GRPC_STRIDE;
-  return idx < 0 ? 0 : idx;
+  if (idx < 0)
+    return 0;
+  if (idx > PROXY_GRPC_MAX_INDEX)
+    return PROXY_GRPC_MAX_INDEX;
+  return idx;
 }
 
-int avoid_reserved_pipeline_port(int port, int proxy_idx, int slot)
+int pipeline_compose_listen_port(int proxy_grpc_port, int slot_core, bool hub_band)
 {
-  // Pipeline bands can numerically collide with the coordinator listen port (55555).
+  const int proxy_idx = pipeline_proxy_index(proxy_grpc_port);
+  const int half = PROXY_PIPELINE_PER_PROXY_BAND / 2;
+  int slot = hub_band ? (half + (slot_core % half)) : (slot_core % half);
+  int port = PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * PROXY_PIPELINE_PER_PROXY_BAND + slot;
   if (port == 55555)
-    return PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * PROXY_PIPELINE_PER_PROXY_BAND + ((slot + 1) % PROXY_PIPELINE_PER_PROXY_BAND);
+  {
+    slot = hub_band ? (half + ((slot_core + 1) % half)) : ((slot_core + 1) % half);
+    port = PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * PROXY_PIPELINE_PER_PROXY_BAND + slot;
+  }
   return port;
+}
+
+int avoid_reserved_pipeline_port(int port, int proxy_grpc_port, int slot_core, bool hub_band)
+{
+  (void)slot_core;
+  (void)hub_band;
+  if (port != 55555)
+    return port;
+  return pipeline_compose_listen_port(proxy_grpc_port, slot_core + 1, hub_band);
 }
 
 int pipeline_hop_listen_port(int proxy_grpc_port, int exchange_epoch, int chain_id, int hop_index)
 {
-  const int proxy_idx = pipeline_proxy_index(proxy_grpc_port);
-  const int slot = (exchange_epoch * 17 + chain_id * 32 + hop_index) % (PROXY_PIPELINE_PER_PROXY_BAND / 2);
-  const int port = PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * PROXY_PIPELINE_PER_PROXY_BAND + slot;
-  return avoid_reserved_pipeline_port(port, proxy_idx, slot);
+  const int slot_core = (exchange_epoch * 17 + chain_id * 32 + hop_index) % (PROXY_PIPELINE_PER_PROXY_BAND / 2);
+  return pipeline_compose_listen_port(proxy_grpc_port, slot_core, false);
 }
 
 int pipeline_hub_listen_port(int hub_proxy_grpc_port, int exchange_epoch, int eq_slot)
 {
-  const int proxy_idx = pipeline_proxy_index(hub_proxy_grpc_port);
-  const int slot = PROXY_PIPELINE_PER_PROXY_BAND / 2 +
-                     (exchange_epoch * 17 + eq_slot * 32 + 1) % (PROXY_PIPELINE_PER_PROXY_BAND / 2);
-  const int port = PROXY_PIPELINE_EXCHANGE_BASE + proxy_idx * PROXY_PIPELINE_PER_PROXY_BAND + slot;
-  return avoid_reserved_pipeline_port(port, proxy_idx, slot);
+  const int slot_core = (exchange_epoch * 17 + eq_slot * 32 + 1) % (PROXY_PIPELINE_PER_PROXY_BAND / 2);
+  return pipeline_compose_listen_port(hub_proxy_grpc_port, slot_core, true);
 }
 
 int resolve_hop_listen_port(const proxy_proto::RecoveryRequest *recovery_request, int hop_index,
@@ -264,29 +424,88 @@ void close_pipeline_socket(asio::ip::tcp::socket &socket)
   socket.close(ec);
 }
 
+void close_pipeline_acceptor(asio::ip::tcp::acceptor &acceptor)
+{
+  asio::error_code ignore_ec;
+#if defined(__linux__) || defined(__APPLE__)
+  if (acceptor.is_open())
+  {
+    const asio::ip::tcp::endpoint bound_ep = acceptor.local_endpoint(ignore_ec);
+    if (!ignore_ec)
+    {
+      std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
+      g_pipeline_active_listen_ports.erase(bound_ep.port());
+    }
+    struct linger lin;
+    lin.l_onoff = 1;
+    lin.l_linger = 0;
+    ::setsockopt(acceptor.native_handle(), SOL_SOCKET, SO_LINGER, &lin, sizeof(lin));
+  }
+#endif
+  acceptor.cancel(ignore_ec);
+  acceptor.close(ignore_ec);
+}
+
 bool open_pipeline_acceptor(asio::io_context &io, int listen_port, asio::ip::tcp::acceptor &acceptor,
                             asio::error_code &ec)
 {
+  auto close_acceptor = [&acceptor]() {
+    asio::error_code ignore_ec;
+    acceptor.close(ignore_ec);
+  };
+
   ec.clear();
   const asio::ip::tcp::endpoint ep(asio::ip::tcp::v4(), listen_port);
-  acceptor.open(ep.protocol(), ec);
-  if (ec)
-    return false;
-  acceptor.set_option(asio::socket_base::reuse_address(true), ec);
-  if (ec)
-    return false;
+
+  for (int retry = 0; retry < 120; ++retry)
   {
-    std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
-    acceptor.bind(ep, ec);
+    ec.clear();
+    acceptor.open(ep.protocol(), ec);
+    if (ec)
+    {
+      close_acceptor();
+      return false;
+    }
+    acceptor.set_option(asio::socket_base::reuse_address(true), ec);
+    if (ec)
+    {
+      close_acceptor();
+      return false;
+    }
+    {
+      std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
+      acceptor.bind(ep, ec);
+    }
+    if (!ec)
+    {
+      acceptor.listen(asio::socket_base::max_listen_connections, ec);
+      if (!ec)
+      {
+        std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
+        g_pipeline_active_listen_ports.insert(listen_port);
+        return true;
+      }
+    }
+    close_acceptor();
+    if (ec != asio::error::address_in_use)
+      return false;
+    {
+      std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
+      if (g_pipeline_active_listen_ports.count(listen_port) > 0)
+      {
+        char tb[128];
+        snprintf(tb, sizeof(tb), "pipeline bind wait port=%d still active in-process retry=%d", listen_port, retry);
+        pipeline_trace(tb);
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
   }
-  if (ec)
-    return false;
-  acceptor.listen(asio::socket_base::max_listen_connections, ec);
-  return !ec;
+  ec = asio::error::address_in_use;
+  return false;
 }
 
 bool connect_pipeline_socket(asio::ip::tcp::socket &socket, const std::string &next_ip, int next_port,
-                             asio::error_code &ec, int max_retries = 120)
+                             asio::error_code &ec, int max_retries = 500)
 {
   const auto endpoint = asio::ip::tcp::endpoint(asio::ip::address::from_string(next_ip), next_port);
   for (int attempt = 0; attempt < max_retries; attempt++)
@@ -297,7 +516,7 @@ bool connect_pipeline_socket(asio::ip::tcp::socket &socket, const std::string &n
       return true;
     if (ec != asio::error::connection_refused)
       break;
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   set_pipeline_error("pipeline connect failed " + next_ip + ":" + std::to_string(next_port) + " " + ec.message());
   return false;
@@ -349,7 +568,7 @@ int hop_count(const proxy_proto::RecoveryRequest *req)
 
 bool read_local_stripe(ProxyImpl *self, const std::string &key, const std::string &ip, int port, int block_size,
                        int off, int len, unsigned char *out, double *disk_start, double *disk_end, double *net_start,
-                       double *net_end, SharedBandwidthLimiter *ingress_bw)
+                       double *net_end)
 {
   char *buf = static_cast<char *>(std::aligned_alloc(32, block_size));
   if (buf == nullptr)
@@ -357,7 +576,7 @@ bool read_local_stripe(ProxyImpl *self, const std::string &key, const std::strin
   std::memset(buf, 0, block_size);
   double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
   const bool ok = self->GetFromDatanodeStripeRangeBreakdown(key, buf, block_size, off, len, ip.c_str(), port, &ds,
-                                                            &de, &ns, &ne, nullptr, nullptr, ingress_bw);
+                                                            &de, &ns, &ne, nullptr, nullptr, nullptr);
   if (ok)
     std::memcpy(out, buf + off, len);
   free(buf);
@@ -385,6 +604,8 @@ bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *reco
                                         proxy_proto::RecoveryReply *response)
 {
   const int role = recovery_request->pipeline_role();
+  if (role == static_cast<int>(GlrcPipelineRole::PRELISTEN))
+    return glrcIlpPipelinePrelistenRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::HUB))
     return glrcIlpPipelineHubRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::CHAIN_HEAD))
@@ -395,6 +616,68 @@ bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *reco
     return glrcIlpPipelineLocalDirectRecovery(recovery_request, response);
   set_pipeline_error("invalid pipeline_role");
   return false;
+}
+
+bool ProxyImpl::glrcIlpPipelinePrelistenRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                                 proxy_proto::RecoveryReply *response)
+{
+  (void)response;
+  const int epoch = recovery_request->pipeline_exchange_epoch();
+  {
+    static std::mutex s_clear_mu;
+    static int s_last_cleared_epoch = -1;
+    std::lock_guard<std::mutex> lock(s_clear_mu);
+    if (epoch != s_last_cleared_epoch)
+    {
+      clear_pipeline_registry_all();
+      s_last_cleared_epoch = epoch;
+    }
+  }
+
+  const int my_idx = recovery_request->pipeline_my_hop_index();
+  if (my_idx > 0 && recovery_request->pipeline_my_listen_port() > 0)
+  {
+    const int chain_id = recovery_request->pipeline_chain_id();
+    const int listen_port = resolve_my_hop_bind_port(recovery_request, m_port, epoch, chain_id, my_idx);
+    PipelineRegistryAcceptor entry;
+    asio::error_code ec;
+    if (!bind_pipeline_listen_port(listen_port, entry, ec, true))
+    {
+      set_pipeline_error("prelisten hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
+      return false;
+    }
+    char tb[128];
+    snprintf(tb, sizeof(tb), "prelisten hop chain=%d hop=%d port=%d", chain_id, my_idx, listen_port);
+    pipeline_trace(tb);
+    return true;
+  }
+
+  const int hub_chain_n = recovery_request->pipeline_hub_chain_eq_slots_size();
+  if (hub_chain_n <= 0)
+  {
+    set_pipeline_error("prelisten missing hop or hub metadata");
+    return false;
+  }
+
+  for (int ci = 0; ci < hub_chain_n; ci++)
+  {
+    if (recovery_request->pipeline_hub_chain_local_only_flags_size() > ci &&
+        recovery_request->pipeline_hub_chain_local_only_flags(ci) != 0)
+      continue;
+    const int eq_slot = recovery_request->pipeline_hub_chain_eq_slots(ci);
+    const int listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, eq_slot);
+    PipelineRegistryAcceptor entry;
+    asio::error_code ec;
+    if (!bind_pipeline_listen_port(listen_port, entry, ec, true))
+    {
+      set_pipeline_error("prelisten hub bind failed port=" + std::to_string(listen_port) + " " + ec.message());
+      return false;
+    }
+    char tb[96];
+    snprintf(tb, sizeof(tb), "prelisten hub chain=%d port=%d", ci, listen_port);
+    pipeline_trace(tb);
+  }
+  return true;
 }
 
 bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequest *recovery_request,
@@ -442,7 +725,8 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] chain_head stream chain=" << chain_id
             << " eq_slot=" << eq_slot
             << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
-            << " hops=" << hops_n << " shards=" << shard_count << std::endl;
+            << " hops=" << hops_n << " shards=" << shard_count
+            << " window=" << resolve_pipeline_window(m_sys_config, shard_count) << std::endl;
 
   const bool next_is_hub = hub_is_tail && hops_n == 1;
   const std::string next_ip =
@@ -459,9 +743,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
   const std::string head_key = recovery_request->pipeline_hop_block_keys(0);
   const std::string head_ip = recovery_request->pipeline_hop_datanode_ips(0);
   const int head_port = recovery_request->pipeline_hop_datanode_ports(0);
-
-  // Coordinator starts hop wiring before chain_head RPC; brief wait before downstream TCP connect.
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  SharedBandwidthLimiter *egress_bw = m_egress_bandwidth.get();
 
   asio::io_context io;
   asio::error_code ec;
@@ -481,52 +763,135 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
   }
   std::memset(block_buf, 0, block_size);
 
-  for (int shard = 0; shard < shard_count; shard++)
-  {
+  const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
+  auto run_chain_head_shard = [&](int shard) -> bool {
     const int off = shard * stripe_len;
-    double shard_disk_s = 0.0, shard_disk_e = 0.0, shard_net_s = 0.0, shard_net_e = 0.0;
     {
       char tb[320];
       snprintf(tb, sizeof(tb), "chain_head read shard=%d key=%s @ %s:%d off=%d len=%d", shard, head_key.c_str(),
                head_ip.c_str(), head_port, off, stripe_len);
       pipeline_trace(tb);
     }
+    double shard_disk_s = 0.0, shard_disk_e = 0.0, shard_net_s = 0.0, shard_net_e = 0.0;
     if (!GetFromDatanodeStripeRangeBreakdown(head_key, block_buf, block_size, off, stripe_len, head_ip.c_str(),
                                              head_port, &shard_disk_s, &shard_disk_e, &shard_net_s, &shard_net_e,
                                              nullptr, nullptr, nullptr))
     {
-      free(block_buf);
-      close_pipeline_socket(out_socket);
       const std::string msg = "pipeline chain head local read failed key=" + head_key + " @" + head_ip + ":" +
                               std::to_string(head_port) + " shard=" + std::to_string(shard);
       set_pipeline_error(msg);
       std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] " << msg << std::endl;
       return false;
     }
-    update_min(min_disk, shard_disk_s);
-    update_max(max_disk, shard_disk_e);
-    update_min(min_net, shard_net_s);
-    update_max(max_net, shard_net_e);
+    return true;
+  };
 
-    std::vector<unsigned char> encoded(static_cast<size_t>(stripe_len), 0);
-    glrc_pipeline_init_partial_range(encoded.data(), reinterpret_cast<unsigned char *>(block_buf + off), head_coef,
-                                     stripe_len, eq_codec);
-    if (!send_pipeline_shard(out_socket, eq_slot, shard, stripe_len, encoded.data(), nullptr, ec))
+  if (pipe_window <= 1)
+  {
+    for (int shard = 0; shard < shard_count; shard++)
     {
-      free(block_buf);
-      close_pipeline_socket(out_socket);
-      set_pipeline_error("pipeline chain head send failed: " + ec.message());
-      return false;
-    }
-    {
-      char tb[128];
-      snprintf(tb, sizeof(tb), "chain_head sent shard=%d chain=%d", shard, chain_id);
-      pipeline_trace(tb);
+      if (!run_chain_head_shard(shard))
+      {
+        free(block_buf);
+        close_pipeline_socket(out_socket);
+        return false;
+      }
+      const int off = shard * stripe_len;
+      std::vector<unsigned char> encoded(static_cast<size_t>(stripe_len), 0);
+      glrc_pipeline_init_partial_range(encoded.data(), reinterpret_cast<unsigned char *>(block_buf + off), head_coef,
+                                       stripe_len, eq_codec);
+      if (!send_pipeline_shard(out_socket, eq_slot, shard, stripe_len, encoded.data(), egress_bw, ec))
+      {
+        free(block_buf);
+        close_pipeline_socket(out_socket);
+        set_pipeline_error("pipeline chain head send failed: " + ec.message());
+        return false;
+      }
     }
   }
+  else
+  {
+    PipelineBoundedQueue send_q(static_cast<size_t>(pipe_window));
+    std::atomic<bool> pipeline_failed{false};
+    std::mutex send_err_mu;
+    std::string send_err;
+    int shards_sent = 0;
+
+    std::thread sender([&]() {
+      PipelineQueuedShard item;
+      while (send_q.pop(item))
+      {
+        if (item.end_of_stream)
+          break;
+        if (!send_pipeline_shard(out_socket, eq_slot, item.shard_id, stripe_len, item.payload.data(), egress_bw, ec))
+        {
+          std::lock_guard<std::mutex> lock(send_err_mu);
+          send_err = "pipeline chain head send failed shard=" + std::to_string(item.shard_id) + " " + ec.message();
+          pipeline_failed.store(true);
+          send_q.close();
+          return;
+        }
+        shards_sent++;
+      }
+      if (!pipeline_failed.load())
+      {
+        if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
+        {
+          std::lock_guard<std::mutex> lock(send_err_mu);
+          send_err = "pipeline chain head stream end failed: " + ec.message();
+          pipeline_failed.store(true);
+        }
+      }
+    });
+
+    for (int shard = 0; shard < shard_count && !pipeline_failed.load(); shard++)
+    {
+      if (!run_chain_head_shard(shard))
+      {
+        pipeline_failed.store(true);
+        break;
+      }
+      const int off = shard * stripe_len;
+      PipelineQueuedShard item;
+      item.shard_id = shard;
+      item.payload.assign(static_cast<size_t>(stripe_len), 0);
+      glrc_pipeline_init_partial_range(item.payload.data(), reinterpret_cast<unsigned char *>(block_buf + off),
+                                       head_coef, stripe_len, eq_codec);
+      send_q.push(std::move(item));
+    }
+    PipelineQueuedShard end_marker;
+    end_marker.end_of_stream = true;
+    send_q.push(std::move(end_marker));
+    send_q.close();
+    if (sender.joinable())
+      sender.join();
+
+    free(block_buf);
+    block_buf = nullptr;
+
+    if (pipeline_failed.load() || shards_sent != shard_count)
+    {
+      close_pipeline_socket(out_socket);
+      if (!send_err.empty())
+        set_pipeline_error(send_err);
+      else if (shards_sent != shard_count)
+        set_pipeline_error("pipeline chain head shard send count mismatch");
+      return false;
+    }
+    close_pipeline_socket(out_socket);
+    response->set_disk_io_start_time(min_disk);
+    response->set_disk_io_end_time(max_disk);
+    response->set_network_start_time(min_net);
+    response->set_network_end_time(max_net);
+    std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] chain_head done chain=" << chain_id
+              << " eq_slot=" << eq_slot << " hub_tail=" << hub_is_tail << " shards=" << shard_count
+              << " window=" << pipe_window << std::endl;
+    return true;
+  }
+
   free(block_buf);
 
-  if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, nullptr, ec))
+  if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
   {
     close_pipeline_socket(out_socket);
     set_pipeline_error("pipeline chain head stream end failed: " + ec.message());
@@ -587,26 +952,42 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
             << " hop=" << my_idx
             << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
             << " port=" << listen_port << std::endl;
-  asio::io_context io;
-  asio::error_code ec;
-  asio::ip::tcp::acceptor acceptor(io);
-  if (!open_pipeline_acceptor(io, listen_port, acceptor, ec))
+
+  PipelineRegistryAcceptor reg_entry;
+  asio::io_context stack_io;
+  asio::ip::tcp::acceptor stack_acceptor(stack_io);
+  asio::io_context *work_io = &stack_io;
+  asio::ip::tcp::acceptor *acceptor_ptr = &stack_acceptor;
+  std::shared_ptr<asio::io_context> shared_io;
+  std::shared_ptr<asio::ip::tcp::acceptor> shared_acceptor;
+
+  if (take_pipeline_registry_acceptor(listen_port, reg_entry))
   {
-    set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
-    return false;
+    shared_io = std::move(reg_entry.io);
+    shared_acceptor = std::move(reg_entry.acceptor);
+    work_io = shared_io.get();
+    acceptor_ptr = shared_acceptor.get();
+    pipeline_trace("hop reused prelisten acceptor");
   }
+  else
+  {
+    asio::error_code ec;
+    if (!open_pipeline_acceptor(stack_io, listen_port, stack_acceptor, ec))
+    {
+      set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
+      return false;
+    }
+  }
+
   struct PipelineAcceptorGuard
   {
     asio::ip::tcp::acceptor *acceptor = nullptr;
     ~PipelineAcceptorGuard()
     {
       if (acceptor)
-      {
-        asio::error_code close_ec;
-        acceptor->close(close_ec);
-      }
+        close_pipeline_acceptor(*acceptor);
     }
-  } acceptor_guard{&acceptor};
+  } acceptor_guard{acceptor_ptr};
 
   double min_disk = 0.0, max_disk = 0.0, min_net = 0.0, max_net = 0.0;
   auto update_min = [](double &slot, double v) {
@@ -620,13 +1001,14 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
 
   const bool connects_to_hub = pipeline_hop_connects_to_hub(recovery_request, my_idx, hops_n);
 
-  asio::ip::tcp::socket out_socket(io);
+  asio::error_code ec;
+  asio::ip::tcp::socket out_socket(*work_io);
   if (connects_to_hub)
   {
     const std::string hub_ip = recovery_request->pipeline_hub_proxy_ip();
     const int hub_port =
         resolve_chain_hub_listen_port(recovery_request, recovery_request->pipeline_hub_proxy_port(), epoch, eq_slot);
-    if (!connect_pipeline_socket(out_socket, hub_ip, hub_port, ec, 120))
+    if (!connect_pipeline_socket(out_socket, hub_ip, hub_port, ec, 300))
       return false;
     set_pipeline_socket_timeouts(out_socket, kPipelineSocketTimeoutSec);
   }
@@ -635,15 +1017,15 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
     const std::string next_ip = recovery_request->pipeline_hop_proxy_ips(my_idx + 1);
     const int next_grpc_port = recovery_request->pipeline_hop_proxy_ports(my_idx + 1);
     const int next_port = resolve_hop_listen_port(recovery_request, my_idx + 1, next_grpc_port, epoch, chain_id);
-    if (!connect_pipeline_socket(out_socket, next_ip, next_port, ec, 120))
+    if (!connect_pipeline_socket(out_socket, next_ip, next_port, ec, 300))
       return false;
     set_pipeline_socket_timeouts(out_socket, kPipelineSocketTimeoutSec);
   }
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hop_server downstream ready chain=" << chain_id
             << " hop=" << my_idx << std::endl;
 
-  asio::ip::tcp::socket in_socket(io);
-  if (!accept_pipeline_socket(acceptor, in_socket, ec, 45))
+  asio::ip::tcp::socket in_socket(*work_io);
+  if (!accept_pipeline_socket(*acceptor_ptr, in_socket, ec, 45))
   {
     close_pipeline_socket(out_socket);
     set_pipeline_error("pipeline hop accept failed: " + ec.message());
@@ -652,7 +1034,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   set_pipeline_socket_timeouts(in_socket, kPipelineSocketTimeoutSec);
   set_pipeline_socket_timeouts(out_socket, kPipelineSocketTimeoutSec);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hop_server accepted upstream chain=" << chain_id
-            << " hop=" << my_idx << std::endl;
+            << " hop=" << my_idx << " window=" << resolve_pipeline_window(m_sys_config, shard_count) << std::endl;
 
   char *block_buf = static_cast<char *>(std::aligned_alloc(32, block_size));
   if (block_buf == nullptr)
@@ -667,83 +1049,170 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   const std::string hop_key = recovery_request->pipeline_hop_block_keys(my_idx);
   const std::string hop_ip = recovery_request->pipeline_hop_datanode_ips(my_idx);
   const int hop_port = recovery_request->pipeline_hop_datanode_ports(my_idx);
+  SharedBandwidthLimiter *egress_bw = m_egress_bandwidth.get();
 
+  const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
   int shards_forwarded = 0;
-  while (true)
-  {
-    PipelineShardHeader hdr{};
-    PipelineStreamEndHeader end_hdr{};
-    std::vector<unsigned char> partial;
-    const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
-    if (frame == PipelineFrameType::ERROR)
-    {
-      close_pipeline_socket(in_socket);
-      close_pipeline_socket(out_socket);
-      set_pipeline_error("pipeline hop recv frame failed: " + ec.message());
-      return false;
-    }
-    if (frame == PipelineFrameType::END)
-    {
-      if ((int)end_hdr.shard_count != shards_forwarded)
-      {
-        close_pipeline_socket(in_socket);
-        close_pipeline_socket(out_socket);
-        set_pipeline_error("pipeline hop stream shard count mismatch");
-        return false;
-      }
-      if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, nullptr, ec))
-      {
-        close_pipeline_socket(in_socket);
-        close_pipeline_socket(out_socket);
-        set_pipeline_error("pipeline hop stream end forward failed");
-        return false;
-      }
-      break;
-    }
 
-    const int shard = static_cast<int>(hdr.shard_id);
+  auto process_inbound_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
     if (shard < 0 || shard >= shard_count || (int)partial.size() != stripe_len)
     {
-      close_pipeline_socket(in_socket);
-      close_pipeline_socket(out_socket);
       set_pipeline_error("pipeline hop shard mismatch");
       return false;
     }
     const int off = shard * stripe_len;
-
-    double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
     if (!GetFromDatanodeStripeRangeBreakdown(hop_key, block_buf, block_size, off, stripe_len, hop_ip.c_str(),
-                                             hop_port, &ds, &de, &ns, &ne, nullptr, nullptr, nullptr))
+                                             hop_port, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr))
     {
-      free(block_buf);
-      close_pipeline_socket(in_socket);
-      close_pipeline_socket(out_socket);
       set_pipeline_error("pipeline hop local read failed hop=" + std::to_string(my_idx) + " shard=" +
                          std::to_string(shard));
       return false;
     }
-    update_min(min_disk, ds);
-    update_max(max_disk, de);
-    update_min(min_net, ns);
-    update_max(max_net, ne);
-
     glrc_pipeline_accumulate_range(partial.data(), reinterpret_cast<unsigned char *>(block_buf + off), my_coef,
                                    stripe_len, eq_codec);
-
-    if (!send_pipeline_shard(out_socket, eq_slot, shard, stripe_len, partial.data(), nullptr, ec))
+    if (!send_pipeline_shard(out_socket, eq_slot, shard, stripe_len, partial.data(), egress_bw, ec))
     {
-      free(block_buf);
-      close_pipeline_socket(in_socket);
-      close_pipeline_socket(out_socket);
       set_pipeline_error("pipeline hop forward failed: " + ec.message());
       return false;
     }
     shards_forwarded++;
+    return true;
+  };
+
+  if (pipe_window <= 1)
+  {
+    while (true)
+    {
+      PipelineShardHeader hdr{};
+      PipelineStreamEndHeader end_hdr{};
+      std::vector<unsigned char> partial;
+      const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
+      if (frame == PipelineFrameType::ERROR)
+      {
+        close_pipeline_socket(in_socket);
+        close_pipeline_socket(out_socket);
+        set_pipeline_error("pipeline hop recv frame failed: " + ec.message());
+        return false;
+      }
+      if (frame == PipelineFrameType::END)
+      {
+        if ((int)end_hdr.shard_count != shards_forwarded)
+        {
+          close_pipeline_socket(in_socket);
+          close_pipeline_socket(out_socket);
+          set_pipeline_error("pipeline hop stream shard count mismatch");
+          return false;
+        }
+        if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
+        {
+          close_pipeline_socket(in_socket);
+          close_pipeline_socket(out_socket);
+          set_pipeline_error("pipeline hop stream end forward failed");
+          return false;
+        }
+        break;
+      }
+      const int shard = static_cast<int>(hdr.shard_id);
+      if (!process_inbound_shard(shard, partial))
+      {
+        free(block_buf);
+        close_pipeline_socket(in_socket);
+        close_pipeline_socket(out_socket);
+        return false;
+      }
+    }
+  }
+  else
+  {
+    PipelineBoundedQueue inbound_q(static_cast<size_t>(pipe_window));
+    std::atomic<bool> reader_failed{false};
+    std::mutex reader_err_mu;
+    std::string reader_err;
+    int upstream_end_count = -1;
+
+    std::thread reader([&]() {
+      while (!reader_failed.load())
+      {
+        PipelineShardHeader hdr{};
+        PipelineStreamEndHeader end_hdr{};
+        std::vector<unsigned char> partial;
+        const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
+        if (frame == PipelineFrameType::ERROR)
+        {
+          std::lock_guard<std::mutex> lock(reader_err_mu);
+          reader_err = "pipeline hop recv frame failed: " + ec.message();
+          reader_failed.store(true);
+          inbound_q.close();
+          return;
+        }
+        if (frame == PipelineFrameType::END)
+        {
+          PipelineQueuedShard end_item;
+          end_item.end_of_stream = true;
+          end_item.end_shard_count = static_cast<int>(end_hdr.shard_count);
+          inbound_q.push(std::move(end_item));
+          inbound_q.close();
+          return;
+        }
+        PipelineQueuedShard item;
+        item.shard_id = static_cast<int>(hdr.shard_id);
+        item.payload = std::move(partial);
+        inbound_q.push(std::move(item));
+      }
+      inbound_q.close();
+    });
+
+    bool processor_ok = true;
+    PipelineQueuedShard item;
+    while (inbound_q.pop(item))
+    {
+      if (item.end_of_stream)
+      {
+        upstream_end_count = item.end_shard_count;
+        break;
+      }
+      if (!process_inbound_shard(item.shard_id, item.payload))
+      {
+        processor_ok = false;
+        reader_failed.store(true);
+        break;
+      }
+    }
+    inbound_q.close();
+    if (reader.joinable())
+      reader.join();
+
+    if (!processor_ok || reader_failed.load())
+    {
+      free(block_buf);
+      close_pipeline_socket(in_socket);
+      close_pipeline_socket(out_socket);
+      if (!reader_err.empty())
+        set_pipeline_error(reader_err);
+      return false;
+    }
+    if (upstream_end_count >= 0 && upstream_end_count != shards_forwarded)
+    {
+      free(block_buf);
+      close_pipeline_socket(in_socket);
+      close_pipeline_socket(out_socket);
+      set_pipeline_error("pipeline hop stream shard count mismatch");
+      return false;
+    }
+    if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
+    {
+      free(block_buf);
+      close_pipeline_socket(in_socket);
+      close_pipeline_socket(out_socket);
+      set_pipeline_error("pipeline hop stream end forward failed");
+      return false;
+    }
   }
 
   free(block_buf);
   close_pipeline_socket(in_socket);
   close_pipeline_socket(out_socket);
+  close_pipeline_acceptor(*acceptor_ptr);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -833,10 +1302,6 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
         set_pipeline_error("pipeline local_direct single-hop read failed shard=" + std::to_string(shard));
         return false;
       }
-      update_min(min_disk, ds);
-      update_max(max_disk, de);
-      update_min(min_net, ns);
-      update_max(max_net, ne);
       glrc_pipeline_accumulate_range(stripe.data(), reinterpret_cast<unsigned char *>(block_buf + off), tail_coef,
                                      stripe_len, eq_codec);
     }
@@ -860,10 +1325,6 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
                              std::to_string(shard));
           return false;
         }
-        update_min(min_disk, ds);
-        update_max(max_disk, de);
-        update_min(min_net, ns);
-        update_max(max_net, ne);
         if (hi == 0)
           glrc_pipeline_init_partial_range(stripe.data(), reinterpret_cast<unsigned char *>(block_buf + off), coef,
                                            stripe_len, eq_codec);
@@ -975,14 +1436,63 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
 
   std::atomic<bool> hub_failed{false};
   std::string hub_fail_msg;
+  SharedBandwidthLimiter *hub_repair_ingress = m_ingress_bandwidth.get();
+
+  struct HubPreboundAcceptor
+  {
+    int ci = 0;
+    int listen_port = 0;
+    std::shared_ptr<asio::io_context> io;
+    std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
+  };
+  std::unordered_map<int, HubPreboundAcceptor> prebound_acceptors;
+  for (int ci = 0; ci < hub_chain_n; ci++)
+  {
+    if (ctxs[ci].local_only)
+      continue;
+    HubPreboundAcceptor pb;
+    pb.ci = ci;
+    pb.listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, ctxs[ci].eq_slot);
+    PipelineRegistryAcceptor reg_entry;
+    if (take_pipeline_registry_acceptor(pb.listen_port, reg_entry))
+    {
+      pb.io = std::move(reg_entry.io);
+      pb.acceptor = std::move(reg_entry.acceptor);
+      prebound_acceptors.emplace(ci, std::move(pb));
+      continue;
+    }
+    pb.io = std::make_shared<asio::io_context>();
+    pb.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*pb.io);
+    asio::error_code bind_ec;
+    if (!open_pipeline_acceptor(*pb.io, pb.listen_port, *pb.acceptor, bind_ec))
+    {
+      for (auto &kv : prebound_acceptors)
+        close_pipeline_acceptor(*kv.second.acceptor);
+      set_pipeline_error("hub bind failed port=" + std::to_string(pb.listen_port) + " " + bind_ec.message());
+      return false;
+    }
+    prebound_acceptors.emplace(ci, std::move(pb));
+  }
+  if (!prebound_acceptors.empty())
+  {
+    char tb[96];
+    snprintf(tb, sizeof(tb), "hub prebound listeners=%zu", prebound_acceptors.size());
+    pipeline_trace(tb);
+  }
+
   std::vector<std::thread> listeners;
   for (int ci = 0; ci < hub_chain_n; ci++)
   {
     const int eq_slot = ctxs[ci].eq_slot;
     const int listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, eq_slot);
-    listeners.emplace_back([this, ci, eq_slot, listen_port, stripe_len, shard_count, block_size, hub_key, hub_dn_ip,
-                            hub_dn_port, &ctxs, &rhs_bufs, &rhs_ready, &rhs_mutex, &rhs_cv, &hub_failed,
-                            &hub_fail_msg]() {
+    const auto prebound_it = prebound_acceptors.find(ci);
+    const bool has_prebound = prebound_it != prebound_acceptors.end();
+    std::shared_ptr<asio::io_context> bound_io = has_prebound ? prebound_it->second.io : nullptr;
+    std::shared_ptr<asio::ip::tcp::acceptor> bound_acceptor =
+        has_prebound ? prebound_it->second.acceptor : nullptr;
+    listeners.emplace_back([this, ci, eq_slot, listen_port, bound_io, bound_acceptor, stripe_len, shard_count, block_size,
+                            hub_key, hub_dn_ip, hub_dn_port, hub_repair_ingress, &ctxs, &rhs_bufs, &rhs_ready,
+                            &rhs_mutex, &rhs_cv, &hub_failed, &hub_fail_msg]() {
       try
       {
         asio::io_context io;
@@ -1048,13 +1558,23 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
         } block_buf_guard{block_buf};
         if (hub_failed.load())
           return;
-        asio::ip::tcp::acceptor acceptor(io);
-        if (!open_pipeline_acceptor(io, listen_port, acceptor, ec))
+        asio::io_context &accept_io = bound_io != nullptr ? *bound_io : io;
+        asio::ip::tcp::acceptor *acceptor_ptr = nullptr;
+        asio::ip::tcp::acceptor stack_acceptor(accept_io);
+        if (bound_acceptor != nullptr)
         {
-          hub_fail_msg = "hub bind failed port=" + std::to_string(listen_port) + " " + ec.message();
-          hub_failed.store(true);
-          rhs_cv.notify_all();
-          return;
+          acceptor_ptr = bound_acceptor.get();
+        }
+        else
+        {
+          if (!open_pipeline_acceptor(accept_io, listen_port, stack_acceptor, ec))
+          {
+            hub_fail_msg = "hub bind failed port=" + std::to_string(listen_port) + " " + ec.message();
+            hub_failed.store(true);
+            rhs_cv.notify_all();
+            return;
+          }
+          acceptor_ptr = &stack_acceptor;
         }
         struct PipelineAcceptorGuard
         {
@@ -1062,14 +1582,11 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           ~PipelineAcceptorGuard()
           {
             if (acceptor)
-            {
-              asio::error_code close_ec;
-              acceptor->close(close_ec);
-            }
+              close_pipeline_acceptor(*acceptor);
           }
-        } acceptor_guard{&acceptor};
-        asio::ip::tcp::socket in_socket(io);
-        if (!accept_pipeline_socket(acceptor, in_socket, ec, 45, &hub_failed))
+        } acceptor_guard{acceptor_ptr};
+        asio::ip::tcp::socket in_socket(accept_io);
+        if (!accept_pipeline_socket(*acceptor_ptr, in_socket, ec, 45, &hub_failed))
         {
           hub_fail_msg = "hub accept failed: " + ec.message();
           hub_failed.store(true);
@@ -1084,7 +1601,8 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           PipelineShardHeader hdr{};
           PipelineStreamEndHeader end_hdr{};
           std::vector<unsigned char> partial;
-          const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
+          const PipelineFrameType frame =
+              recv_pipeline_frame(in_socket, hdr, end_hdr, partial, hub_repair_ingress, ec);
           if (frame == PipelineFrameType::ERROR)
           {
             hub_fail_msg = "hub recv frame failed: " + ec.message();
@@ -1154,6 +1672,17 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   double min_decode_start = 0.0, max_decode_end = 0.0;
   double total_write_net = 0.0;
   double total_write_disk = 0.0;
+
+  struct HubAsyncWriteback
+  {
+    std::vector<unsigned char *> blocks;
+    std::vector<std::thread> threads;
+    std::vector<double> wnets;
+    std::vector<double> wdisks;
+  };
+  std::vector<HubAsyncWriteback> pending_writes;
+  std::atomic<bool> any_write_failed{false};
+
   for (int shard = 0; shard < shard_count; shard++)
   {
     const int off = shard * stripe_len;
@@ -1207,47 +1736,49 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     // Release lock while writing stripes so listeners can mark rhs_ready for the next shard.
     lock.unlock();
 
-    std::vector<std::thread> write_threads;
-    std::vector<double> wnets(f, 0.0), wdisks(f, 0.0);
-    std::atomic<bool> write_failed{false};
+    pending_writes.emplace_back();
+    HubAsyncWriteback &wb = pending_writes.back();
+    wb.blocks = std::move(shard_recovered);
+    wb.wnets.assign(f, 0.0);
+    wb.wdisks.assign(f, 0.0);
     for (int i = 0; i < f; i++)
     {
-      write_threads.emplace_back([this, i, &shard_recovered, off, stripe_len, recovery_request, &failed_ids, &wnets,
-                                  &wdisks, &write_failed]() {
-        double wnet = 0.0, wdisk = 0.0;
+      wb.threads.emplace_back([this, i, &wb, off, stripe_len, recovery_request, &failed_ids, &any_write_failed]() {
         if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(i).c_str(), failed_ids[i],
-                                               reinterpret_cast<char *>(shard_recovered[i] + off),
+                                               reinterpret_cast<char *>(wb.blocks[i] + off),
                                                recovery_request->replaced_node_ips(i).c_str(),
-                                               recovery_request->replaced_node_ports(i), off, stripe_len, &wnet, &wdisk))
-          write_failed.store(true);
-        wnets[i] = wnet;
-        wdisks[i] = wdisk;
+                                               recovery_request->replaced_node_ports(i), off, stripe_len, &wb.wnets[i],
+                                               &wb.wdisks[i]))
+          any_write_failed.store(true);
       });
     }
-    for (auto &th : write_threads)
+    {
+      char tb[128];
+      snprintf(tb, sizeof(tb), "hub decode shard=%d/%d (writeback async)", shard, shard_count);
+      pipeline_trace(tb);
+    }
+  }
+
+  for (auto &wb : pending_writes)
+  {
+    for (auto &th : wb.threads)
     {
       if (th.joinable())
         th.join();
     }
-    for (unsigned char *p : shard_recovered)
+    for (int i = 0; i < f && i < (int)wb.wnets.size(); i++)
+    {
+      total_write_net += wb.wnets[i];
+      total_write_disk += wb.wdisks[i];
+    }
+    for (unsigned char *p : wb.blocks)
       delete[] p;
-
-    if (write_failed.load())
-    {
-      hub_fail_msg = "pipeline hub stripe write-back failed shard=" + std::to_string(shard);
-      hub_failed.store(true);
-      break;
-    }
-    for (int i = 0; i < f; i++)
-    {
-      total_write_net += wnets[i];
-      total_write_disk += wdisks[i];
-    }
-    {
-      char tb[128];
-      snprintf(tb, sizeof(tb), "hub wrote shard=%d/%d", shard, shard_count);
-      pipeline_trace(tb);
-    }
+    wb.blocks.clear();
+  }
+  if (any_write_failed.load())
+  {
+    hub_fail_msg = "pipeline hub stripe write-back failed";
+    hub_failed.store(true);
   }
 
   for (auto &th : listeners)

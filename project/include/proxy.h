@@ -133,7 +133,7 @@ namespace ECProject
     void get_from_node(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index);
     void get_from_node_breakdown(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index, 
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
-    void initIngressBandwidth();
+    void initNodeBandwidth();
     bool GetFromDatanodeStripeRangeBreakdown(const std::string &key, char *value, size_t full_block_size,
                                              int read_offset, int read_length, const char *ip, const int port,
                                              double *disk_io_start_time, double *disk_io_end_time,
@@ -165,6 +165,8 @@ namespace ECProject
                                           proxy_proto::RecoveryReply *response);
     bool glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRequest *recovery_request,
                                             proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelinePrelistenRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                          proxy_proto::RecoveryReply *response);
 
   private:
     std::mutex m_glrc_phase2_mutex;
@@ -172,6 +174,7 @@ namespace ECProject
     std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_ingress_bw;
     std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_egress_bw;
     std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
+    std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
     std::mutex m_mutex;
     std::condition_variable cv;
     bool init_coordinator();
@@ -199,7 +202,7 @@ namespace ECProject
     {
       m_proxyImpl_ptr.m_sys_config = ECProject::Config::getInstance(sys_config_path);
       m_proxyImpl_ptr.m_toolbox = ECProject::ToolBox::getInstance();
-      m_proxyImpl_ptr.initIngressBandwidth();
+      m_proxyImpl_ptr.initNodeBandwidth();
     }
     void Run()
     {

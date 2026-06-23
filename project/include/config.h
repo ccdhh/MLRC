@@ -15,6 +15,8 @@ namespace ECProject
   /** Must match generate_local_cluster.py BASE_PROXY / PROXY_STRIDE. */
   const int PROXY_GRPC_BASE = 50405;
   const int PROXY_GRPC_STRIDE = 2;
+  /** Inclusive max proxy index (45 local proxies: 0..44). Must match generate_local_cluster.py. */
+  const int PROXY_GRPC_MAX_INDEX = 44;
   const int PROXY_PHASE2_PER_PROXY_BAND = 256;
   /** Base TCP port for gLRC pipeline shard exchange (see pipeline_*_listen_port). */
   const int PROXY_PIPELINE_EXCHANGE_BASE = 53000;
@@ -59,6 +61,8 @@ namespace ECProject
     std::string GlrcRepairMode = "phase1";
     std::string GlrcEquationPolicy = "local-then-global";
     int GlrcShardCount = 16;
+    /** Pipeline in-flight shard window (W). 0 = W=GlrcShardCount (full pipeline); 1 = serial W=1. */
+    int GlrcPipelineWindow = 0;
     /** Phase2: write recovered blocks back to datanodes (disable for repeated random-failure trials on one stripe). */
     bool GlrcPhase2WriteBack = true;
     int N = 0;

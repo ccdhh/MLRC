@@ -10,6 +10,8 @@
 #include <vector>
 #include "meta_definition.h"
 #include "config.h"
+#include "link_bandwidth.h"
+#include <memory>
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
@@ -87,8 +89,11 @@ namespace ECProject
         void deserialize(const std::string &filename, char *buf);
         bool createDirectories(const std::string &path);
         ECProject::Config *m_sys_config;
+        void initNodeBandwidth();
 
     private:
+        std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
+        std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
         std::string datanode_ip_port;
         std::string m_ip;
         int m_port;
@@ -105,6 +110,7 @@ namespace ECProject
         DataNode(std::string datanode_ip_port, std::string sys_config_path) : datanode_ip_port(datanode_ip_port), m_datanodeImpl_ptr(datanode_ip_port)
         {
             m_datanodeImpl_ptr.m_sys_config = ECProject::Config::getInstance(sys_config_path);
+            m_datanodeImpl_ptr.initNodeBandwidth();
         }
 
         void Run()

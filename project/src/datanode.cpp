@@ -1,4 +1,5 @@
 #include "datanode.h"
+#include "link_bandwidth.h"
 #include "toolbox.h"
 #include "unilrc_encoder.h"
 #include <chrono>
@@ -10,6 +11,19 @@
 #include <sys/stat.h>
 namespace ECProject
 {
+    void DatanodeImpl::initNodeBandwidth()
+    {
+        m_ingress_bandwidth.reset();
+        m_egress_bandwidth.reset();
+        if (m_sys_config != nullptr && m_sys_config->NodeBlockBandwidthMBps > 0.0)
+        {
+            m_ingress_bandwidth =
+                std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+            m_egress_bandwidth =
+                std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+        }
+    }
+
     grpc::Status DatanodeImpl::checkalive(
         grpc::ServerContext *context,
         const datanode_proto::CheckaliveCMD *request,
@@ -290,7 +304,8 @@ namespace ECProject
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                asio::read(socket, asio::buffer(buf.data(), m_sys_config->BlockSize), ec);
+                tcp_read_with_shared_bandwidth(socket, buf.data(), m_sys_config->BlockSize, m_ingress_bandwidth.get(),
+                                               ec);
 
                 asio::error_code ignore_ec;
                 socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
@@ -361,7 +376,7 @@ namespace ECProject
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                asio::read(socket, asio::buffer(buf.data(), recovery_size), ec);
+                tcp_read_with_shared_bandwidth(socket, buf.data(), recovery_size, m_ingress_bandwidth.get(), ec);
 
                 asio::error_code ignore_ec;
                 socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
@@ -739,7 +754,9 @@ namespace ECProject
         }
         response->set_data_port(data_acceptor->local_endpoint().port());
 
-        auto handler = [this, read_length, data_acceptor](char *payload) mutable
+        const bool stripe_local_read =
+            read_length > 0 && read_length < block_size;
+        auto handler = [this, read_length, stripe_local_read, data_acceptor](char *payload) mutable
         {
             int data_port = data_acceptor->local_endpoint().port();
             asio::error_code error;
@@ -753,7 +770,14 @@ namespace ECProject
             }
             else
             {
-                size_t wrote = asio::write(socket, asio::buffer(payload, read_length), error);
+                size_t wrote = 0;
+                if (stripe_local_read)
+                    wrote = asio::write(socket, asio::buffer(payload, read_length), error);
+                else
+                {
+                    tcp_write_with_shared_bandwidth(socket, payload, read_length, m_egress_bandwidth.get(), error);
+                    wrote = error ? 0 : read_length;
+                }
                 if (IF_DEBUG)
                 {
                     std::cout << "[Datanode" << m_port << "][GET] data_port " << data_port << " wrote " << wrote << "/"
@@ -815,7 +839,7 @@ namespace ECProject
             asio::error_code error;
             asio::ip::tcp::socket socket(io_context);
             acceptor.accept(socket);
-            asio::write(socket, asio::buffer(buf, block_size), error);
+            tcp_write_with_shared_bandwidth(socket, buf, block_size, m_egress_bandwidth.get(), error);
             asio::error_code ignore_ec;
             socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
             socket.close(ignore_ec);

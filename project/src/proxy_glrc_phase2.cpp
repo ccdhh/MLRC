@@ -267,8 +267,9 @@ bool ProxyImpl::GetFromDatanodeStripeRangeBreakdown(const std::string &key, char
     // instead of hanging the whole partition (and the coordinator) indefinitely.
     set_exchange_socket_timeouts(socket, 45);
     asio::error_code ec;
-    SharedBandwidthLimiter *bw = block_bandwidth != nullptr ? block_bandwidth : m_ingress_bandwidth.get();
-    tcp_read_with_shared_bandwidth(socket, value + read_offset, static_cast<size_t>(read_length), bw, ec);
+    // nullptr block_bandwidth = unlimited (pipeline co-located local stripe reads).
+    tcp_read_with_shared_bandwidth(socket, value + read_offset, static_cast<size_t>(read_length), block_bandwidth,
+                                   ec);
     if (ec)
     {
       char tb[256];

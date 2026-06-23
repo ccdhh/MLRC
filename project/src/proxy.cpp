@@ -35,12 +35,15 @@ inline T ceil(T const &A, T const &B)
 };
 namespace ECProject
 {
-  void ProxyImpl::initIngressBandwidth()
+  void ProxyImpl::initNodeBandwidth()
   {
     m_ingress_bandwidth.reset();
+    m_egress_bandwidth.reset();
     if (m_sys_config != nullptr && m_sys_config->NodeBlockBandwidthMBps > 0.0)
     {
       m_ingress_bandwidth =
+          std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+      m_egress_bandwidth =
           std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
     }
   }
@@ -235,7 +238,7 @@ namespace ECProject
       }
       std::cout << "[RecoveryToDatanode] Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT
                 << " success! block_key: " << block_key << " block_id: " << block_id << std::endl;
-      asio::write(socket, asio::buffer(buf, m_sys_config->BlockSize), error);
+      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize, m_egress_bandwidth.get(), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -295,7 +298,7 @@ namespace ECProject
       }
       std::cout << "[RecoveryToDatanode] Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT
                 << " success! block_key: " << block_key << " block_id: " << block_id << std::endl;
-      asio::write(socket, asio::buffer(buf, m_sys_config->BlockSize), error);
+      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize, m_egress_bandwidth.get(), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -364,7 +367,7 @@ namespace ECProject
         notify_datanode_thread.join();
         return false;
       }
-      asio::write(socket, asio::buffer(buf, recovery_size), error);
+      tcp_write_with_shared_bandwidth(socket, buf, recovery_size, m_egress_bandwidth.get(), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -1257,6 +1260,8 @@ namespace ECProject
     {
       if (m_ingress_bandwidth)
         m_ingress_bandwidth->reset();
+      if (m_egress_bandwidth)
+        m_egress_bandwidth->reset();
       std::string code_type = m_sys_config->CodeType;
       // auto status = std::make_shared<std::vector<bool>>(request_copy->datanodeip_size(), false);
       std::unique_ptr<bool[]> status(new bool[request_copy->datanodeip_size()]);
@@ -1410,6 +1415,8 @@ namespace ECProject
     {
       if (m_ingress_bandwidth)
         m_ingress_bandwidth->reset();
+      if (m_egress_bandwidth)
+        m_egress_bandwidth->reset();
       std::string code_type = m_sys_config->CodeType;
       // auto status = std::make_shared<std::vector<bool>>(request_copy->datanodeip_size(), false);
       std::unique_ptr<bool[]> status(new bool[request_copy->datanodeip_size()]);
@@ -2303,6 +2310,8 @@ namespace ECProject
     // resetting shared ingress here races with in-flight datanode reads.
     if (m_ingress_bandwidth && !pipeline_recovery)
       m_ingress_bandwidth->reset();
+    if (m_egress_bandwidth && !pipeline_recovery)
+      m_egress_bandwidth->reset();
     std::chrono::high_resolution_clock::time_point START = std::chrono::high_resolution_clock::now();
     response->set_grpc_start_time(std::chrono::duration_cast<std::chrono::duration<double>>(START.time_since_epoch()).count());
     try
