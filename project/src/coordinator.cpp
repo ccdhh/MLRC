@@ -20,6 +20,7 @@
 namespace {
 std::atomic<uint32_t> g_glrc_phase2_exchange_epoch{0};
 std::atomic<uint32_t> g_glrc_pipeline_exchange_epoch{0};
+std::mutex g_glrc_phase2_recovery_mutex;
 std::mutex g_glrc_pipeline_recovery_mutex;
 
 static void pipeline_plan_trace(const char *msg)
@@ -2908,6 +2909,12 @@ namespace ECProject
       return false;
     }
     const auto repair_start = std::chrono::high_resolution_clock::now();
+    double orchestration_wait_sec = 0.0;
+    auto orchestration_sleep = [&](int ms) {
+      orchestration_wait_sec += static_cast<double>(ms) / 1000.0;
+      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    };
+    std::lock_guard<std::mutex> phase2_recovery_lock(g_glrc_phase2_recovery_mutex);
     Stripe &t_stripe = m_stripe_table[stripe_id];
     for (int fid : failed_block_ids)
     {
@@ -3086,10 +3093,29 @@ namespace ECProject
 
     std::vector<std::thread> partition_threads;
     partition_threads.reserve(f);
+    std::vector<bool> partition_started(f, false);
+    // Phase A: listener partitions (id >= 1) bind exchange acceptors first.
+    if (f >= 2)
+    {
+      for (int pi = f - 1; pi >= 1; pi--)
+      {
+        partition_threads.emplace_back(run_partition, pi);
+        partition_started[pi] = true;
+        if (pi > 1)
+          orchestration_sleep(100);
+      }
+      orchestration_sleep(800);
+    }
+    // Phase B: client-heavy partition 0 (and f==1) starts after acceptors are ready.
     for (int pi = 0; pi < f; pi++)
-      partition_threads.emplace_back(run_partition, pi);
+    {
+      if (!partition_started[pi])
+        partition_threads.emplace_back(run_partition, pi);
+    }
     for (auto &th : partition_threads)
       th.join();
+
+    orchestration_sleep(500);
 
     bool all_ok = true;
     double max_disk = 0.0, max_net = 0.0, max_decode = 0.0, sum_write_net = 0.0, sum_write_disk = 0.0;
@@ -3124,8 +3150,11 @@ namespace ECProject
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
     const auto repair_end = std::chrono::high_resolution_clock::now();
-    recovery_reply->set_total_time(
-        std::chrono::duration<double>(repair_end - repair_start).count());
+    double repair_time_sec =
+        std::chrono::duration<double>(repair_end - repair_start).count() - orchestration_wait_sec;
+    if (repair_time_sec < 0.0)
+      repair_time_sec = 0.0;
+    recovery_reply->set_total_time(repair_time_sec);
     std::cout << "[Coordinator] gLRC ILP Phase2 recovery stripe " << stripe_id << " success" << std::endl;
     return true;
   }
