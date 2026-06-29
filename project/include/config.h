@@ -57,8 +57,10 @@ namespace ECProject
     int CoordinatorPort = 55555;
     std::string AppendMode = "UNILRC_MODE";
     std::string CodeType = "UniLRC";
-    /** gLRC repair: "phase1" (single proxy) or "phase2" (sharded stripes). */
+    /** gLRC repair: "phase1", "phase2", "pipeline", or "hybrid". */
     std::string GlrcRepairMode = "phase1";
+    /** Hybrid split p: "auto" or integer in [0, GlrcShardCount-1]. 0 = pipeline-only. */
+    std::string GlrcHybridP = "auto";
     std::string GlrcEquationPolicy = "local-then-global";
     int GlrcShardCount = 16;
     /** Pipeline in-flight shard window (W). 0 = W=GlrcShardCount (full pipeline); 1 = serial W=1. */

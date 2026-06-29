@@ -2303,14 +2303,15 @@ namespace ECProject
     proxy_proto::RecoveryReply *response)
   {
     response->Clear();
-    const bool pipeline_recovery =
-        recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_pipeline() &&
-        m_sys_config != nullptr && m_sys_config->CodeType == "gLRC";
-    // Pipeline may run several recoveryBreakdown RPCs concurrently on one proxy (hub/hop/chain);
-    // resetting shared ingress here races with in-flight datanode reads.
-    if (m_ingress_bandwidth && !pipeline_recovery)
+    const bool glrc_concurrent_recovery =
+        recovery_request->glrc_ilp_recovery() && m_sys_config != nullptr && m_sys_config->CodeType == "gLRC" &&
+        (recovery_request->glrc_ilp_pipeline() || recovery_request->glrc_ilp_phase2());
+    // Pipeline / Phase2 may run several recoveryBreakdown RPCs concurrently on one proxy
+    // (hub/hop/chain, or hybrid phase2+pipeline on the same repair proxy). Resetting shared
+    // ingress/egress here races with in-flight datanode reads on other threads.
+    if (m_ingress_bandwidth && !glrc_concurrent_recovery)
       m_ingress_bandwidth->reset();
-    if (m_egress_bandwidth && !pipeline_recovery)
+    if (m_egress_bandwidth && !glrc_concurrent_recovery)
       m_egress_bandwidth->reset();
     std::chrono::high_resolution_clock::time_point START = std::chrono::high_resolution_clock::now();
     response->set_grpc_start_time(std::chrono::duration_cast<std::chrono::duration<double>>(START.time_since_epoch()).count());

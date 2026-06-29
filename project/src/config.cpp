@@ -111,6 +111,8 @@ namespace ECProject
       GlrcShardCount = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcPipelineWindow"))
       GlrcPipelineWindow = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("GlrcHybridP"))
+      GlrcHybridP = std::string(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcPhase2WriteBack"))
     {
       std::string v = elem->GetText();
@@ -192,6 +194,7 @@ namespace ECProject
       std::cout << "  GlrcShardCount: " << GlrcShardCount << std::endl;
       std::cout << "  GlrcPipelineWindow: " << GlrcPipelineWindow
                 << (GlrcPipelineWindow == 0 ? " (full pipeline, W=GlrcShardCount)" : "") << std::endl;
+      std::cout << "  GlrcHybridP: " << GlrcHybridP << std::endl;
       std::cout << "  GlrcPhase2WriteBack: " << (GlrcPhase2WriteBack ? "true" : "false") << std::endl;
     }
   }

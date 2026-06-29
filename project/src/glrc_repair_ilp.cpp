@@ -606,6 +606,38 @@ double glrc_phase2_est_system_network_sec(int helper_count, int failed_count,
   return est_max;
 }
 
+bool glrc_failures_at_most_one_per_group(int k, int r, int z, const std::vector<int> &failed_block_ids)
+{
+  if (failed_block_ids.empty())
+    return false;
+  std::vector<std::vector<int>> groups;
+  glrc_build_placement_groups(k, r, z, groups);
+  std::vector<int> per_group(groups.size(), 0);
+  for (int fid : failed_block_ids)
+  {
+    bool found = false;
+    for (size_t gi = 0; gi < groups.size(); gi++)
+    {
+      for (int b : groups[gi])
+      {
+        if (b == fid)
+        {
+          per_group[gi]++;
+          if (per_group[gi] > 1)
+            return false;
+          found = true;
+          break;
+        }
+      }
+      if (found)
+        break;
+    }
+    if (!found)
+      return false;
+  }
+  return true;
+}
+
 std::string glrc_block_label(int block_id, int k, int r, int z)
 {
   const int n = k + r + z;

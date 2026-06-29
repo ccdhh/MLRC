@@ -2,6 +2,7 @@
 #include "glrc_repair_ilp.h"
 #include "glrc_pipeline_plan.h"
 #include "glrc_shard_plan.h"
+#include "glrc_hybrid.h"
 #include "config.h"
 #include "tinyxml2.h"
 #include <random>
@@ -22,6 +23,7 @@ std::atomic<uint32_t> g_glrc_phase2_exchange_epoch{0};
 std::atomic<uint32_t> g_glrc_pipeline_exchange_epoch{0};
 std::mutex g_glrc_phase2_recovery_mutex;
 std::mutex g_glrc_pipeline_recovery_mutex;
+std::mutex g_glrc_hybrid_recovery_mutex;
 
 static void pipeline_plan_trace(const char *msg)
 {
@@ -147,16 +149,22 @@ void GlrcPipelinePortAllocator::reset_port_session()
 }
 
 void fill_pipeline_chain_fields(proxy_proto::RecoveryRequest &req, const ECProject::GlrcPipelineChainPlan &chain,
-                                const ECProject::GlrcPipelinePlan &plan, int shard_count, int z,
+                                const ECProject::GlrcPipelinePlan &plan, int local_shard_count, int z,
                                 ECProject::GlrcPipelineRole role, int my_hop_index,
-                                const GlrcPipelineChainPorts *chain_ports = nullptr)
+                                const GlrcPipelineChainPorts *chain_ports = nullptr,
+                                int global_shard_begin = 0, int global_shard_count = 0)
 {
   req.set_pipeline_role(static_cast<int>(role));
   req.set_pipeline_chain_id(chain.chain_id);
   req.set_pipeline_equation_index(chain.equation_index);
   req.set_pipeline_eq_slot(chain.eq_slot);
   req.set_pipeline_exchange_epoch(plan.exchange_epoch);
-  req.set_pipeline_shard_count(shard_count);
+  req.set_pipeline_shard_count(local_shard_count);
+  if (global_shard_count > 0)
+  {
+    req.set_pipeline_shard_global_begin(global_shard_begin);
+    req.set_pipeline_global_shard_count(global_shard_count);
+  }
   req.set_pipeline_hub_block_id(plan.hub_block_id);
   req.set_pipeline_hub_proxy_ip(plan.hub_proxy_ip);
   req.set_pipeline_hub_proxy_port(plan.hub_proxy_port);
@@ -2902,6 +2910,17 @@ namespace ECProject
                                                          const std::vector<int> &failed_block_ids,
                                                          coordinator_proto::RecoveryReply *recovery_reply)
   {
+    return recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, recovery_reply, nullptr, 0, true,
+                                                 nullptr);
+  }
+
+  bool CoordinatorImpl::recovery_glrc_ilp_phase2_breakdown_ex(int stripe_id,
+                                                            const std::vector<int> &failed_block_ids,
+                                                            coordinator_proto::RecoveryReply *recovery_reply,
+                                                            const GlrcIlpRepairPlan *preset_plan,
+                                                            int shard_count_override, bool acquire_mutex,
+                                                            double *out_orchestration_wait_sec)
+  {
     if (m_sys_config->CodeType != "gLRC")
     {
       recovery_reply->set_message("recovery_glrc_ilp_phase2 requires CodeType gLRC");
@@ -2914,7 +2933,9 @@ namespace ECProject
       orchestration_wait_sec += static_cast<double>(ms) / 1000.0;
       std::this_thread::sleep_for(std::chrono::milliseconds(ms));
     };
-    std::lock_guard<std::mutex> phase2_recovery_lock(g_glrc_phase2_recovery_mutex);
+    std::unique_ptr<std::lock_guard<std::mutex>> phase2_recovery_lock;
+    if (acquire_mutex)
+      phase2_recovery_lock = std::make_unique<std::lock_guard<std::mutex>>(g_glrc_phase2_recovery_mutex);
     Stripe &t_stripe = m_stripe_table[stripe_id];
     for (int fid : failed_block_ids)
     {
@@ -2927,20 +2948,34 @@ namespace ECProject
     }
 
     const std::string equation_policy =
-        glrc_normalize_equation_policy(m_sys_config->GlrcEquationPolicy);
-    GlrcIlpRepairPlan plan;
-    if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                equation_policy, plan))
+        preset_plan ? "ilp-min-helper"
+                    : glrc_normalize_equation_policy(m_sys_config->GlrcEquationPolicy);
+    GlrcIlpRepairPlan owned_plan;
+    const GlrcIlpRepairPlan *plan_ptr = preset_plan;
+    if (!plan_ptr)
     {
-      recovery_reply->set_message(plan.error_message);
+      if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                  equation_policy, owned_plan))
+      {
+        recovery_reply->set_message(owned_plan.error_message);
+        recovery_reply->set_success(false);
+        recovery_reply->set_ilp_time(owned_plan.ilp_solve_time_sec);
+        recovery_reply->set_equation_policy(equation_policy);
+        return false;
+      }
+      plan_ptr = &owned_plan;
+    }
+    else if (!plan_ptr->success)
+    {
+      recovery_reply->set_message(plan_ptr->error_message.empty() ? "preset phase2 plan failed" : plan_ptr->error_message);
       recovery_reply->set_success(false);
-      recovery_reply->set_ilp_time(plan.ilp_solve_time_sec);
-      recovery_reply->set_equation_policy(equation_policy);
       return false;
     }
+    const GlrcIlpRepairPlan &plan = *plan_ptr;
 
     const int f = (int)failed_block_ids.size();
-    const int shard_count = m_sys_config->GlrcShardCount;
+    const int shard_count =
+        shard_count_override > 0 ? shard_count_override : m_sys_config->GlrcShardCount;
     std::vector<int> failed_cluster_ids;
     std::vector<std::string> failed_proxy_ips;
     std::vector<int> failed_proxy_ports;
@@ -2955,7 +2990,8 @@ namespace ECProject
     GlrcPhase2ShardPlan shard_plan;
     std::string shard_err;
     if (!GlrcPhase2ShardPlan::build(shard_count, m_sys_config->BlockSize, failed_block_ids, failed_cluster_ids,
-                                    failed_proxy_ips, failed_proxy_ports, shard_plan, shard_err))
+                                    failed_proxy_ips, failed_proxy_ports, m_sys_config->GlrcShardCount, shard_plan,
+                                    shard_err))
     {
       recovery_reply->set_message(shard_err);
       recovery_reply->set_success(false);
@@ -3155,6 +3191,8 @@ namespace ECProject
     if (repair_time_sec < 0.0)
       repair_time_sec = 0.0;
     recovery_reply->set_total_time(repair_time_sec);
+    if (out_orchestration_wait_sec)
+      *out_orchestration_wait_sec = orchestration_wait_sec;
     std::cout << "[Coordinator] gLRC ILP Phase2 recovery stripe " << stripe_id << " success" << std::endl;
     return true;
   }
@@ -3163,14 +3201,28 @@ namespace ECProject
                                                             const std::vector<int> &failed_block_ids,
                                                             coordinator_proto::RecoveryReply *recovery_reply)
   {
+    return recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, recovery_reply, nullptr, nullptr, -1,
+                                                   0, 0, true, nullptr);
+  }
+
+  bool CoordinatorImpl::recovery_glrc_ilp_pipeline_breakdown_ex(int stripe_id,
+                                                            const std::vector<int> &failed_block_ids,
+                                                            coordinator_proto::RecoveryReply *recovery_reply,
+                                                            const GlrcIlpRepairPlan *preset_plan,
+                                                            const GlrcPipelinePlan *preset_pipeline,
+                                                            int hub_block_id_preset, int global_shard_begin,
+                                                            int local_shard_count_override, bool acquire_mutex,
+                                                            double *out_orchestration_wait_sec)
+  {
     if (m_sys_config->CodeType != "gLRC")
     {
       recovery_reply->set_message("recovery_glrc_ilp_pipeline requires CodeType gLRC");
       recovery_reply->set_success(false);
       return false;
     }
-    // One pipeline recovery at a time: overlapping recoveries reuse listen ports before acceptors close.
-    std::lock_guard<std::mutex> pipeline_recovery_lock(g_glrc_pipeline_recovery_mutex);
+    std::unique_ptr<std::lock_guard<std::mutex>> pipeline_recovery_lock;
+    if (acquire_mutex)
+      pipeline_recovery_lock = std::make_unique<std::lock_guard<std::mutex>>(g_glrc_pipeline_recovery_mutex);
     const auto repair_start = std::chrono::high_resolution_clock::now();
     double orchestration_wait_sec = 0.0;
     Stripe &t_stripe = m_stripe_table[stripe_id];
@@ -3185,17 +3237,30 @@ namespace ECProject
     }
 
     const std::string equation_policy =
-        glrc_normalize_equation_policy(m_sys_config->GlrcEquationPolicy);
-    GlrcIlpRepairPlan plan;
-    if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                equation_policy, plan))
+        preset_plan ? "local-first"
+                    : glrc_normalize_equation_policy(m_sys_config->GlrcEquationPolicy);
+    GlrcIlpRepairPlan owned_plan;
+    const GlrcIlpRepairPlan *plan_ptr = preset_plan;
+    if (!plan_ptr)
     {
-      recovery_reply->set_message(plan.error_message);
+      if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                  equation_policy, owned_plan))
+      {
+        recovery_reply->set_message(owned_plan.error_message);
+        recovery_reply->set_success(false);
+        recovery_reply->set_ilp_time(owned_plan.ilp_solve_time_sec);
+        recovery_reply->set_equation_policy(equation_policy);
+        return false;
+      }
+      plan_ptr = &owned_plan;
+    }
+    else if (!plan_ptr->success)
+    {
+      recovery_reply->set_message(plan_ptr->error_message.empty() ? "preset pipeline plan failed" : plan_ptr->error_message);
       recovery_reply->set_success(false);
-      recovery_reply->set_ilp_time(plan.ilp_solve_time_sec);
-      recovery_reply->set_equation_policy(equation_policy);
       return false;
     }
+    const GlrcIlpRepairPlan &plan = *plan_ptr;
 
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
@@ -3203,30 +3268,32 @@ namespace ECProject
                                   all_equations, candidate_indices);
     std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
 
-    std::unordered_map<int, int> helper_equation_count;
-    for (int eq_idx : plan.selected_equation_indices)
+    int hub_block_id = hub_block_id_preset;
+    if (hub_block_id < 0)
     {
-      if (eq_idx < 0 || eq_idx >= (int)all_equations.size())
-        continue;
-      for (int b : all_equations[eq_idx].involved_blocks)
+      std::unordered_map<int, int> helper_equation_count;
+      for (int eq_idx : plan.selected_equation_indices)
       {
-        if (!failed_set.count(b))
-          helper_equation_count[b]++;
+        if (eq_idx < 0 || eq_idx >= (int)all_equations.size())
+          continue;
+        for (int b : all_equations[eq_idx].involved_blocks)
+        {
+          if (!failed_set.count(b))
+            helper_equation_count[b]++;
+        }
       }
-    }
-
-    int hub_block_id = -1;
-    int best_count = -1;
-    for (const auto &kv : helper_equation_count)
-    {
-      if (kv.second > best_count || (kv.second == best_count && (hub_block_id < 0 || kv.first < hub_block_id)))
+      int best_count = -1;
+      for (const auto &kv : helper_equation_count)
       {
-        hub_block_id = kv.first;
-        best_count = kv.second;
+        if (kv.second > best_count || (kv.second == best_count && (hub_block_id < 0 || kv.first < hub_block_id)))
+        {
+          hub_block_id = kv.first;
+          best_count = kv.second;
+        }
       }
+      if (hub_block_id < 0 && !plan.helper_block_ids.empty())
+        hub_block_id = plan.helper_block_ids[0];
     }
-    if (hub_block_id < 0 && !plan.helper_block_ids.empty())
-      hub_block_id = plan.helper_block_ids[0];
     if (hub_block_id < 0)
     {
       recovery_reply->set_message("pipeline hub selection failed");
@@ -3254,17 +3321,24 @@ namespace ECProject
       nl.block_key = blk->block_key;
     }
 
-    GlrcPipelinePlan pipeline_plan;
-    const int exchange_epoch = static_cast<int>(g_glrc_pipeline_exchange_epoch.fetch_add(1));
+    GlrcPipelinePlan owned_pipeline_plan;
+    const GlrcPipelinePlan *pipeline_plan_ptr = preset_pipeline;
+    const int exchange_epoch = preset_pipeline ? preset_pipeline->exchange_epoch
+                                               : static_cast<int>(g_glrc_pipeline_exchange_epoch.fetch_add(1));
     std::string plan_error;
-    if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan,
-                                  all_equations, hub_block_id, node_lookup, exchange_epoch, pipeline_plan,
-                                  plan_error))
+    if (!pipeline_plan_ptr)
     {
-      recovery_reply->set_message(plan_error);
-      recovery_reply->set_success(false);
-      return false;
+      if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan,
+                                    all_equations, hub_block_id, node_lookup, exchange_epoch, owned_pipeline_plan,
+                                    plan_error))
+      {
+        recovery_reply->set_message(plan_error);
+        recovery_reply->set_success(false);
+        return false;
+      }
+      pipeline_plan_ptr = &owned_pipeline_plan;
     }
+    const GlrcPipelinePlan &pipeline_plan = *pipeline_plan_ptr;
 
     const std::string hub_proxy_key = pipeline_plan.hub_proxy_ip + ":" + std::to_string(pipeline_plan.hub_proxy_port);
     recovery_reply->set_ilp_time(plan.ilp_solve_time_sec);
@@ -3277,13 +3351,17 @@ namespace ECProject
       recovery_reply->add_helper_block_ids(hid);
 
     const int ck = m_sys_config->k, cr = m_sys_config->r, cz = m_sys_config->z;
-    const int shard_count = m_sys_config->GlrcShardCount;
+    const int global_shard_count = m_sys_config->GlrcShardCount;
+    const int local_shard_count =
+        local_shard_count_override > 0 ? local_shard_count_override : global_shard_count;
+    const int pipeline_global_begin = global_shard_begin;
     std::cout << "[Coordinator] gLRC Pipeline chain plan (" << equation_policy << "): f=" << failed_block_ids.size()
               << " failed_blocks=" << glrc_format_block_list(failed_block_ids, ck, cr, cz)
               << " hub=" << glrc_block_label(hub_block_id, ck, cr, cz) << " hub_proxy=" << hub_proxy_key
               << " hub_chains=" << pipeline_plan.hub_chains.size()
-              << " local_direct_chains=" << pipeline_plan.local_direct_chains.size() << " shards=" << shard_count
-              << " epoch=" << exchange_epoch << std::endl;
+              << " local_direct_chains=" << pipeline_plan.local_direct_chains.size()
+              << " shards=" << local_shard_count << "/" << global_shard_count
+              << " begin=" << pipeline_global_begin << " epoch=" << exchange_epoch << std::endl;
 
     struct PipelineRpcResult
     {
@@ -3323,7 +3401,12 @@ namespace ECProject
       req.set_glrc_ilp_recovery(true);
       req.set_glrc_ilp_pipeline(true);
       req.set_cross_rack_num(0);
-      req.set_pipeline_shard_count(shard_count);
+      req.set_pipeline_shard_count(local_shard_count);
+      if (pipeline_global_begin > 0 || local_shard_count != global_shard_count)
+      {
+        req.set_pipeline_shard_global_begin(pipeline_global_begin);
+        req.set_pipeline_global_shard_count(global_shard_count);
+      }
       req.set_pipeline_hub_block_id(hub_block_id);
       req.set_pipeline_exchange_epoch(exchange_epoch);
       for (int fid : failed_block_ids)
@@ -3485,7 +3568,8 @@ namespace ECProject
         const auto cp_it = chain_ports.find(chain.chain_id);
         if (cp_it != chain_ports.end())
           cp = &cp_it->second;
-        fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
+        fill_pipeline_chain_fields(req, chain, pipeline_plan, local_shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi,
+                                   cp, pipeline_global_begin, global_shard_count);
         launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
         orchestration_sleep(50);
       }
@@ -3545,7 +3629,8 @@ namespace ECProject
       const auto cp_it = chain_ports.find(chain.chain_id);
       if (cp_it != chain_ports.end())
         cp = &cp_it->second;
-      fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::CHAIN_HEAD, 0, cp);
+      fill_pipeline_chain_fields(req, chain, pipeline_plan, local_shard_count, cz, GlrcPipelineRole::CHAIN_HEAD, 0, cp,
+                                 pipeline_global_begin, global_shard_count);
       launch_pipeline_rpc(proxy_key_from_hop(chain.hops[0]), req);
     }
 
@@ -3557,7 +3642,8 @@ namespace ECProject
       const GlrcPipelineNodeLookup &nl = node_lookup[fid];
       const std::string failed_proxy = nl.proxy_ip + ":" + std::to_string(nl.proxy_port);
       proxy_proto::RecoveryRequest req = make_base_request();
-      fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::LOCAL_DIRECT, 0);
+      fill_pipeline_chain_fields(req, chain, pipeline_plan, local_shard_count, cz, GlrcPipelineRole::LOCAL_DIRECT, 0,
+                                 nullptr, pipeline_global_begin, global_shard_count);
       launch_pipeline_rpc(failed_proxy, req);
     }
 
@@ -3595,8 +3681,278 @@ namespace ECProject
     recovery_reply->set_disk_write_time(total_write_disk);
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
+    if (out_orchestration_wait_sec)
+      *out_orchestration_wait_sec = orchestration_wait_sec;
     std::cout << "[Coordinator] gLRC Pipeline chain recovery stripe " << stripe_id << " success via hub "
               << glrc_block_label(hub_block_id, ck, cr, cz) << std::endl;
+    return true;
+  }
+
+  bool CoordinatorImpl::recovery_glrc_ilp_hybrid_breakdown(int stripe_id,
+                                                           const std::vector<int> &failed_block_ids,
+                                                           coordinator_proto::RecoveryReply *recovery_reply)
+  {
+    if (m_sys_config->CodeType != "gLRC")
+    {
+      recovery_reply->set_message("recovery_glrc_ilp_hybrid requires CodeType gLRC");
+      recovery_reply->set_success(false);
+      return false;
+    }
+    std::lock_guard<std::mutex> hybrid_lock(g_glrc_hybrid_recovery_mutex);
+    const auto repair_start = std::chrono::high_resolution_clock::now();
+    Stripe &t_stripe = m_stripe_table[stripe_id];
+    for (int fid : failed_block_ids)
+    {
+      if (fid < 0 || fid >= (int)t_stripe.blocks.size() || t_stripe.blocks[fid] == nullptr)
+      {
+        recovery_reply->set_message("invalid failed block id: " + std::to_string(fid));
+        recovery_reply->set_success(false);
+        return false;
+      }
+    }
+
+    const int f = static_cast<int>(failed_block_ids.size());
+    const int global_S = m_sys_config->GlrcShardCount;
+    const int ck = m_sys_config->k, cr = m_sys_config->r, cz = m_sys_config->z;
+
+    GlrcIlpRepairPlan plan_lf;
+    if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                "local-first", plan_lf))
+    {
+      recovery_reply->set_message(plan_lf.error_message);
+      recovery_reply->set_success(false);
+      recovery_reply->set_ilp_time(plan_lf.ilp_solve_time_sec);
+      return false;
+    }
+
+    std::vector<GlrcEquation> all_equations;
+    std::vector<int> candidate_indices;
+    glrc_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, all_equations,
+                                  candidate_indices);
+    std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
+
+    std::unordered_map<int, int> helper_equation_count;
+    for (int eq_idx : plan_lf.selected_equation_indices)
+    {
+      if (eq_idx < 0 || eq_idx >= static_cast<int>(all_equations.size()))
+        continue;
+      for (int b : all_equations[eq_idx].involved_blocks)
+      {
+        if (!failed_set.count(b))
+          helper_equation_count[b]++;
+      }
+    }
+    int hub_block_id = -1;
+    int best_count = -1;
+    for (const auto &kv : helper_equation_count)
+    {
+      if (kv.second > best_count || (kv.second == best_count && (hub_block_id < 0 || kv.first < hub_block_id)))
+      {
+        hub_block_id = kv.first;
+        best_count = kv.second;
+      }
+    }
+    if (hub_block_id < 0 && !plan_lf.helper_block_ids.empty())
+      hub_block_id = plan_lf.helper_block_ids[0];
+    if (hub_block_id < 0)
+    {
+      recovery_reply->set_message("hybrid pipeline hub selection failed");
+      recovery_reply->set_success(false);
+      return false;
+    }
+
+    const int n_blocks = m_sys_config->k + m_sys_config->r + m_sys_config->z;
+    std::vector<GlrcPipelineNodeLookup> node_lookup(n_blocks);
+    for (int bid = 0; bid < n_blocks; bid++)
+    {
+      if (bid >= static_cast<int>(t_stripe.blocks.size()) || t_stripe.blocks[bid] == nullptr)
+        continue;
+      Block *blk = t_stripe.blocks[bid];
+      const int node_id = blk->map2node;
+      auto node_it = m_node_table.find(node_id);
+      if (node_it == m_node_table.end())
+        continue;
+      GlrcPipelineNodeLookup &nl = node_lookup[bid];
+      nl.node_id = node_id;
+      nl.datanode_ip = node_it->second.node_ip;
+      nl.datanode_port = node_it->second.node_port;
+      nl.proxy_ip = node_it->second.repair_proxy_ip;
+      nl.proxy_port = node_it->second.repair_proxy_port;
+      nl.block_key = blk->block_key;
+    }
+
+    const int pipeline_epoch = static_cast<int>(g_glrc_pipeline_exchange_epoch.fetch_add(1));
+    GlrcPipelinePlan pipeline_plan;
+    std::string plan_error;
+    if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan_lf,
+                                  all_equations, hub_block_id, node_lookup, pipeline_epoch, pipeline_plan, plan_error))
+    {
+      recovery_reply->set_message(plan_error);
+      recovery_reply->set_success(false);
+      return false;
+    }
+
+    std::unordered_set<int> local_direct_failed;
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.local_direct_chains)
+      local_direct_failed.insert(chain.local_direct_failed_block_id);
+    const int pipeline_local_direct_count = static_cast<int>(pipeline_plan.local_direct_chains.size());
+
+    const std::string &hybrid_p_cfg = m_sys_config->GlrcHybridP;
+    const bool hybrid_fixed_zero = (hybrid_p_cfg == "0");
+    const bool hybrid_auto_pipeline_only =
+        (hybrid_p_cfg == "auto" || hybrid_p_cfg == "AUTO") &&
+        glrc_failures_at_most_one_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids);
+
+    GlrcIlpRepairPlan plan_ilp;
+    const GlrcIlpRepairPlan *plan_ilp_ptr = nullptr;
+    if (!hybrid_fixed_zero && !hybrid_auto_pipeline_only)
+    {
+      if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                  "ilp-min-helper", plan_ilp))
+      {
+        recovery_reply->set_message(plan_ilp.error_message);
+        recovery_reply->set_success(false);
+        recovery_reply->set_ilp_time(plan_lf.ilp_solve_time_sec + plan_ilp.ilp_solve_time_sec);
+        return false;
+      }
+      plan_ilp_ptr = &plan_ilp;
+    }
+
+    GlrcHybridChooseResult choose = glrc_hybrid_choose_p(
+        m_sys_config->k, m_sys_config->r, m_sys_config->z, f, global_S, m_sys_config->BlockSize,
+        m_sys_config->NodeBlockBandwidthMBps, plan_ilp_ptr, hub_block_id, pipeline_local_direct_count,
+        local_direct_failed, failed_block_ids, hybrid_p_cfg);
+    if (!choose.success)
+    {
+      recovery_reply->set_message(choose.error_message);
+      recovery_reply->set_success(false);
+      return false;
+    }
+    const int p = choose.p;
+    if (p > 0 && !plan_ilp.success)
+    {
+      if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                  "ilp-min-helper", plan_ilp))
+      {
+        recovery_reply->set_message(plan_ilp.error_message);
+        recovery_reply->set_success(false);
+        return false;
+      }
+    }
+    const int pipeline_begin = p;
+    const int pipeline_shards = global_S - p;
+
+    if (p == 0)
+    {
+      std::cout << "[Coordinator] gLRC Hybrid plan: f=" << f
+                << " failed_blocks=" << glrc_format_block_list(failed_block_ids, ck, cr, cz)
+                << " p=0 (pipeline-only full stripe, <=1 failure per group) pipeline_shards=[0," << global_S << ")"
+                << " local_direct=" << pipeline_local_direct_count
+                << " hub_chains=" << pipeline_plan.hub_chains.size() << std::endl;
+    }
+    else
+    {
+      std::cout << "[Coordinator] gLRC Hybrid plan: f=" << f
+                << " failed_blocks=" << glrc_format_block_list(failed_block_ids, ck, cr, cz)
+                << " p=" << p << " (p*=" << choose.p_continuous << ")"
+                << " phase2_shards=[0," << p << ") pipeline_shards=[" << p << "," << global_S << ")"
+                << " hub=" << glrc_block_label(hub_block_id, ck, cr, cz)
+                << " est_phase2~" << choose.t_phase2_est_sec << "s est_pipeline~" << choose.t_pipeline_est_sec << "s"
+                << std::endl;
+    }
+
+    const auto parallel_start = std::chrono::high_resolution_clock::now();
+
+    coordinator_proto::RecoveryReply reply_phase2;
+    coordinator_proto::RecoveryReply reply_pipeline;
+    double orch_phase2 = 0.0;
+    double orch_pipeline = 0.0;
+
+    if (p == 0)
+    {
+      reply_phase2.set_success(true);
+      reply_phase2.set_message("phase2 skipped (p=0)");
+      recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, &reply_pipeline, &plan_lf, &pipeline_plan,
+                                              hub_block_id, 0, global_S, false, &orch_pipeline);
+    }
+    else
+    {
+      std::thread phase2_thread([&]() {
+        recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, &reply_phase2, &plan_ilp, p, false,
+                                              &orch_phase2);
+      });
+      std::thread pipeline_thread([&]() {
+        recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, &reply_pipeline, &plan_lf,
+                                                &pipeline_plan, hub_block_id, pipeline_begin, pipeline_shards, false,
+                                                &orch_pipeline);
+      });
+      phase2_thread.join();
+      pipeline_thread.join();
+    }
+
+    const auto parallel_end = std::chrono::high_resolution_clock::now();
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    const bool phase2_ok = reply_phase2.success();
+    const bool pipeline_ok = reply_pipeline.success();
+    if (!phase2_ok || !pipeline_ok)
+    {
+      recovery_reply->set_success(false);
+      recovery_reply->set_message(std::string("hybrid half failed: phase2=") + reply_phase2.message() +
+                                  " pipeline=" + reply_pipeline.message());
+      return false;
+    }
+
+    recovery_reply->set_ilp_time(plan_lf.ilp_solve_time_sec +
+                                 (plan_ilp.success ? plan_ilp.ilp_solve_time_sec : 0.0));
+    recovery_reply->set_helper_block_count(p == 0 ? plan_lf.helper_block_count : plan_ilp.helper_block_count);
+    recovery_reply->set_repair_mode("hybrid");
+    recovery_reply->set_equation_policy(p == 0 ? "hybrid:p=0 local-first pipeline"
+                                                 : "hybrid:ilp-min-helper+local-first pipeline");
+    if (p == 0)
+    {
+      for (const auto &eq : plan_lf.selected_equations)
+        recovery_reply->add_selected_equations(eq);
+      for (int hid : plan_lf.helper_block_ids)
+        recovery_reply->add_helper_block_ids(hid);
+    }
+    else
+    {
+      for (const auto &eq : plan_ilp.selected_equations)
+        recovery_reply->add_selected_equations(eq);
+      for (int hid : plan_ilp.helper_block_ids)
+        recovery_reply->add_helper_block_ids(hid);
+    }
+
+    if (p == 0)
+    {
+      recovery_reply->set_disk_read_time(reply_pipeline.disk_read_time());
+      recovery_reply->set_network_time(reply_pipeline.network_time());
+      recovery_reply->set_decode_time(reply_pipeline.decode_time());
+      recovery_reply->set_disk_write_time(reply_pipeline.disk_write_time());
+    }
+    else
+    {
+      recovery_reply->set_disk_read_time(std::max(reply_phase2.disk_read_time(), reply_pipeline.disk_read_time()));
+      recovery_reply->set_network_time(std::max(reply_phase2.network_time(), reply_pipeline.network_time()));
+      recovery_reply->set_decode_time(std::max(reply_phase2.decode_time(), reply_pipeline.decode_time()));
+      recovery_reply->set_disk_write_time(reply_phase2.disk_write_time() + reply_pipeline.disk_write_time());
+    }
+
+    const double planner_sec =
+        std::chrono::duration<double>(parallel_start - repair_start).count();
+    const double parallel_sec =
+        std::chrono::duration<double>(parallel_end - parallel_start).count();
+    const double orch_deduct = p == 0 ? orch_pipeline : std::max(orch_phase2, orch_pipeline);
+    const double parallel_work_sec = parallel_sec - orch_deduct;
+    double repair_time_sec = planner_sec + (parallel_work_sec > 0.0 ? parallel_work_sec : 0.0);
+    if (repair_time_sec < 0.0)
+      repair_time_sec = 0.0;
+    recovery_reply->set_total_time(repair_time_sec);
+    recovery_reply->set_success(true);
+    recovery_reply->set_message("ok hybrid p=" + std::to_string(p));
+    std::cout << "[Coordinator] gLRC Hybrid recovery stripe " << stripe_id << " success p=" << p
+              << " repair_time=" << repair_time_sec << "s" << std::endl;
     return true;
   }
 
@@ -3635,6 +3991,8 @@ namespace ECProject
       ok = recovery_glrc_ilp_phase2_breakdown(stripe_id, block_ids, replyClient);
     else if (m_sys_config->GlrcRepairMode == "pipeline")
       ok = recovery_glrc_ilp_pipeline_breakdown(stripe_id, block_ids, replyClient);
+    else if (m_sys_config->GlrcRepairMode == "hybrid")
+      ok = recovery_glrc_ilp_hybrid_breakdown(stripe_id, block_ids, replyClient);
     else
       ok = recovery_glrc_ilp_breakdown(stripe_id, block_ids, replyClient);
 

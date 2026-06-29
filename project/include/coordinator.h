@@ -14,6 +14,7 @@
 #include <toolbox.h>
 #include "unilrc_encoder.h"
 #include "glrc_repair_ilp.h"
+#include "glrc_pipeline_plan.h"
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
@@ -164,8 +165,20 @@ namespace ECProject
                                        coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_glrc_ilp_phase2_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                               coordinator_proto::RecoveryReply *recovery_reply);
+    bool recovery_glrc_ilp_phase2_breakdown_ex(int stripe_id, const std::vector<int> &failed_block_ids,
+                                                 coordinator_proto::RecoveryReply *recovery_reply,
+                                                 const GlrcIlpRepairPlan *preset_plan, int shard_count_override,
+                                                 bool acquire_mutex, double *out_orchestration_wait_sec);
     bool recovery_glrc_ilp_pipeline_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                               coordinator_proto::RecoveryReply *recovery_reply);
+    bool recovery_glrc_ilp_pipeline_breakdown_ex(int stripe_id, const std::vector<int> &failed_block_ids,
+                                                   coordinator_proto::RecoveryReply *recovery_reply,
+                                                   const GlrcIlpRepairPlan *preset_plan,
+                                                   const GlrcPipelinePlan *preset_pipeline, int hub_block_id_preset,
+                                                   int global_shard_begin, int local_shard_count_override,
+                                                   bool acquire_mutex, double *out_orchestration_wait_sec);
+    bool recovery_glrc_ilp_hybrid_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
+                                            coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_one_block_breakdown(int stripe_id, int failed_block_id, 
       std::vector<double> &disk_io_start_time, std::vector<double> &disk_io_end_time, std::vector<double> &decode_start_time, std::vector<double> &decode_end_time,
       std::vector<double> &network_start_time, std::vector<double> &network_end_time, double &cross_rack_network_time, double &cross_rack_xor_time,

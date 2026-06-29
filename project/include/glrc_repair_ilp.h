@@ -95,6 +95,9 @@ namespace ECProject
                                             const std::vector<int> &partition_shard_counts,
                                             int stripe_byte_len, double link_mbps);
 
+  /** True when every placement group contains at most one failed block (local-first pipeline suffices). */
+  bool glrc_failures_at_most_one_per_group(int k, int r, int z, const std::vector<int> &failed_block_ids);
+
 } // namespace ECProject
 
 #endif

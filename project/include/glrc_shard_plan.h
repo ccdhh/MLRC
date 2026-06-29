@@ -38,12 +38,12 @@ struct GlrcPhase2ShardPlan
   int block_size = 0;
   std::vector<GlrcPartitionShardPlan> partitions;
 
-  /** Assign shard_count stripes across f partitions; +1 shard to first (rem) partitions. */
-  static bool build(int shard_count, int block_size, const std::vector<int> &failed_block_ids,
+  /** Assign active_shard_count stripes across f partitions; stripe_byte_len = block_size / global_shard_count. */
+  static bool build(int active_shard_count, int block_size, const std::vector<int> &failed_block_ids,
                     const std::vector<int> &failed_cluster_ids,
                     const std::vector<std::string> &failed_proxy_ips,
-                    const std::vector<int> &failed_proxy_ports, GlrcPhase2ShardPlan &out,
-                    std::string &error_message);
+                    const std::vector<int> &failed_proxy_ports, int global_shard_count,
+                    GlrcPhase2ShardPlan &out, std::string &error_message);
 };
 
 } // namespace ECProject

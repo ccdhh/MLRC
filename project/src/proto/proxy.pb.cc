@@ -414,6 +414,8 @@ PROTOBUF_CONSTEXPR RecoveryRequest::RecoveryRequest(
   , /*decltype(_impl_.pipeline_equation_is_local_)*/0
   , /*decltype(_impl_.pipeline_my_listen_port_)*/0
   , /*decltype(_impl_.pipeline_chain_hub_listen_port_)*/0
+  , /*decltype(_impl_.pipeline_shard_global_begin_)*/0
+  , /*decltype(_impl_.pipeline_global_shard_count_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct RecoveryRequestDefaultTypeInternal {
   PROTOBUF_CONSTEXPR RecoveryRequestDefaultTypeInternal()
@@ -814,6 +816,8 @@ const uint32_t TableStruct_proxy_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(pr
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_my_listen_port_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_chain_hub_listen_port_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_hub_listener_ports_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_shard_global_begin_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_global_shard_count_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::proxy_proto::MultipleRecoveryRequest, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -910,12 +914,12 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 157, -1, -1, sizeof(::proxy_proto::PartialDecodingRequest)},
   { 171, -1, -1, sizeof(::proxy_proto::DegradedReadReply)},
   { 188, -1, -1, sizeof(::proxy_proto::RecoveryRequest)},
-  { 264, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
-  { 275, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
-  { 294, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
-  { 313, -1, -1, sizeof(::proxy_proto::SetReply)},
-  { 320, -1, -1, sizeof(::proxy_proto::GetReply)},
-  { 327, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
+  { 266, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
+  { 277, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
+  { 296, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
+  { 315, -1, -1, sizeof(::proxy_proto::SetReply)},
+  { 322, -1, -1, sizeof(::proxy_proto::GetReply)},
+  { 329, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -1001,7 +1005,7 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "k_time\030\007 \001(\001\022\033\n\023cross_rack_xor_time\030\010 \001("
   "\001\022\027\n\017grpc_start_time\030\t \001(\001\022\"\n\032data_node_"
   "grpc_notify_time\030\n \001(\001\022!\n\031data_node_grpc"
-  "_start_time\030\013 \001(\001\"\230\021\n\017RecoveryRequest\022\030\n"
+  "_start_time\030\013 \001(\001\"\342\021\n\017RecoveryRequest\022\030\n"
   "\020replaced_node_ip\030\001 \001(\t\022\032\n\022replaced_node"
   "_port\030\002 \001(\005\022\027\n\017failed_block_id\030\003 \001(\005\022\030\n\020"
   "failed_block_key\030\004 \001(\t\022\026\n\016cross_rack_num"
@@ -1056,69 +1060,71 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "ipeline_hop_listen_ports\030C \003(\005\022\037\n\027pipeli"
   "ne_my_listen_port\030D \001(\005\022&\n\036pipeline_chai"
   "n_hub_listen_port\030E \001(\005\022#\n\033pipeline_hub_"
-  "listener_ports\030F \003(\005\"\236\001\n\027MultipleRecover"
-  "yRequest\022\031\n\021replacing_node_ip\030\001 \001(\t\022\033\n\023r"
-  "eplacing_node_port\030\002 \001(\005\022\030\n\020failed_block"
-  "_ids\030\003 \003(\005\022\031\n\021failed_block_keys\030\004 \003(\t\022\026\n"
-  "\016cross_rack_num\030\005 \001(\005\"\217\003\n\rRecoveryReply\022"
-  "\032\n\022disk_io_start_time\030\001 \001(\001\022\030\n\020disk_io_e"
-  "nd_time\030\002 \001(\001\022\032\n\022network_start_time\030\003 \001("
-  "\001\022\030\n\020network_end_time\030\004 \001(\001\022\031\n\021decode_st"
-  "art_time\030\005 \001(\001\022\027\n\017decode_end_time\030\006 \001(\001\022"
-  "\027\n\017cross_rack_time\030\007 \001(\001\022\033\n\023cross_rack_x"
-  "or_time\030\010 \001(\001\022\027\n\017grpc_start_time\030\t \001(\001\022\""
-  "\n\032data_node_grpc_notify_time\030\n \001(\001\022!\n\031da"
-  "ta_node_grpc_start_time\030\013 \001(\001\022#\n\033dest_da"
-  "ta_node_network_time\030\014 \001(\001\022#\n\033dest_data_"
-  "node_disk_io_time\030\r \001(\001\"\230\002\n\031AppendStripe"
-  "DataPlacement\022\013\n\003key\030\001 \001(\t\022\022\n\ncluster_id"
-  "\030\002 \001(\005\022\021\n\tstripe_id\030\003 \001(\005\022\023\n\013append_size"
-  "\030\004 \001(\004\022\022\n\ndatanodeip\030\005 \003(\t\022\024\n\014datanodepo"
-  "rt\030\006 \003(\005\022\021\n\tblockkeys\030\007 \003(\t\022\020\n\010blockids\030"
-  "\010 \003(\005\022\017\n\007offsets\030\t \003(\004\022\r\n\005sizes\030\n \003(\004\022\027\n"
-  "\017is_merge_parity\030\013 \001(\010\022\023\n\013append_mode\030\014 "
-  "\001(\t\022\025\n\ris_serialized\030\r \001(\010\"\034\n\010SetReply\022\020"
-  "\n\010ifcommit\030\001 \001(\010\"\036\n\010GetReply\022\022\n\ngetsucce"
-  "ss\030\001 \001(\010\"\261\001\n\021StripeAndBlockIDs\022\021\n\tstripe"
-  "_id\030\001 \001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010clientip\030"
-  "\003 \001(\t\022\022\n\nclientport\030\004 \001(\005\022\021\n\tblock_ids\030\005"
-  " \003(\005\022\022\n\nblock_keys\030\006 \003(\t\022\023\n\013datanodeips\030"
-  "\007 \003(\t\022\025\n\rdatanodeports\030\010 \003(\0052\307\t\n\014proxySe"
-  "rvice\022D\n\ncheckalive\022\032.proxy_proto.Checka"
-  "liveCMD\032\032.proxy_proto.RequestResult\022L\n\022e"
-  "ncodeAndSetObject\022\037.proxy_proto.ObjectAn"
-  "dPlacement\032\025.proxy_proto.SetReply\022L\n\022dec"
-  "odeAndGetObject\022\037.proxy_proto.ObjectAndP"
-  "lacement\032\025.proxy_proto.GetReply\022P\n\014degra"
-  "dedRead\022 .proxy_proto.DegradedReadReques"
-  "t\032\036.proxy_proto.DegradedReadReply\022S\n\023deg"
-  "radedRead2Client\022\034.proxy_proto.RecoveryR"
-  "equest\032\036.proxy_proto.DegradedReadReply\022Y"
-  "\n\025degradedReadBreakdown\022 .proxy_proto.De"
-  "gradedReadRequest\032\036.proxy_proto.Degraded"
-  "ReadReply\022\\\n\034degradedRead2ClientBreakdow"
-  "n\022\034.proxy_proto.RecoveryRequest\032\036.proxy_"
-  "proto.DegradedReadReply\022X\n\035degradedReadW"
-  "ithBlockStripeID\022 .proxy_proto.DegradedR"
-  "eadRequest\032\025.proxy_proto.GetReply\022V\n\017par"
-  "tialDecoding\022#.proxy_proto.PartialDecodi"
-  "ngRequest\032\036.proxy_proto.DegradedReadRepl"
-  "y\022D\n\010recovery\022\034.proxy_proto.RecoveryRequ"
-  "est\032\032.proxy_proto.RecoveryReply\022M\n\021recov"
-  "eryBreakdown\022\034.proxy_proto.RecoveryReque"
-  "st\032\032.proxy_proto.RecoveryReply\022O\n\020multip"
-  "leRecovery\022$.proxy_proto.MultipleRecover"
-  "yRequest\032\025.proxy_proto.GetReply\022\?\n\013delet"
-  "eBlock\022\031.proxy_proto.NodeAndBlock\032\025.prox"
-  "y_proto.DelReply\022X\n\027scheduleAppend2Datan"
-  "ode\022&.proxy_proto.AppendStripeDataPlacem"
-  "ent\032\025.proxy_proto.SetReply\022B\n\tgetBlocks\022"
-  "\036.proxy_proto.StripeAndBlockIDs\032\025.proxy_"
-  "proto.GetReplyb\006proto3"
+  "listener_ports\030F \003(\005\022#\n\033pipeline_shard_g"
+  "lobal_begin\030G \001(\005\022#\n\033pipeline_global_sha"
+  "rd_count\030H \001(\005\"\236\001\n\027MultipleRecoveryReque"
+  "st\022\031\n\021replacing_node_ip\030\001 \001(\t\022\033\n\023replaci"
+  "ng_node_port\030\002 \001(\005\022\030\n\020failed_block_ids\030\003"
+  " \003(\005\022\031\n\021failed_block_keys\030\004 \003(\t\022\026\n\016cross"
+  "_rack_num\030\005 \001(\005\"\217\003\n\rRecoveryReply\022\032\n\022dis"
+  "k_io_start_time\030\001 \001(\001\022\030\n\020disk_io_end_tim"
+  "e\030\002 \001(\001\022\032\n\022network_start_time\030\003 \001(\001\022\030\n\020n"
+  "etwork_end_time\030\004 \001(\001\022\031\n\021decode_start_ti"
+  "me\030\005 \001(\001\022\027\n\017decode_end_time\030\006 \001(\001\022\027\n\017cro"
+  "ss_rack_time\030\007 \001(\001\022\033\n\023cross_rack_xor_tim"
+  "e\030\010 \001(\001\022\027\n\017grpc_start_time\030\t \001(\001\022\"\n\032data"
+  "_node_grpc_notify_time\030\n \001(\001\022!\n\031data_nod"
+  "e_grpc_start_time\030\013 \001(\001\022#\n\033dest_data_nod"
+  "e_network_time\030\014 \001(\001\022#\n\033dest_data_node_d"
+  "isk_io_time\030\r \001(\001\"\230\002\n\031AppendStripeDataPl"
+  "acement\022\013\n\003key\030\001 \001(\t\022\022\n\ncluster_id\030\002 \001(\005"
+  "\022\021\n\tstripe_id\030\003 \001(\005\022\023\n\013append_size\030\004 \001(\004"
+  "\022\022\n\ndatanodeip\030\005 \003(\t\022\024\n\014datanodeport\030\006 \003"
+  "(\005\022\021\n\tblockkeys\030\007 \003(\t\022\020\n\010blockids\030\010 \003(\005\022"
+  "\017\n\007offsets\030\t \003(\004\022\r\n\005sizes\030\n \003(\004\022\027\n\017is_me"
+  "rge_parity\030\013 \001(\010\022\023\n\013append_mode\030\014 \001(\t\022\025\n"
+  "\ris_serialized\030\r \001(\010\"\034\n\010SetReply\022\020\n\010ifco"
+  "mmit\030\001 \001(\010\"\036\n\010GetReply\022\022\n\ngetsuccess\030\001 \001"
+  "(\010\"\261\001\n\021StripeAndBlockIDs\022\021\n\tstripe_id\030\001 "
+  "\001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010clientip\030\003 \001(\t\022"
+  "\022\n\nclientport\030\004 \001(\005\022\021\n\tblock_ids\030\005 \003(\005\022\022"
+  "\n\nblock_keys\030\006 \003(\t\022\023\n\013datanodeips\030\007 \003(\t\022"
+  "\025\n\rdatanodeports\030\010 \003(\0052\307\t\n\014proxyService\022"
+  "D\n\ncheckalive\022\032.proxy_proto.CheckaliveCM"
+  "D\032\032.proxy_proto.RequestResult\022L\n\022encodeA"
+  "ndSetObject\022\037.proxy_proto.ObjectAndPlace"
+  "ment\032\025.proxy_proto.SetReply\022L\n\022decodeAnd"
+  "GetObject\022\037.proxy_proto.ObjectAndPlaceme"
+  "nt\032\025.proxy_proto.GetReply\022P\n\014degradedRea"
+  "d\022 .proxy_proto.DegradedReadRequest\032\036.pr"
+  "oxy_proto.DegradedReadReply\022S\n\023degradedR"
+  "ead2Client\022\034.proxy_proto.RecoveryRequest"
+  "\032\036.proxy_proto.DegradedReadReply\022Y\n\025degr"
+  "adedReadBreakdown\022 .proxy_proto.Degraded"
+  "ReadRequest\032\036.proxy_proto.DegradedReadRe"
+  "ply\022\\\n\034degradedRead2ClientBreakdown\022\034.pr"
+  "oxy_proto.RecoveryRequest\032\036.proxy_proto."
+  "DegradedReadReply\022X\n\035degradedReadWithBlo"
+  "ckStripeID\022 .proxy_proto.DegradedReadReq"
+  "uest\032\025.proxy_proto.GetReply\022V\n\017partialDe"
+  "coding\022#.proxy_proto.PartialDecodingRequ"
+  "est\032\036.proxy_proto.DegradedReadReply\022D\n\010r"
+  "ecovery\022\034.proxy_proto.RecoveryRequest\032\032."
+  "proxy_proto.RecoveryReply\022M\n\021recoveryBre"
+  "akdown\022\034.proxy_proto.RecoveryRequest\032\032.p"
+  "roxy_proto.RecoveryReply\022O\n\020multipleReco"
+  "very\022$.proxy_proto.MultipleRecoveryReque"
+  "st\032\025.proxy_proto.GetReply\022\?\n\013deleteBlock"
+  "\022\031.proxy_proto.NodeAndBlock\032\025.proxy_prot"
+  "o.DelReply\022X\n\027scheduleAppend2Datanode\022&."
+  "proxy_proto.AppendStripeDataPlacement\032\025."
+  "proxy_proto.SetReply\022B\n\tgetBlocks\022\036.prox"
+  "y_proto.StripeAndBlockIDs\032\025.proxy_proto."
+  "GetReplyb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_proxy_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_proxy_2eproto = {
-    false, false, 6782, descriptor_table_protodef_proxy_2eproto,
+    false, false, 6856, descriptor_table_protodef_proxy_2eproto,
     "proxy.proto",
     &descriptor_table_proxy_2eproto_once, nullptr, 0, 23,
     schemas, file_default_instances, TableStruct_proxy_2eproto::offsets,
@@ -6938,6 +6944,8 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
     , decltype(_impl_.pipeline_equation_is_local_){}
     , decltype(_impl_.pipeline_my_listen_port_){}
     , decltype(_impl_.pipeline_chain_hub_listen_port_){}
+    , decltype(_impl_.pipeline_shard_global_begin_){}
+    , decltype(_impl_.pipeline_global_shard_count_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -6990,8 +6998,8 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
       _this->GetArenaForAllocation());
   }
   ::memcpy(&_impl_.replaced_node_port_, &from._impl_.replaced_node_port_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.pipeline_chain_hub_listen_port_) -
-    reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_chain_hub_listen_port_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.pipeline_global_shard_count_) -
+    reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_global_shard_count_));
   // @@protoc_insertion_point(copy_constructor:proxy_proto.RecoveryRequest)
 }
 
@@ -7092,6 +7100,8 @@ inline void RecoveryRequest::SharedCtor(
     , decltype(_impl_.pipeline_equation_is_local_){0}
     , decltype(_impl_.pipeline_my_listen_port_){0}
     , decltype(_impl_.pipeline_chain_hub_listen_port_){0}
+    , decltype(_impl_.pipeline_shard_global_begin_){0}
+    , decltype(_impl_.pipeline_global_shard_count_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.replaced_node_ip_.InitDefault();
@@ -7220,8 +7230,8 @@ void RecoveryRequest::Clear() {
   _impl_.pipeline_local_replaced_node_ip_.ClearToEmpty();
   _impl_.pipeline_hub_block_key_.ClearToEmpty();
   ::memset(&_impl_.replaced_node_port_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.pipeline_chain_hub_listen_port_) -
-      reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_chain_hub_listen_port_));
+      reinterpret_cast<char*>(&_impl_.pipeline_global_shard_count_) -
+      reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_global_shard_count_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -7939,6 +7949,22 @@ const char* RecoveryRequest::_InternalParse(const char* ptr, ::_pbi::ParseContex
         } else
           goto handle_unusual;
         continue;
+      // int32 pipeline_shard_global_begin = 71;
+      case 71:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 56)) {
+          _impl_.pipeline_shard_global_begin_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 pipeline_global_shard_count = 72;
+      case 72:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 64)) {
+          _impl_.pipeline_global_shard_count_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
       default:
         goto handle_unusual;
     }  // switch
@@ -8516,6 +8542,18 @@ uint8_t* RecoveryRequest::_InternalSerialize(
       target = stream->WriteInt32Packed(
           70, _internal_pipeline_hub_listener_ports(), byte_size, target);
     }
+  }
+
+  // int32 pipeline_shard_global_begin = 71;
+  if (this->_internal_pipeline_shard_global_begin() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(71, this->_internal_pipeline_shard_global_begin(), target);
+  }
+
+  // int32 pipeline_global_shard_count = 72;
+  if (this->_internal_pipeline_global_shard_count() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(72, this->_internal_pipeline_global_shard_count(), target);
   }
 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
@@ -9170,6 +9208,20 @@ size_t RecoveryRequest::ByteSizeLong() const {
         this->_internal_pipeline_chain_hub_listen_port());
   }
 
+  // int32 pipeline_shard_global_begin = 71;
+  if (this->_internal_pipeline_shard_global_begin() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_shard_global_begin());
+  }
+
+  // int32 pipeline_global_shard_count = 72;
+  if (this->_internal_pipeline_global_shard_count() != 0) {
+    total_size += 2 +
+      ::_pbi::WireFormatLite::Int32Size(
+        this->_internal_pipeline_global_shard_count());
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -9334,6 +9386,12 @@ void RecoveryRequest::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   if (from._internal_pipeline_chain_hub_listen_port() != 0) {
     _this->_internal_set_pipeline_chain_hub_listen_port(from._internal_pipeline_chain_hub_listen_port());
   }
+  if (from._internal_pipeline_shard_global_begin() != 0) {
+    _this->_internal_set_pipeline_shard_global_begin(from._internal_pipeline_shard_global_begin());
+  }
+  if (from._internal_pipeline_global_shard_count() != 0) {
+    _this->_internal_set_pipeline_global_shard_count(from._internal_pipeline_global_shard_count());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -9410,8 +9468,8 @@ void RecoveryRequest::InternalSwap(RecoveryRequest* other) {
       &other->_impl_.pipeline_hub_block_key_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.pipeline_chain_hub_listen_port_)
-      + sizeof(RecoveryRequest::_impl_.pipeline_chain_hub_listen_port_)
+      PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.pipeline_global_shard_count_)
+      + sizeof(RecoveryRequest::_impl_.pipeline_global_shard_count_)
       - PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.replaced_node_port_)>(
           reinterpret_cast<char*>(&_impl_.replaced_node_port_),
           reinterpret_cast<char*>(&other->_impl_.replaced_node_port_));

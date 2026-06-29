@@ -105,6 +105,38 @@ int resolve_pipeline_window(const Config *cfg, int shard_count)
   return std::min(w, shard_count);
 }
 
+struct PipelineShardView
+{
+  int global_begin = 0;
+  int local_count = 0;
+  int global_S = 0;
+  int stripe_len = 0;
+
+  int global_shard(int local_i) const { return global_begin + local_i; }
+  int byte_off(int local_i) const { return global_shard(local_i) * stripe_len; }
+
+  bool valid_geometry(int block_size) const
+  {
+    return local_count > 0 && global_S > 0 && stripe_len > 0 && global_begin >= 0 &&
+           global_begin + local_count <= global_S &&
+           static_cast<size_t>(global_S) * static_cast<size_t>(stripe_len) == static_cast<size_t>(block_size);
+  }
+};
+
+PipelineShardView resolve_pipeline_shard_view(const proxy_proto::RecoveryRequest *req, int block_size,
+                                              const Config *cfg)
+{
+  PipelineShardView v;
+  v.global_S = req->pipeline_global_shard_count() > 0 ? req->pipeline_global_shard_count()
+              : (req->pipeline_shard_count() > 0 ? req->pipeline_shard_count() : cfg->GlrcShardCount);
+  v.local_count = req->pipeline_shard_count() > 0 ? req->pipeline_shard_count() : v.global_S;
+  v.global_begin = req->pipeline_shard_global_begin();
+  if (v.global_begin + v.local_count > v.global_S)
+    v.local_count = std::max(0, v.global_S - v.global_begin);
+  v.stripe_len = (v.global_S > 0 && block_size % v.global_S == 0) ? block_size / v.global_S : 0;
+  return v;
+}
+
 struct PipelineQueuedShard
 {
   int shard_id = -1;
@@ -584,14 +616,14 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
   }
 
   const int block_size = m_sys_config->BlockSize;
-  int shard_count = recovery_request->pipeline_shard_count() > 0 ? recovery_request->pipeline_shard_count()
-                                                                 : m_sys_config->GlrcShardCount;
-  if (shard_count <= 0 || block_size % shard_count != 0)
+  const PipelineShardView shards = resolve_pipeline_shard_view(recovery_request, block_size, m_sys_config);
+  if (!shards.valid_geometry(block_size))
   {
     set_pipeline_error("invalid pipeline shard geometry");
     return false;
   }
-  const int stripe_len = block_size / shard_count;
+  const int shard_count = shards.local_count;
+  const int stripe_len = shards.stripe_len;
   const int chain_id = recovery_request->pipeline_chain_id();
   const int eq_slot = recovery_request->pipeline_eq_slot();
   const int epoch = recovery_request->pipeline_exchange_epoch();
@@ -656,7 +688,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
   auto run_chain_head_shard = [&](int shard) -> bool {
-    const int off = shard * stripe_len;
+    const int off = shards.byte_off(shard);
     {
       char tb[320];
       snprintf(tb, sizeof(tb), "chain_head read shard=%d key=%s @ %s:%d off=%d len=%d", shard, head_key.c_str(),
@@ -687,7 +719,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
         close_pipeline_socket(out_socket);
         return false;
       }
-      const int off = shard * stripe_len;
+      const int off = shards.byte_off(shard);
       std::vector<unsigned char> encoded(static_cast<size_t>(stripe_len), 0);
       glrc_pipeline_init_partial_range(encoded.data(), reinterpret_cast<unsigned char *>(block_buf + off), head_coef,
                                        stripe_len, eq_codec);
@@ -742,7 +774,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
         pipeline_failed.store(true);
         break;
       }
-      const int off = shard * stripe_len;
+      const int off = shards.byte_off(shard);
       PipelineQueuedShard item;
       item.shard_id = shard;
       item.payload.assign(static_cast<size_t>(stripe_len), 0);
@@ -820,9 +852,14 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   }
 
   const int block_size = m_sys_config->BlockSize;
-  int shard_count = recovery_request->pipeline_shard_count() > 0 ? recovery_request->pipeline_shard_count()
-                                                                 : m_sys_config->GlrcShardCount;
-  const int stripe_len = block_size / shard_count;
+  const PipelineShardView shards = resolve_pipeline_shard_view(recovery_request, block_size, m_sys_config);
+  if (!shards.valid_geometry(block_size))
+  {
+    set_pipeline_error("invalid pipeline hop_server geometry");
+    return false;
+  }
+  const int shard_count = shards.local_count;
+  const int stripe_len = shards.stripe_len;
   const int chain_id = recovery_request->pipeline_chain_id();
   const int eq_slot = recovery_request->pipeline_eq_slot();
   const int epoch = recovery_request->pipeline_exchange_epoch();
@@ -931,7 +968,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       set_pipeline_error("pipeline hop shard mismatch");
       return false;
     }
-    const int off = shard * stripe_len;
+    const int off = shards.byte_off(shard);
     if (!GetFromDatanodeStripeRangeBreakdown(hop_key, block_buf, block_size, off, stripe_len, hop_ip.c_str(),
                                              hop_port, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr))
     {
@@ -1113,9 +1150,14 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
   }
 
   const int block_size = m_sys_config->BlockSize;
-  int shard_count = recovery_request->pipeline_shard_count() > 0 ? recovery_request->pipeline_shard_count()
-                                                                 : m_sys_config->GlrcShardCount;
-  const int stripe_len = block_size / shard_count;
+  const PipelineShardView shards = resolve_pipeline_shard_view(recovery_request, block_size, m_sys_config);
+  if (!shards.valid_geometry(block_size))
+  {
+    set_pipeline_error("invalid pipeline local_direct geometry");
+    return false;
+  }
+  const int shard_count = shards.local_count;
+  const int stripe_len = shards.stripe_len;
   const int chain_id = recovery_request->pipeline_chain_id();
   const int epoch = recovery_request->pipeline_exchange_epoch();
   const int tail_idx = hops_n - 1;
@@ -1157,7 +1199,7 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
 
   for (int shard = 0; shard < shard_count; shard++)
   {
-    const int off = shard * stripe_len;
+    const int off = shards.byte_off(shard);
     std::fill(stripe.begin(), stripe.end(), 0);
 
     if (hops_n == 1)
@@ -1246,15 +1288,14 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
 {
   const int f = recovery_request->failed_block_ids_size();
   const int block_size = m_sys_config->BlockSize;
-  int shard_count = recovery_request->pipeline_shard_count() > 0 ? recovery_request->pipeline_shard_count()
-                                                                 : m_sys_config->GlrcShardCount;
-  if (f <= 0 || shard_count <= 0 || block_size % shard_count != 0)
+  const PipelineShardView shards = resolve_pipeline_shard_view(recovery_request, block_size, m_sys_config);
+  if (f <= 0 || !shards.valid_geometry(block_size))
   {
     set_pipeline_error("invalid pipeline hub geometry");
     return false;
   }
-
-  const int stripe_len = block_size / shard_count;
+  const int shard_count = shards.local_count;
+  const int stripe_len = shards.stripe_len;
   const int epoch = recovery_request->pipeline_exchange_epoch();
   const int hub_chain_n = recovery_request->pipeline_hub_chain_eq_slots_size();
   if (hub_chain_n <= 0)
@@ -1353,9 +1394,9 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     std::shared_ptr<asio::io_context> bound_io = has_prebound ? prebound_it->second.io : nullptr;
     std::shared_ptr<asio::ip::tcp::acceptor> bound_acceptor =
         has_prebound ? prebound_it->second.acceptor : nullptr;
-    listeners.emplace_back([this, ci, eq_slot, listen_port, bound_io, bound_acceptor, stripe_len, shard_count, block_size,
-                            hub_key, hub_dn_ip, hub_dn_port, hub_repair_ingress, &ctxs, &rhs_bufs, &rhs_ready,
-                            &rhs_mutex, &rhs_cv, &hub_failed, &hub_fail_msg]() {
+    listeners.emplace_back([this, ci, eq_slot, listen_port, bound_io, bound_acceptor, shards, stripe_len, shard_count,
+                            block_size, hub_key, hub_dn_ip, hub_dn_port, hub_repair_ingress, &ctxs, &rhs_bufs,
+                            &rhs_ready, &rhs_mutex, &rhs_cv, &hub_failed, &hub_fail_msg]() {
       try
       {
         asio::io_context io;
@@ -1375,7 +1416,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           std::memset(block_buf, 0, block_size);
           for (int shard = 0; shard < shard_count && !hub_failed.load(); shard++)
           {
-            const int off = shard * stripe_len;
+            const int off = shards.byte_off(shard);
             std::vector<unsigned char> partial(stripe_len, 0);
             double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
             if (!GetFromDatanodeStripeRangeBreakdown(hub_key, block_buf, block_size, off, stripe_len,
@@ -1494,7 +1535,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
             close_pipeline_socket(in_socket);
             return;
           }
-          const int off = shard * stripe_len;
+          const int off = shards.byte_off(shard);
 
           if (ctxs[ci].hub_is_tail && ctxs[ci].hub_coef != 0)
           {
@@ -1548,7 +1589,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
 
   for (int shard = 0; shard < shard_count; shard++)
   {
-    const int off = shard * stripe_len;
+    const int off = shards.byte_off(shard);
     std::unique_lock<std::mutex> lock(rhs_mutex);
     rhs_cv.wait(lock, [&]() {
       if (hub_failed.load())

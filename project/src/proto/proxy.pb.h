@@ -4068,6 +4068,8 @@ class RecoveryRequest final :
     kPipelineEquationIsLocalFieldNumber = 64,
     kPipelineMyListenPortFieldNumber = 68,
     kPipelineChainHubListenPortFieldNumber = 69,
+    kPipelineShardGlobalBeginFieldNumber = 71,
+    kPipelineGlobalShardCountFieldNumber = 72,
   };
   // repeated string datanodeip = 6;
   int datanodeip_size() const;
@@ -5165,6 +5167,24 @@ class RecoveryRequest final :
   void _internal_set_pipeline_chain_hub_listen_port(int32_t value);
   public:
 
+  // int32 pipeline_shard_global_begin = 71;
+  void clear_pipeline_shard_global_begin();
+  int32_t pipeline_shard_global_begin() const;
+  void set_pipeline_shard_global_begin(int32_t value);
+  private:
+  int32_t _internal_pipeline_shard_global_begin() const;
+  void _internal_set_pipeline_shard_global_begin(int32_t value);
+  public:
+
+  // int32 pipeline_global_shard_count = 72;
+  void clear_pipeline_global_shard_count();
+  int32_t pipeline_global_shard_count() const;
+  void set_pipeline_global_shard_count(int32_t value);
+  private:
+  int32_t _internal_pipeline_global_shard_count() const;
+  void _internal_set_pipeline_global_shard_count(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:proxy_proto.RecoveryRequest)
  private:
   class _Internal;
@@ -5265,6 +5285,8 @@ class RecoveryRequest final :
     int32_t pipeline_equation_is_local_;
     int32_t pipeline_my_listen_port_;
     int32_t pipeline_chain_hub_listen_port_;
+    int32_t pipeline_shard_global_begin_;
+    int32_t pipeline_global_shard_count_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -13063,6 +13085,46 @@ inline ::PROTOBUF_NAMESPACE_ID::RepeatedField< int32_t >*
 RecoveryRequest::mutable_pipeline_hub_listener_ports() {
   // @@protoc_insertion_point(field_mutable_list:proxy_proto.RecoveryRequest.pipeline_hub_listener_ports)
   return _internal_mutable_pipeline_hub_listener_ports();
+}
+
+// int32 pipeline_shard_global_begin = 71;
+inline void RecoveryRequest::clear_pipeline_shard_global_begin() {
+  _impl_.pipeline_shard_global_begin_ = 0;
+}
+inline int32_t RecoveryRequest::_internal_pipeline_shard_global_begin() const {
+  return _impl_.pipeline_shard_global_begin_;
+}
+inline int32_t RecoveryRequest::pipeline_shard_global_begin() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryRequest.pipeline_shard_global_begin)
+  return _internal_pipeline_shard_global_begin();
+}
+inline void RecoveryRequest::_internal_set_pipeline_shard_global_begin(int32_t value) {
+  
+  _impl_.pipeline_shard_global_begin_ = value;
+}
+inline void RecoveryRequest::set_pipeline_shard_global_begin(int32_t value) {
+  _internal_set_pipeline_shard_global_begin(value);
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.pipeline_shard_global_begin)
+}
+
+// int32 pipeline_global_shard_count = 72;
+inline void RecoveryRequest::clear_pipeline_global_shard_count() {
+  _impl_.pipeline_global_shard_count_ = 0;
+}
+inline int32_t RecoveryRequest::_internal_pipeline_global_shard_count() const {
+  return _impl_.pipeline_global_shard_count_;
+}
+inline int32_t RecoveryRequest::pipeline_global_shard_count() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryRequest.pipeline_global_shard_count)
+  return _internal_pipeline_global_shard_count();
+}
+inline void RecoveryRequest::_internal_set_pipeline_global_shard_count(int32_t value) {
+  
+  _impl_.pipeline_global_shard_count_ = value;
+}
+inline void RecoveryRequest::set_pipeline_global_shard_count(int32_t value) {
+  _internal_set_pipeline_global_shard_count(value);
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.pipeline_global_shard_count)
 }
 
 // -------------------------------------------------------------------

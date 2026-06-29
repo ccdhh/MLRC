@@ -3,12 +3,12 @@
 namespace ECProject
 {
 
-bool GlrcPhase2ShardPlan::build(int shard_count, int block_size,
+bool GlrcPhase2ShardPlan::build(int active_shard_count, int block_size,
                                 const std::vector<int> &failed_block_ids,
                                 const std::vector<int> &failed_cluster_ids,
                                 const std::vector<std::string> &failed_proxy_ips,
-                                const std::vector<int> &failed_proxy_ports, GlrcPhase2ShardPlan &out,
-                                std::string &error_message)
+                                const std::vector<int> &failed_proxy_ports, int global_shard_count,
+                                GlrcPhase2ShardPlan &out, std::string &error_message)
 {
   out = GlrcPhase2ShardPlan();
   error_message.clear();
@@ -18,19 +18,20 @@ bool GlrcPhase2ShardPlan::build(int shard_count, int block_size,
     error_message = "empty failure set";
     return false;
   }
-  if (shard_count < 1 || block_size < 1)
+  const int global_S = global_shard_count > 0 ? global_shard_count : active_shard_count;
+  if (active_shard_count < 1 || global_S < 1 || block_size < 1)
   {
     error_message = "invalid shard_count or block_size";
     return false;
   }
-  if (block_size % shard_count != 0)
+  if (block_size % global_S != 0)
   {
-    error_message = "BlockSize must be divisible by GlrcShardCount";
+    error_message = "BlockSize must be divisible by global shard count";
     return false;
   }
-  if (f > shard_count)
+  if (f > active_shard_count)
   {
-    error_message = "failed block count f exceeds shard count";
+    error_message = "failed block count f exceeds active shard count";
     return false;
   }
   if ((int)failed_cluster_ids.size() != f || (int)failed_proxy_ips.size() != f ||
@@ -40,11 +41,11 @@ bool GlrcPhase2ShardPlan::build(int shard_count, int block_size,
     return false;
   }
 
-  const int base = shard_count / f;
-  const int rem = shard_count % f;
-  out.shard_count = shard_count;
+  const int base = active_shard_count / f;
+  const int rem = active_shard_count % f;
+  out.shard_count = active_shard_count;
   out.block_size = block_size;
-  out.stripe_byte_len = block_size / shard_count;
+  out.stripe_byte_len = block_size / global_S;
   out.partitions.resize(f);
 
   int shard_cursor = 0;

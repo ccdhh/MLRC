@@ -163,6 +163,7 @@ foreach (_target
             ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_shard_plan.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_repair_ilp.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_pipeline_plan.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_hybrid.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_pipeline_codec.cpp
             #${_target}.cpp
             )

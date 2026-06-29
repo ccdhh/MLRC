@@ -265,6 +265,10 @@ message RecoveryRequest{
   int32 pipeline_my_listen_port = 68;
   int32 pipeline_chain_hub_listen_port = 69;
   repeated int32 pipeline_hub_listener_ports = 70;
+  /** Global shard index of first pipeline half-shard (hybrid lower region). */
+  int32 pipeline_shard_global_begin = 71;
+  /** Total stripe shard count S (stripe_len = block_size / S). 0 = same as pipeline_shard_count. */
+  int32 pipeline_global_shard_count = 72;
 }
 
 message MultipleRecoveryRequest{
