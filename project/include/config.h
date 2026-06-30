@@ -15,12 +15,12 @@ namespace ECProject
   /** Must match generate_local_cluster.py BASE_PROXY / PROXY_STRIDE. */
   const int PROXY_GRPC_BASE = 50405;
   const int PROXY_GRPC_STRIDE = 2;
-  /** Inclusive max proxy index (45 local proxies: 0..44). Must match generate_local_cluster.py. */
-  const int PROXY_GRPC_MAX_INDEX = 44;
+  /** Inclusive max proxy index. Current 4x20 local topology uses 80 proxies: 0..79. */
+  const int PROXY_GRPC_MAX_INDEX = 79;
   const int PROXY_PHASE2_PER_PROXY_BAND = 256;
   /** Base TCP port for gLRC pipeline shard exchange (see pipeline_*_listen_port). */
   const int PROXY_PIPELINE_EXCHANGE_BASE = 53000;
-  const int PROXY_PIPELINE_PER_PROXY_BAND = 256;
+  const int PROXY_PIPELINE_PER_PROXY_BAND = 150;
 
   class Config
   {

@@ -13,6 +13,8 @@
 #include <functional>
 #include <atomic>
 #include <mutex>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <unordered_set>
@@ -32,6 +34,8 @@ static void pipeline_plan_trace(const char *msg)
     fclose(f);
   }
 }
+
+bool pipeline_port_bindable(int port);
 
 struct GlrcPipelineChainPorts;
 
@@ -95,6 +99,8 @@ private:
         continue;
       if (s_inflight_ports[proxy_key].count(port) > 0)
         continue;
+      if (!pipeline_port_bindable(port))
+        continue;
       if (used_ports_[proxy_key].insert(port).second)
       {
         s_inflight_ports[proxy_key].insert(port);
@@ -119,6 +125,64 @@ struct GlrcPipelineChainPorts
   std::vector<int> hop_listen_ports;
   int hub_listen_port = 0;
 };
+
+bool pipeline_port_bindable(int port)
+{
+  if (port <= 0 || port > 65535)
+    return true;
+  const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0)
+    return false;
+  int opt = 1;
+  ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  addr.sin_port = htons(static_cast<uint16_t>(port));
+  const bool ok = (::bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0);
+  ::close(fd);
+  return ok;
+}
+
+bool wait_pipeline_ports_released(const std::unordered_map<int, GlrcPipelineChainPorts> &chain_ports,
+                                  const ECProject::GlrcPipelinePlan &pipeline_plan, int timeout_ms)
+{
+  std::unordered_set<int> ports;
+  for (const ECProject::GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+  {
+    const auto cp_it = chain_ports.find(chain.chain_id);
+    if (cp_it == chain_ports.end())
+      continue;
+    for (int port : cp_it->second.hop_listen_ports)
+      ports.insert(port);
+    if (cp_it->second.hub_listen_port > 0)
+      ports.insert(cp_it->second.hub_listen_port);
+  }
+  if (ports.empty())
+    return true;
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  while (std::chrono::steady_clock::now() < deadline)
+  {
+    bool all_released = true;
+    for (int port : ports)
+    {
+      if (!pipeline_port_bindable(port))
+      {
+        all_released = false;
+        break;
+      }
+    }
+    if (all_released)
+      return true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  char tb[160];
+  snprintf(tb, sizeof(tb), "pipeline port release wait timed out ports=%zu", ports.size());
+  pipeline_plan_trace(tb);
+  return false;
+}
 
 void GlrcPipelinePortAllocator::release_inflight_ports(
     const std::unordered_map<int, GlrcPipelineChainPorts> &chain_ports, const std::string &hub_proxy_ip,
@@ -3383,7 +3447,6 @@ namespace ECProject
       join_pipeline_workers();
       // Session teardown (not counted in repair_time).
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
-      GlrcPipelinePortAllocator::reset_port_session();
       proxy_proto::RecoveryRequest tear_req;
       tear_req.set_glrc_ilp_recovery(true);
       tear_req.set_glrc_ilp_pipeline(true);
@@ -3398,6 +3461,8 @@ namespace ECProject
         ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
         pit->second->recoveryBreakdown(&ctx, tear_req, &tear_rep);
       }
+      wait_pipeline_ports_released(chain_ports, pipeline_plan, 60000);
+      GlrcPipelinePortAllocator::reset_port_session();
       pipeline_plan_trace("pipeline session finalize ok");
     };
     struct PipelineSessionGuard
@@ -3473,26 +3538,6 @@ namespace ECProject
       }
     }
 
-    for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
-    {
-      const int last_hop_server =
-          chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
-                                  : static_cast<int>(chain.hops.size()) - 1;
-      for (int hi = last_hop_server; hi >= 1; hi--)
-      {
-        proxy_proto::RecoveryRequest req = make_base_request();
-        const GlrcPipelineChainPorts *cp = nullptr;
-        const auto cp_it = chain_ports.find(chain.chain_id);
-        if (cp_it != chain_ports.end())
-          cp = &cp_it->second;
-        fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
-        launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
-        orchestration_sleep(50);
-      }
-    }
-
-    orchestration_sleep(300);
-
     if (!pipeline_plan.hub_chains.empty())
     {
       proxy_proto::RecoveryRequest hub_req = make_base_request();
@@ -3536,7 +3581,29 @@ namespace ECProject
       launch_pipeline_rpc(hub_proxy_key, hub_req);
     }
 
-    orchestration_sleep(2500);
+    // Start the hub first: it pre-binds all hub listener ports before waiting for chain inputs.
+    // This removes the race where tail hops connect before the hub is listening.
+    orchestration_sleep(800);
+
+    for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+    {
+      const int last_hop_server =
+          chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
+                                  : static_cast<int>(chain.hops.size()) - 1;
+      for (int hi = last_hop_server; hi >= 1; hi--)
+      {
+        proxy_proto::RecoveryRequest req = make_base_request();
+        const GlrcPipelineChainPorts *cp = nullptr;
+        const auto cp_it = chain_ports.find(chain.chain_id);
+        if (cp_it != chain_ports.end())
+          cp = &cp_it->second;
+        fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
+        launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
+        orchestration_sleep(50);
+      }
+    }
+
+    orchestration_sleep(800);
 
     for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
     {

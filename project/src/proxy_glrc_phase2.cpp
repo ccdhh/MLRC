@@ -412,6 +412,99 @@ bool ProxyImpl::GetFromDatanodeStripeRangeBreakdown(const std::string &key, char
   }
 }
 
+bool ProxyImpl::GetFromDatanodeStripeRangeCompactBreakdown(const std::string &key, char *value, size_t full_block_size,
+                                                           int read_offset, int read_length, const char *ip,
+                                                           const int port, double *disk_io_start_time,
+                                                           double *disk_io_end_time, double *network_start_time,
+                                                           double *network_end_time, double *grpc_notify_time,
+                                                           double *grpc_start_time,
+                                                           SharedBandwidthLimiter *block_bandwidth)
+{
+  try
+  {
+    grpc::ClientContext context;
+    datanode_proto::GetInfo get_info;
+    datanode_proto::RequestResult result;
+    get_info.set_block_key(key);
+    get_info.set_block_size(static_cast<int>(full_block_size));
+    get_info.set_read_offset(read_offset);
+    get_info.set_read_length(read_length);
+    get_info.set_proxy_ip(m_ip);
+    get_info.set_proxy_port(m_port);
+    std::string node_ip_port = std::string(ip) + ":" + std::to_string(port);
+    auto dn_it = m_datanode_ptrs.find(node_ip_port);
+    if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
+    {
+      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] datanode stub missing: " << node_ip_port
+                << std::endl;
+      return false;
+    }
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+    auto grpc_notify = std::chrono::high_resolution_clock::now();
+    grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
+    if (!stat.ok())
+    {
+      char tb[384];
+      snprintf(tb, sizeof(tb), "helper grpc failed key=%s @ %s off=%d len=%d : %s", key.c_str(),
+               node_ip_port.c_str(), read_offset, read_length, stat.error_message().c_str());
+      phase2_trace(tb);
+      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] " << tb << std::endl;
+      return false;
+    }
+
+    if (disk_io_start_time)
+      *disk_io_start_time = result.disk_io_start_time();
+    if (disk_io_end_time)
+      *disk_io_end_time = result.disk_io_end_time();
+    if (grpc_notify_time)
+      *grpc_notify_time =
+          std::chrono::duration_cast<std::chrono::duration<double>>(grpc_notify.time_since_epoch()).count();
+    if (grpc_start_time)
+      *grpc_start_time = result.grpc_start_time();
+
+    asio::io_context io_context;
+    asio::ip::tcp::resolver resolver(io_context);
+    asio::ip::tcp::socket socket(io_context);
+    auto begin = std::chrono::high_resolution_clock::now();
+    const int data_port = result.data_port();
+    asio::error_code connect_ec;
+    asio::connect(socket, resolver.resolve({std::string(ip), std::to_string(data_port)}), connect_ec);
+    if (connect_ec)
+    {
+      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] helper tcp connect failed key=" << key << " @ "
+                << ip << ":" << data_port << " " << connect_ec.message() << std::endl;
+      return false;
+    }
+
+    set_exchange_socket_timeouts(socket, 45);
+    asio::error_code ec;
+    tcp_read_with_shared_bandwidth(socket, value, static_cast<size_t>(read_length), block_bandwidth, ec);
+    if (ec)
+    {
+      char tb[256];
+      snprintf(tb, sizeof(tb), "helper tcp compact read failed key=%s @ %s:%d len=%d : %s", key.c_str(), ip,
+               data_port, read_length, ec.message().c_str());
+      set_phase2_error(tb);
+      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] " << tb << std::endl;
+      return false;
+    }
+    asio::error_code ignore_ec;
+    socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+    socket.close(ignore_ec);
+    auto end = std::chrono::high_resolution_clock::now();
+    if (network_start_time)
+      *network_start_time = std::chrono::duration_cast<std::chrono::duration<double>>(begin.time_since_epoch()).count();
+    if (network_end_time)
+      *network_end_time = std::chrono::duration_cast<std::chrono::duration<double>>(end.time_since_epoch()).count();
+    return true;
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << e.what() << '\n';
+    return false;
+  }
+}
+
 void ProxyImpl::get_from_node_stripe_range_breakdown(const std::string &block_key, char *block_value,
                                                      size_t full_block_size, int read_offset, int read_length,
                                                      const char *datanode_ip, const int datanode_port, bool *status,
@@ -611,6 +704,17 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   for (int i = 0; i < helper_n; i++)
     block_idxs.push_back(recovery_request->blockids(i));
 
+  std::vector<unsigned char> phase2_decode_inverse;
+  std::vector<std::vector<int>> phase2_eq_helper_indices;
+  std::vector<std::vector<unsigned char>> phase2_eq_helper_coefs;
+  if (!glrc_ilp_prepare_helper_decode(m_sys_config->k, m_sys_config->r, m_sys_config->z, block_idxs, failed_ids,
+                                      eq_indices, phase2_decode_inverse, phase2_eq_helper_indices,
+                                      phase2_eq_helper_coefs))
+  {
+    set_phase2_error("phase2 prepare helper decode failed");
+    return false;
+  }
+
   std::vector<char *> get_bufs(helper_n);
   for (int i = 0; i < helper_n; i++)
   {
@@ -636,6 +740,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   double min_disk_start = 0.0, max_disk_end = 0.0;
   double min_net_start = 0.0, max_net_end = 0.0;
   double min_decode_start = 0.0, max_decode_end = 0.0;
+  double total_decode_time = 0.0;
   double min_grpc_notify = 0.0, max_grpc_start = 0.0;
   bool have_disk = false, have_net = false, have_decode = false;
   bool have_grpc = false;
@@ -947,10 +1052,10 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
     std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs);
     auto t3 = std::chrono::high_resolution_clock::now();
-    std::vector<unsigned char *> shard_recovered;
+    std::vector<std::vector<unsigned char>> shard_recovered;
     const bool decode_ok =
-        decode_glrc_ilp_range(m_sys_config->k, m_sys_config->r, m_sys_config->z, block_size, block_idxs,
-                              block_ptrs.data(), failed_ids, eq_indices, stripe_off, stripe_byte_len, shard_recovered);
+        decode_glrc_ilp_helper_compact(block_ptrs.data(), phase2_decode_inverse, phase2_eq_helper_indices,
+                                       phase2_eq_helper_coefs, f, stripe_off, stripe_byte_len, shard_recovered);
     auto t4 = std::chrono::high_resolution_clock::now();
     for (char *p : get_bufs)
       (void)p;
@@ -962,32 +1067,25 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       set_phase2_error(buf);
       std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
                 << std::endl;
-      for (unsigned char *p : shard_recovered)
-        delete[] p;
       exchange_failed.store(true);
       break;
     }
 
-    const double decode_begin_ts =
-        std::chrono::duration_cast<std::chrono::duration<double>>(t3.time_since_epoch()).count();
-    const double decode_end_ts =
-        std::chrono::duration_cast<std::chrono::duration<double>>(t4.time_since_epoch()).count();
+    const double decode_duration = std::chrono::duration<double>(t4 - t3).count();
+    total_decode_time += decode_duration;
     if (!have_decode)
     {
-      min_decode_start = decode_begin_ts;
-      max_decode_end = decode_end_ts;
+      min_decode_start = 0.0;
+      max_decode_end = total_decode_time;
       have_decode = true;
     }
     else
     {
-      min_decode_start = std::min(min_decode_start, decode_begin_ts);
-      max_decode_end = std::max(max_decode_end, decode_end_ts);
+      max_decode_end = total_decode_time;
     }
 
     for (int t = 0; t < f; t++)
-      std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t] + stripe_off, stripe_byte_len);
-    for (unsigned char *p : shard_recovered)
-      delete[] p;
+      std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t].data(), stripe_byte_len);
     }
 
     exchange_shard_with_peer(shard_k);

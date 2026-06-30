@@ -121,6 +121,35 @@ namespace ECProject
                                    int range_off, int range_len,
                                    std::vector<unsigned char *> &recovered_ptrs);
 
+    /** Precompute the f x f inverse matrix for repeated per-shard pipeline hub decoding. */
+    bool glrc_ilp_prepare_inverse(const int k, const int r, const int z,
+                                  const std::vector<int> &failed_block_ids,
+                                  const std::vector<int> &selected_equation_indices,
+                                  std::vector<unsigned char> &A_inv_out);
+
+    /** Decode compact per-shard RHS buffers using a precomputed inverse matrix. */
+    bool decode_glrc_ilp_rhs_compact(const std::vector<unsigned char *> &rhs_ptrs,
+                                     const std::vector<unsigned char> &A_inv,
+                                     int failed_count, int range_len,
+                                     std::vector<std::vector<unsigned char>> &recovered);
+
+    /** Precompute inverse + helper equation terms for repeated Phase2 per-shard decode. */
+    bool glrc_ilp_prepare_helper_decode(const int k, const int r, const int z,
+                                        const std::vector<int> &helper_block_ids,
+                                        const std::vector<int> &failed_block_ids,
+                                        const std::vector<int> &selected_equation_indices,
+                                        std::vector<unsigned char> &A_inv_out,
+                                        std::vector<std::vector<int>> &eq_helper_indices_out,
+                                        std::vector<std::vector<unsigned char>> &eq_helper_coefs_out);
+
+    /** Decode compact recovered shard buffers from full helper buffers using precomputed Phase2 terms. */
+    bool decode_glrc_ilp_helper_compact(unsigned char **helper_ptrs,
+                                        const std::vector<unsigned char> &A_inv,
+                                        const std::vector<std::vector<int>> &eq_helper_indices,
+                                        const std::vector<std::vector<unsigned char>> &eq_helper_coefs,
+                                        int failed_count, int range_off, int range_len,
+                                        std::vector<std::vector<unsigned char>> &recovered);
+
     bool glrc_ilp_decode_matrix_invertible(int k, int r, int z,
                                            const std::vector<int> &failed_block_ids,
                                            const std::vector<int> &selected_equation_indices);
