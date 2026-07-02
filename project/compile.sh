@@ -5,5 +5,5 @@ set -e
 cd $CRT_DIR
 mkdir -p cmake/build
 cd cmake/build
-cmake ../..
+cmake -DENABLE_AVX2_ASM=ON ../..
 make -j

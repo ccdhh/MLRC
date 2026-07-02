@@ -8,16 +8,20 @@ namespace ECProject
 {
   const int DATANODE_PORT_SHIFT = 50;
   const int PROXY_PORT_SHIFT = 1;
-  /** Base TCP port for Phase-2 stripe exchange (see phase2_exchange_port). */
-  const int PROXY_PHASE2_EXCHANGE_BASE = 52000;
-  /** Port band per recovery epoch (must exceed max f * partition stride). */
-  const int PROXY_PHASE2_EPOCH_STRIDE = 256;
+  /** Base TCP port for Phase-2 stripe exchange (see phase2_exchange_port).
+   * Keep this below PROXY_PIPELINE_EXCHANGE_BASE and below the OS ephemeral
+   * range, otherwise outbound helper reads can steal planned listener ports.
+   */
+  const int PROXY_PHASE2_EXCHANGE_BASE = 10240;
+  /** Number of epoch slots kept per proxy port band. */
+  const int PROXY_PHASE2_EPOCH_STRIDE = 64;
   /** Must match generate_local_cluster.py BASE_PROXY / PROXY_STRIDE. */
   const int PROXY_GRPC_BASE = 50405;
   const int PROXY_GRPC_STRIDE = 2;
   /** Inclusive max proxy index. Current 4x20 local topology uses 80 proxies: 0..79. */
   const int PROXY_GRPC_MAX_INDEX = 79;
-  const int PROXY_PHASE2_PER_PROXY_BAND = 256;
+  /** 64 epoch slots * 8 partitions (supports f<=8 per stripe). */
+  const int PROXY_PHASE2_PER_PROXY_BAND = 80;
   /** Base TCP port for gLRC pipeline shard exchange (see pipeline_*_listen_port).
    * Keep this below Linux's default ephemeral range (32768+) so datanode temporary
    * data sockets created with port 0 cannot steal planned pipeline listener ports.

@@ -3191,8 +3191,9 @@ namespace ECProject
       }
       const auto &rep = outcomes[pi].reply;
       max_disk = std::max(max_disk, breakdown_metric_span(rep.disk_io_start_time(), rep.disk_io_end_time()));
-      max_net = std::max(max_net, breakdown_metric_span(rep.network_start_time(), rep.network_end_time()) +
-                                    rep.cross_rack_time() + rep.dest_data_node_network_time());
+      max_net = std::max(max_net, std::max(breakdown_metric_span(rep.network_start_time(), rep.network_end_time()),
+                                           rep.cross_rack_time()) +
+                                    rep.dest_data_node_network_time());
       max_decode = std::max(max_decode, breakdown_metric_span(rep.decode_start_time(), rep.decode_end_time()) +
                                          rep.cross_rack_xor_time());
       sum_write_net += rep.dest_data_node_network_time();

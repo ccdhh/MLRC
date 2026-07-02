@@ -1307,36 +1307,112 @@ bool ECProject::decode_glrc_ilp_helper_compact(unsigned char **helper_ptrs,
                                                const std::vector<unsigned char> &A_inv,
                                                const std::vector<std::vector<int>> &eq_helper_indices,
                                                const std::vector<std::vector<unsigned char>> &eq_helper_coefs,
-                                               int failed_count, int range_off, int range_len,
+                                               int failed_count, int helper_base_off, int range_off, int range_len,
                                                std::vector<std::vector<unsigned char>> &recovered)
 {
   const int f = failed_count;
-  if (f <= 0 || range_off < 0 || range_len < 0 || (int)A_inv.size() != f * f ||
+  if (f <= 0 || helper_base_off < 0 || range_off < helper_base_off || range_len < 0 ||
+      (int)A_inv.size() != f * f ||
       (int)eq_helper_indices.size() != f || (int)eq_helper_coefs.size() != f)
     return false;
 
   recovered.assign(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
-  std::vector<unsigned char> col_b(f);
-  for (int rel = 0; rel < range_len; rel++)
+  if (range_len == 0)
+    return true;
+
+  const int helper_off = range_off - helper_base_off;
+  std::vector<std::vector<unsigned char>> rhs(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
+
+  for (int ei = 0; ei < f; ei++)
   {
-    const int byte_off = range_off + rel;
-    for (int ei = 0; ei < f; ei++)
-    {
-      if (eq_helper_indices[ei].size() != eq_helper_coefs[ei].size())
-        return false;
-      unsigned char rhs = 0;
-      for (size_t ti = 0; ti < eq_helper_indices[ei].size(); ti++)
-        rhs ^= ECProject::gf_mul(eq_helper_coefs[ei][ti], helper_ptrs[eq_helper_indices[ei][ti]][byte_off]);
-      col_b[ei] = rhs;
-    }
-    for (int t = 0; t < f; t++)
-    {
-      unsigned char acc = 0;
-      for (int j = 0; j < f; j++)
-        acc ^= ECProject::gf_mul(A_inv[t * f + j], col_b[j]);
-      recovered[t][rel] = acc;
-    }
+    if (eq_helper_indices[ei].size() != eq_helper_coefs[ei].size())
+      return false;
+    const int term_count = static_cast<int>(eq_helper_indices[ei].size());
+    if (term_count == 0)
+      continue;
+
+    std::vector<unsigned char *> srcs(term_count);
+    for (int ti = 0; ti < term_count; ti++)
+      srcs[ti] = helper_ptrs[eq_helper_indices[ei][ti]] + helper_off;
+
+    std::vector<unsigned char> coefs = eq_helper_coefs[ei];
+    std::vector<unsigned char> g_tbls(static_cast<size_t>(term_count) * 32);
+    ec_init_tables(term_count, 1, coefs.data(), g_tbls.data());
+    unsigned char *dst = rhs[ei].data();
+    ec_encode_data_avx2(range_len, term_count, 1, g_tbls.data(), srcs.data(), &dst);
   }
+
+  std::vector<unsigned char *> rhs_ptrs(f);
+  std::vector<unsigned char *> recovered_ptrs(f);
+  for (int i = 0; i < f; i++)
+  {
+    rhs_ptrs[i] = rhs[i].data();
+    recovered_ptrs[i] = recovered[i].data();
+  }
+  std::vector<unsigned char> inv = A_inv;
+  std::vector<unsigned char> g_tbls(static_cast<size_t>(f) * static_cast<size_t>(f) * 32);
+  ec_init_tables(f, f, inv.data(), g_tbls.data());
+  ec_encode_data_avx2(range_len, f, f, g_tbls.data(), rhs_ptrs.data(), recovered_ptrs.data());
+  return true;
+}
+
+bool ECProject::decode_glrc_ilp_helper_compact_prepared(unsigned char **helper_ptrs,
+                                                        const std::vector<std::vector<int>> &eq_helper_indices,
+                                                        const std::vector<std::vector<unsigned char>> &eq_helper_g_tbls,
+                                                        const std::vector<unsigned char> &inv_g_tbls,
+                                                        int failed_count, int helper_base_off, int range_off,
+                                                        int range_len,
+                                                        std::vector<std::vector<unsigned char>> &rhs,
+                                                        std::vector<std::vector<unsigned char>> &recovered)
+{
+  const int f = failed_count;
+  if (f <= 0 || helper_base_off < 0 || range_off < helper_base_off || range_len < 0 ||
+      (int)eq_helper_indices.size() != f || (int)eq_helper_g_tbls.size() != f ||
+      (int)inv_g_tbls.size() != f * f * 32)
+    return false;
+
+  if ((int)rhs.size() != f)
+    rhs.assign(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
+  if ((int)recovered.size() != f)
+    recovered.assign(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
+  for (int i = 0; i < f; i++)
+  {
+    if ((int)rhs[i].size() != range_len)
+      rhs[i].assign(static_cast<size_t>(range_len), 0);
+    else
+      std::fill(rhs[i].begin(), rhs[i].end(), 0);
+    if ((int)recovered[i].size() != range_len)
+      recovered[i].assign(static_cast<size_t>(range_len), 0);
+  }
+  if (range_len == 0)
+    return true;
+
+  const int helper_off = range_off - helper_base_off;
+  for (int ei = 0; ei < f; ei++)
+  {
+    const int term_count = static_cast<int>(eq_helper_indices[ei].size());
+    if (term_count == 0)
+      continue;
+    if ((int)eq_helper_g_tbls[ei].size() != term_count * 32)
+      return false;
+
+    std::vector<unsigned char *> srcs(term_count);
+    for (int ti = 0; ti < term_count; ti++)
+      srcs[ti] = helper_ptrs[eq_helper_indices[ei][ti]] + helper_off;
+    unsigned char *dst = rhs[ei].data();
+    ec_encode_data_avx2(range_len, term_count, 1,
+                        const_cast<unsigned char *>(eq_helper_g_tbls[ei].data()), srcs.data(), &dst);
+  }
+
+  std::vector<unsigned char *> rhs_ptrs(f);
+  std::vector<unsigned char *> recovered_ptrs(f);
+  for (int i = 0; i < f; i++)
+  {
+    rhs_ptrs[i] = rhs[i].data();
+    recovered_ptrs[i] = recovered[i].data();
+  }
+  ec_encode_data_avx2(range_len, f, f, const_cast<unsigned char *>(inv_g_tbls.data()), rhs_ptrs.data(),
+                      recovered_ptrs.data());
   return true;
 }
 

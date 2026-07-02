@@ -147,8 +147,16 @@ namespace ECProject
                                         const std::vector<unsigned char> &A_inv,
                                         const std::vector<std::vector<int>> &eq_helper_indices,
                                         const std::vector<std::vector<unsigned char>> &eq_helper_coefs,
-                                        int failed_count, int range_off, int range_len,
+                                        int failed_count, int helper_base_off, int range_off, int range_len,
                                         std::vector<std::vector<unsigned char>> &recovered);
+
+    bool decode_glrc_ilp_helper_compact_prepared(unsigned char **helper_ptrs,
+                                                const std::vector<std::vector<int>> &eq_helper_indices,
+                                                const std::vector<std::vector<unsigned char>> &eq_helper_g_tbls,
+                                                const std::vector<unsigned char> &inv_g_tbls,
+                                                int failed_count, int helper_base_off, int range_off, int range_len,
+                                                std::vector<std::vector<unsigned char>> &rhs,
+                                                std::vector<std::vector<unsigned char>> &recovered);
 
     bool glrc_ilp_decode_matrix_invertible(int k, int r, int z,
                                            const std::vector<int> &failed_block_ids,
