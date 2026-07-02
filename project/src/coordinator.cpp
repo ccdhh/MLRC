@@ -133,13 +133,12 @@ bool pipeline_port_bindable(int port)
   const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0)
     return false;
-  int opt = 1;
-  ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   addr.sin_port = htons(static_cast<uint16_t>(port));
-  const bool ok = (::bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0);
+  const bool ok = (::bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) == 0 &&
+                   ::listen(fd, SOMAXCONN) == 0);
   ::close(fd);
   return ok;
 }
@@ -3461,8 +3460,12 @@ namespace ECProject
         ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
         pit->second->recoveryBreakdown(&ctx, tear_req, &tear_rep);
       }
-      wait_pipeline_ports_released(chain_ports, pipeline_plan, 60000);
-      GlrcPipelinePortAllocator::reset_port_session();
+      const bool ports_released = wait_pipeline_ports_released(chain_ports, pipeline_plan, 60000);
+      if (ports_released)
+        GlrcPipelinePortAllocator::release_inflight_ports(chain_ports, pipeline_plan.hub_proxy_ip,
+                                                          pipeline_plan.hub_proxy_port, pipeline_plan);
+      else
+        pipeline_plan_trace("pipeline session kept inflight port reservations after release timeout");
       pipeline_plan_trace("pipeline session finalize ok");
     };
     struct PipelineSessionGuard

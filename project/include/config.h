@@ -18,8 +18,11 @@ namespace ECProject
   /** Inclusive max proxy index. Current 4x20 local topology uses 80 proxies: 0..79. */
   const int PROXY_GRPC_MAX_INDEX = 79;
   const int PROXY_PHASE2_PER_PROXY_BAND = 256;
-  /** Base TCP port for gLRC pipeline shard exchange (see pipeline_*_listen_port). */
-  const int PROXY_PIPELINE_EXCHANGE_BASE = 53000;
+  /** Base TCP port for gLRC pipeline shard exchange (see pipeline_*_listen_port).
+   * Keep this below Linux's default ephemeral range (32768+) so datanode temporary
+   * data sockets created with port 0 cannot steal planned pipeline listener ports.
+   */
+  const int PROXY_PIPELINE_EXCHANGE_BASE = 20000;
   const int PROXY_PIPELINE_PER_PROXY_BAND = 150;
 
   class Config

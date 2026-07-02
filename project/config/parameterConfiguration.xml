@@ -41,7 +41,7 @@
     <!-- 修复方式：phase1 | phase2 | pipeline -->
     <GlrcRepairMode>pipeline</GlrcRepairMode>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
-    <GlrcEquationPolicy>local-first</GlrcEquationPolicy>
+    <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 
     <GlrcShardCount>64</GlrcShardCount>
     <GlrcPipelineWindow>0</GlrcPipelineWindow>
