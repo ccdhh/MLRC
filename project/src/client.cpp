@@ -1520,6 +1520,8 @@ namespace ECProject
     metrics.helper_block_count = reply.helper_block_count();
     metrics.repair_mode = reply.repair_mode();
     metrics.equation_policy = reply.equation_policy();
+    metrics.hybrid_p = reply.hybrid_p();
+    metrics.hybrid_p_continuous = reply.hybrid_p_continuous();
     metrics.selected_equations.clear();
     metrics.helper_block_ids.clear();
     for (int i = 0; i < reply.selected_equations_size(); i++)

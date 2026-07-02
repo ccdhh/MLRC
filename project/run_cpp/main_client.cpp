@@ -105,6 +105,13 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
     if (m.repair_mode == "pipeline")
       std::cout << "; excl. orchestration wait & teardown";
     std::cout << ")" << std::endl;
+    if (m.repair_mode == "hybrid")
+    {
+        std::cout << "  hybrid_p:                " << m.hybrid_p;
+        if (m.hybrid_p_continuous > 0.0 || m.hybrid_p == 0)
+            std::cout << "  (p*=" << m.hybrid_p_continuous << ")";
+        std::cout << std::endl;
+    }
 }
 
 static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config)
@@ -153,6 +160,10 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     double sum_total = 0.0, sum_ilp = 0.0, sum_read = 0.0, sum_net = 0.0;
     double sum_decode = 0.0, sum_write = 0.0;
     double sum_helpers = 0.0;
+    double sum_hybrid_p = 0.0, sum_hybrid_p_continuous = 0.0;
+    int min_hybrid_p = -1, max_hybrid_p = -1;
+    int hybrid_success_count = 0;
+    std::vector<int> hybrid_p_samples;
 
     for (int t = 0; t < trial_count; t++)
     {
@@ -183,6 +194,17 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         sum_decode += m.decode_time;
         sum_write += m.disk_write_time;
         sum_helpers += m.helper_block_count;
+        if (m.repair_mode == "hybrid")
+        {
+            hybrid_success_count++;
+            sum_hybrid_p += m.hybrid_p;
+            sum_hybrid_p_continuous += m.hybrid_p_continuous;
+            hybrid_p_samples.push_back(m.hybrid_p);
+            if (min_hybrid_p < 0 || m.hybrid_p < min_hybrid_p)
+                min_hybrid_p = m.hybrid_p;
+            if (max_hybrid_p < 0 || m.hybrid_p > max_hybrid_p)
+                max_hybrid_p = m.hybrid_p;
+        }
 
         print_glrc_trial_metrics(m, k, r, z);
 
@@ -209,6 +231,19 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
           std::cout << "  (excl. orchestration wait & teardown)";
         std::cout << std::endl;
         std::cout << "  avg_helper_blocks:         " << (sum_helpers / cnt) << std::endl;
+        if (config->GlrcRepairMode == "hybrid" && hybrid_success_count > 0)
+        {
+            const double hp_cnt = static_cast<double>(hybrid_success_count);
+            std::cout << "  --- hybrid p stats (n=" << hybrid_success_count << ") ---" << std::endl;
+            std::cout << "  avg_hybrid_p:              " << (sum_hybrid_p / hp_cnt) << std::endl;
+            std::cout << "  avg_hybrid_p_continuous:   " << (sum_hybrid_p_continuous / hp_cnt) << std::endl;
+            std::cout << "  min_hybrid_p:              " << min_hybrid_p << std::endl;
+            std::cout << "  max_hybrid_p:              " << max_hybrid_p << std::endl;
+            std::cout << "  hybrid_p_per_trial:        ";
+            for (size_t i = 0; i < hybrid_p_samples.size(); i++)
+                std::cout << (i ? ", " : "") << hybrid_p_samples[i];
+            std::cout << std::endl;
+        }
     }
     std::cout << "===============================================" << std::endl;
 

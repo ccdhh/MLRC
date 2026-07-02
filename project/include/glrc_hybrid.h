@@ -25,9 +25,15 @@ struct GlrcHybridChooseResult
  * Choose hybrid split point p in [0, S-1].
  * GlrcHybridP config: "auto" or integer in [0, S-1].
  *
- * p=0: all shards via local-first pipeline when each placement group has at most one failure
- *       (e.g. D0+D5+G1 or L0+L1+L2), or GlrcHybridP=0.
- * p in (0,S-1): hybrid split; T_hot_block(p) ≈ T_hub(p) for auto mode when p>0.
+ * Auto mode: solve continuous p* from T_hot(p) ≈ T_hub(p), where
+ *   T_hot(p) ≈ a2*p + (σ/B)*(S-p) on the hottest Phase2 block (if it also receives pipeline tail),
+ *   T_hub(p)  = (σ/B)*p [hub helper read] + f_hub*(σ/B)*(S-p) [hub chains],
+ * then discretize by comparing floor(p*) and ceil(p*) and picking the one with smaller
+ * max(T_phase2_est, T_pipeline_est).
+ * Global stripe [0,p) runs Phase2+ILP (split across failed blocks; p<f allowed — some blocks get 0 shards).
+ * Global stripe [p,S) runs Pipeline+local-first on every failed block's repair proxy.
+ *
+ * p=0: all shards via local-first pipeline when each placement group has at most one failure, or GlrcHybridP=0.
  */
 GlrcHybridChooseResult glrc_hybrid_choose_p(int k, int r, int z, int f, int global_shard_count, int block_size,
                                             double link_mbps, const GlrcIlpRepairPlan *plan_ilp, int hub_block_id,

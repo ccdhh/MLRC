@@ -29,9 +29,9 @@ bool GlrcPhase2ShardPlan::build(int active_shard_count, int block_size,
     error_message = "BlockSize must be divisible by global shard count";
     return false;
   }
-  if (f > active_shard_count)
+  if (active_shard_count == 0)
   {
-    error_message = "failed block count f exceeds active shard count";
+    error_message = "active_shard_count is zero";
     return false;
   }
   if ((int)failed_cluster_ids.size() != f || (int)failed_proxy_ips.size() != f ||

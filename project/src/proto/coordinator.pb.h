@@ -3908,6 +3908,8 @@ class RecoveryReply final :
     kHelperBlockCountFieldNumber = 8,
     kSuccessFieldNumber = 11,
     kMaxPartitionShardCountFieldNumber = 16,
+    kHybridPFieldNumber = 17,
+    kHybridPContinuousFieldNumber = 18,
   };
   // repeated string selected_equations = 9;
   int selected_equations_size() const;
@@ -4109,6 +4111,24 @@ class RecoveryReply final :
   void _internal_set_max_partition_shard_count(int32_t value);
   public:
 
+  // int32 hybrid_p = 17;
+  void clear_hybrid_p();
+  int32_t hybrid_p() const;
+  void set_hybrid_p(int32_t value);
+  private:
+  int32_t _internal_hybrid_p() const;
+  void _internal_set_hybrid_p(int32_t value);
+  public:
+
+  // double hybrid_p_continuous = 18;
+  void clear_hybrid_p_continuous();
+  double hybrid_p_continuous() const;
+  void set_hybrid_p_continuous(double value);
+  private:
+  double _internal_hybrid_p_continuous() const;
+  void _internal_set_hybrid_p_continuous(double value);
+  public:
+
   // @@protoc_insertion_point(class_scope:coordinator_proto.RecoveryReply)
  private:
   class _Internal;
@@ -4135,6 +4155,8 @@ class RecoveryReply final :
     int32_t helper_block_count_;
     bool success_;
     int32_t max_partition_shard_count_;
+    int32_t hybrid_p_;
+    double hybrid_p_continuous_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -7092,6 +7114,46 @@ inline void RecoveryReply::_internal_set_max_partition_shard_count(int32_t value
 inline void RecoveryReply::set_max_partition_shard_count(int32_t value) {
   _internal_set_max_partition_shard_count(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.max_partition_shard_count)
+}
+
+// int32 hybrid_p = 17;
+inline void RecoveryReply::clear_hybrid_p() {
+  _impl_.hybrid_p_ = 0;
+}
+inline int32_t RecoveryReply::_internal_hybrid_p() const {
+  return _impl_.hybrid_p_;
+}
+inline int32_t RecoveryReply::hybrid_p() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_p)
+  return _internal_hybrid_p();
+}
+inline void RecoveryReply::_internal_set_hybrid_p(int32_t value) {
+  
+  _impl_.hybrid_p_ = value;
+}
+inline void RecoveryReply::set_hybrid_p(int32_t value) {
+  _internal_set_hybrid_p(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_p)
+}
+
+// double hybrid_p_continuous = 18;
+inline void RecoveryReply::clear_hybrid_p_continuous() {
+  _impl_.hybrid_p_continuous_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_p_continuous() const {
+  return _impl_.hybrid_p_continuous_;
+}
+inline double RecoveryReply::hybrid_p_continuous() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_p_continuous)
+  return _internal_hybrid_p_continuous();
+}
+inline void RecoveryReply::_internal_set_hybrid_p_continuous(double value) {
+  
+  _impl_.hybrid_p_continuous_ = value;
+}
+inline void RecoveryReply::set_hybrid_p_continuous(double value) {
+  _internal_set_hybrid_p_continuous(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_p_continuous)
 }
 
 // -------------------------------------------------------------------

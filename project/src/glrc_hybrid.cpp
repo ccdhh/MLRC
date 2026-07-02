@@ -143,6 +143,7 @@ void estimate_hybrid_times(int p, int f, int global_shard_count, int stripe_byte
         hot_block_id >= 0 && local_direct_failed.count(hot_block_id) == 0 && lower > 0;
     if (hot_receives_pipeline)
     {
+      // Hot Phase2 block also ingests pipeline stripe [p,S): (S-p) shards at link rate B.
       const size_t write_bytes = static_cast<size_t>(lower) * static_cast<size_t>(stripe_byte_len);
       t_phase2_out += node_block_transfer_seconds(write_bytes, link_mbps);
     }
@@ -184,10 +185,13 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
   const double hub_helper_slope = hub_in_helper_set(hub_block_id, plan_ilp) ? inv_b : 0.0;
   const double hub_chain_slope = f_hub > 0 ? static_cast<double>(f_hub) * inv_b : 0.0;
 
+  // T_hot(p) ≈ a2*p + hot_pipe_slope*(S-p)   [pipeline tail on hottest Phase2 block]
+  // T_hub(p) = hub_helper_slope*p + hub_chain_slope*(S-p)
+  // Expand to slope*p + intercept for p* = (hub_intercept - hot_intercept) / (hot_slope - hub_slope).
   const double hot_slope = a2 - hot_pipe_slope;
   const double hub_slope = hub_helper_slope - hub_chain_slope;
-  const double hot_intercept = hot_pipe_slope * global_shard_count;
-  const double hub_intercept = hub_chain_slope * global_shard_count;
+  const double hot_intercept = hot_pipe_slope * static_cast<double>(global_shard_count);
+  const double hub_intercept = hub_chain_slope * static_cast<double>(global_shard_count);
 
   const double denom = hot_slope - hub_slope;
   if (std::fabs(denom) < 1e-12)
@@ -197,6 +201,7 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
   return std::max(0.0, std::min(static_cast<double>(global_shard_count - 1), p_star));
 }
 
+/** Among floor(p*) and ceil(p*), pick p minimizing max(T_phase2_est, T_pipeline_est). */
 int discretize_p(double p_continuous, int global_shard_count, int f, int block_size, int stripe_byte_len,
                  double link_mbps, const GlrcIlpRepairPlan &plan_ilp, int hub_block_id,
                  int pipeline_local_direct_count, const std::unordered_set<int> &local_direct_failed,
@@ -213,7 +218,7 @@ int discretize_p(double p_continuous, int global_shard_count, int f, int block_s
   candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
 
   double best_score = 1e300;
-  int best_p = 0;
+  int best_p = p_floor;
   double best_t2 = 0.0, best_tp = 0.0;
   for (int p : candidates)
   {

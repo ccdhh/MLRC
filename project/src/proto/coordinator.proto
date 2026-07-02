@@ -202,6 +202,10 @@ message RecoveryReply {
   string equation_policy = 14;
   repeated int32 partition_shard_counts = 15;
   int32 max_partition_shard_count = 16;
+  /** Hybrid split: Phase2 shards [0, hybrid_p); pipeline [hybrid_p, S). -1 if not hybrid. */
+  int32 hybrid_p = 17;
+  /** Continuous optimum p* before discretization (hybrid auto/fixed only). */
+  double hybrid_p_continuous = 18;
 }
 
 message StripePos {

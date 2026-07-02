@@ -29,6 +29,9 @@ namespace ECProject
     int helper_block_count = 0;
     std::string repair_mode;
     std::string equation_policy;
+    /** Hybrid split p; -1 when repair_mode != hybrid. */
+    int hybrid_p = -1;
+    double hybrid_p_continuous = 0.0;
     std::vector<std::string> selected_equations;
     std::vector<int> helper_block_ids;
   };

@@ -140,6 +140,12 @@ namespace ECProject
                                              double *network_start_time, double *network_end_time,
                                              double *grpc_notify_time, double *grpc_start_time,
                                              SharedBandwidthLimiter *block_bandwidth = nullptr);
+    bool GetFromDatanodeStripeRangeCompactBreakdown(const std::string &key, char *value, size_t full_block_size,
+                                                    int read_offset, int read_length, const char *ip, const int port,
+                                                    double *disk_io_start_time, double *disk_io_end_time,
+                                                    double *network_start_time, double *network_end_time,
+                                                    double *grpc_notify_time, double *grpc_start_time,
+                                                    SharedBandwidthLimiter *block_bandwidth = nullptr);
     void get_from_node_stripe_range_breakdown(const std::string &block_key, char *block_value, size_t full_block_size,
                                               int read_offset, int read_length, const char *datanode_ip,
                                               const int datanode_port, bool *status, int index,

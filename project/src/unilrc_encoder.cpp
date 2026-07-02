@@ -1202,6 +1202,144 @@ bool ECProject::glrc_ilp_decode_matrix_invertible(int k, int r, int z,
   return ok;
 }
 
+bool ECProject::glrc_ilp_prepare_inverse(const int k, const int r, const int z,
+                                         const std::vector<int> &failed_block_ids,
+                                         const std::vector<int> &selected_equation_indices,
+                                         std::vector<unsigned char> &A_inv_out)
+{
+  const int f = (int)failed_block_ids.size();
+  if (f == 0 || (int)selected_equation_indices.size() != f)
+    return false;
+
+  const int n = k + r + z;
+  std::vector<std::vector<int>> groups;
+  glrc_build_placement_groups(k, r, z, groups);
+
+  unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
+  gen_glrc_matrix(encode_matrix, k, r, z);
+  const bool ok = glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
+                                         encode_matrix, groups, A_inv_out);
+  delete[] encode_matrix;
+  return ok;
+}
+
+bool ECProject::decode_glrc_ilp_rhs_compact(const std::vector<unsigned char *> &rhs_ptrs,
+                                            const std::vector<unsigned char> &A_inv,
+                                            int failed_count, int range_len,
+                                            std::vector<std::vector<unsigned char>> &recovered)
+{
+  const int f = failed_count;
+  if (f <= 0 || range_len < 0 || (int)rhs_ptrs.size() != f || (int)A_inv.size() != f * f)
+    return false;
+
+  recovered.assign(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
+  std::vector<unsigned char> col_b(f);
+  for (int byte_off = 0; byte_off < range_len; byte_off++)
+  {
+    for (int ei = 0; ei < f; ei++)
+      col_b[ei] = rhs_ptrs[ei][byte_off];
+    for (int t = 0; t < f; t++)
+    {
+      unsigned char acc = 0;
+      for (int j = 0; j < f; j++)
+        acc ^= ECProject::gf_mul(A_inv[t * f + j], col_b[j]);
+      recovered[t][byte_off] = acc;
+    }
+  }
+  return true;
+}
+
+bool ECProject::glrc_ilp_prepare_helper_decode(const int k, const int r, const int z,
+                                               const std::vector<int> &helper_block_ids,
+                                               const std::vector<int> &failed_block_ids,
+                                               const std::vector<int> &selected_equation_indices,
+                                               std::vector<unsigned char> &A_inv_out,
+                                               std::vector<std::vector<int>> &eq_helper_indices_out,
+                                               std::vector<std::vector<unsigned char>> &eq_helper_coefs_out)
+{
+  const int n = k + r + z;
+  const int f = (int)failed_block_ids.size();
+  if (f == 0 || (int)selected_equation_indices.size() != f || helper_block_ids.empty())
+    return false;
+
+  std::vector<std::vector<int>> groups;
+  glrc_build_placement_groups(k, r, z, groups);
+  unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
+  gen_glrc_matrix(encode_matrix, k, r, z);
+
+  if (!glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
+                              encode_matrix, groups, A_inv_out))
+  {
+    delete[] encode_matrix;
+    return false;
+  }
+
+  std::unordered_map<int, int> helper_pos;
+  for (int i = 0; i < (int)helper_block_ids.size(); i++)
+    helper_pos[helper_block_ids[i]] = i;
+  std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
+
+  eq_helper_indices_out.assign(f, {});
+  eq_helper_coefs_out.assign(f, {});
+  std::vector<unsigned char> coef_row(n);
+  for (int ei = 0; ei < f; ei++)
+  {
+    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row);
+    for (int b = 0; b < n; b++)
+    {
+      if (!coef_row[b] || failed_set.count(b))
+        continue;
+      auto it = helper_pos.find(b);
+      if (it == helper_pos.end())
+      {
+        delete[] encode_matrix;
+        return false;
+      }
+      eq_helper_indices_out[ei].push_back(it->second);
+      eq_helper_coefs_out[ei].push_back(coef_row[b]);
+    }
+  }
+  delete[] encode_matrix;
+  return true;
+}
+
+bool ECProject::decode_glrc_ilp_helper_compact(unsigned char **helper_ptrs,
+                                               const std::vector<unsigned char> &A_inv,
+                                               const std::vector<std::vector<int>> &eq_helper_indices,
+                                               const std::vector<std::vector<unsigned char>> &eq_helper_coefs,
+                                               int failed_count, int range_off, int range_len,
+                                               std::vector<std::vector<unsigned char>> &recovered)
+{
+  const int f = failed_count;
+  if (f <= 0 || range_off < 0 || range_len < 0 || (int)A_inv.size() != f * f ||
+      (int)eq_helper_indices.size() != f || (int)eq_helper_coefs.size() != f)
+    return false;
+
+  recovered.assign(f, std::vector<unsigned char>(static_cast<size_t>(range_len), 0));
+  std::vector<unsigned char> col_b(f);
+  for (int rel = 0; rel < range_len; rel++)
+  {
+    const int byte_off = range_off + rel;
+    for (int ei = 0; ei < f; ei++)
+    {
+      if (eq_helper_indices[ei].size() != eq_helper_coefs[ei].size())
+        return false;
+      unsigned char rhs = 0;
+      for (size_t ti = 0; ti < eq_helper_indices[ei].size(); ti++)
+        rhs ^= ECProject::gf_mul(eq_helper_coefs[ei][ti], helper_ptrs[eq_helper_indices[ei][ti]][byte_off]);
+      col_b[ei] = rhs;
+    }
+    for (int t = 0; t < f; t++)
+    {
+      unsigned char acc = 0;
+      for (int j = 0; j < f; j++)
+        acc ^= ECProject::gf_mul(A_inv[t * f + j], col_b[j]);
+      recovered[t][rel] = acc;
+    }
+  }
+  return true;
+}
+
 bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block_size,
                                 const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
                                 const std::vector<int> &failed_block_ids,

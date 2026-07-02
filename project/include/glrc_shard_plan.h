@@ -38,7 +38,8 @@ struct GlrcPhase2ShardPlan
   int block_size = 0;
   std::vector<GlrcPartitionShardPlan> partitions;
 
-  /** Assign active_shard_count stripes across f partitions; stripe_byte_len = block_size / global_shard_count. */
+  /** Assign active_shard_count stripes across f partitions; stripe_byte_len = block_size / global_shard_count.
+   *  active_shard_count may be < f: first (active_shard_count % f) partitions get one extra shard; others may get 0. */
   static bool build(int active_shard_count, int block_size, const std::vector<int> &failed_block_ids,
                     const std::vector<int> &failed_cluster_ids,
                     const std::vector<std::string> &failed_proxy_ips,
