@@ -557,6 +557,36 @@ bool read_local_stripe(ProxyImpl *self, const std::string &key, const std::strin
   return ok;
 }
 
+struct DatanodeReadStream
+{
+  asio::io_context io;
+  asio::ip::tcp::socket socket{io};
+  bool ok = false;
+};
+
+bool open_datanode_read_stream(ProxyImpl *self, const std::string &key, const std::string &ip, int port,
+                               int block_size, DatanodeReadStream &out)
+{
+  if (!self->openDatanodeGetStream(key, ip, port, block_size, out.io, out.socket))
+    return false;
+  out.ok = true;
+  return true;
+}
+
+bool read_datanode_stream_block(DatanodeReadStream &stream, unsigned char *dst, size_t len)
+{
+  if (!stream.ok)
+    return false;
+  asio::error_code read_ec;
+  tcp_read_with_node_bandwidth(stream.socket, reinterpret_cast<char *>(dst), len, 0.0, read_ec);
+  return !read_ec;
+}
+
+bool read_datanode_stream_shard(DatanodeReadStream &stream, unsigned char *dst, size_t len)
+{
+  return read_datanode_stream_block(stream, dst, len);
+}
+
 void clear_glrc_pipeline_session_state()
 {
   {
@@ -573,6 +603,35 @@ std::string glrc_pipeline_take_last_error()
   std::string out = g_glrc_pipeline_last_error;
   g_glrc_pipeline_last_error.clear();
   return out;
+}
+
+bool ProxyImpl::openDatanodeGetStream(const std::string &block_key, const std::string &ip, int port, int block_size,
+                                      asio::io_context &io, asio::ip::tcp::socket &socket)
+{
+  grpc::ClientContext context;
+  datanode_proto::GetInfo get_info;
+  datanode_proto::RequestResult result;
+  get_info.set_block_key(block_key);
+  get_info.set_block_size(block_size);
+  get_info.set_read_offset(0);
+  get_info.set_read_length(block_size);
+  get_info.set_proxy_ip(m_ip);
+  get_info.set_proxy_port(m_port);
+  const std::string node_ip_port = ip + ":" + std::to_string(port);
+  auto dn_it = m_datanode_ptrs.find(node_ip_port);
+  if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
+    return false;
+  context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+  grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
+  if (!stat.ok())
+    return false;
+  asio::ip::tcp::resolver resolver(io);
+  asio::error_code dn_ec;
+  asio::connect(socket, resolver.resolve({ip, std::to_string(result.data_port())}), dn_ec);
+  if (dn_ec)
+    return false;
+  set_pipeline_socket_timeouts(socket, kPipelineSocketTimeoutSec);
+  return true;
 }
 
 bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *recovery_request,
@@ -678,6 +737,44 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
             << " -> " << next_ip << ":" << listen_port << " streaming=" << shard_count << std::endl;
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
+  asio::io_context dn_io;
+  asio::ip::tcp::socket head_stream(dn_io);
+  bool head_stream_ok = false;
+  {
+    grpc::ClientContext context;
+    datanode_proto::GetInfo get_info;
+    datanode_proto::RequestResult result;
+    get_info.set_block_key(head_key);
+    get_info.set_block_size(block_size);
+    get_info.set_read_offset(0);
+    get_info.set_read_length(block_size);
+    get_info.set_proxy_ip(m_ip);
+    get_info.set_proxy_port(m_port);
+    const std::string node_ip_port = head_ip + ":" + std::to_string(head_port);
+    auto dn_it = m_datanode_ptrs.find(node_ip_port);
+    if (dn_it != m_datanode_ptrs.end() && dn_it->second)
+    {
+      context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+      grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
+      if (stat.ok())
+      {
+        asio::ip::tcp::resolver resolver(dn_io);
+        asio::error_code dn_ec;
+        asio::connect(head_stream, resolver.resolve({head_ip, std::to_string(result.data_port())}), dn_ec);
+        if (!dn_ec)
+        {
+          set_pipeline_socket_timeouts(head_stream, kPipelineSocketTimeoutSec);
+          head_stream_ok = true;
+        }
+      }
+    }
+  }
+  if (!head_stream_ok)
+  {
+    close_pipeline_socket(out_socket);
+    set_pipeline_error("pipeline chain head stream setup failed key=" + head_key);
+    return false;
+  }
   auto run_chain_head_shard = [&](int shard, unsigned char *dst) -> bool {
     const int off = shards.byte_off(shard);
     {
@@ -686,11 +783,10 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
                head_ip.c_str(), head_port, off, stripe_len);
       pipeline_trace(tb);
     }
-    double shard_disk_s = 0.0, shard_disk_e = 0.0, shard_net_s = 0.0, shard_net_e = 0.0;
-    if (!GetFromDatanodeStripeRangeCompactBreakdown(head_key, reinterpret_cast<char *>(dst), block_size, off,
-                                                    stripe_len, head_ip.c_str(), head_port, &shard_disk_s,
-                                                    &shard_disk_e, &shard_net_s, &shard_net_e, nullptr, nullptr,
-                                                    nullptr))
+    asio::error_code read_ec;
+    tcp_read_with_node_bandwidth(head_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len), 0.0,
+                                 read_ec);
+    if (read_ec)
     {
       const std::string msg = "pipeline chain head local read failed key=" + head_key + " @" + head_ip + ":" +
                               std::to_string(head_port) + " shard=" + std::to_string(shard);
@@ -787,6 +883,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
       return false;
     }
     close_pipeline_socket(out_socket);
+    close_pipeline_socket(head_stream);
     response->set_disk_io_start_time(min_disk);
     response->set_disk_io_end_time(max_disk);
     response->set_network_start_time(min_net);
@@ -804,6 +901,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
     return false;
   }
   close_pipeline_socket(out_socket);
+  close_pipeline_socket(head_stream);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -934,6 +1032,46 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
   int shards_forwarded = 0;
+  asio::io_context dn_io;
+  asio::ip::tcp::socket hop_stream(dn_io);
+  bool hop_stream_ok = false;
+  {
+    grpc::ClientContext context;
+    datanode_proto::GetInfo get_info;
+    datanode_proto::RequestResult result;
+    get_info.set_block_key(hop_key);
+    get_info.set_block_size(block_size);
+    get_info.set_read_offset(0);
+    get_info.set_read_length(block_size);
+    get_info.set_proxy_ip(m_ip);
+    get_info.set_proxy_port(m_port);
+    const std::string node_ip_port = hop_ip + ":" + std::to_string(hop_port);
+    auto dn_it = m_datanode_ptrs.find(node_ip_port);
+    if (dn_it != m_datanode_ptrs.end() && dn_it->second)
+    {
+      context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+      grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
+      if (stat.ok())
+      {
+        asio::ip::tcp::resolver resolver(dn_io);
+        asio::error_code dn_ec;
+        asio::connect(hop_stream, resolver.resolve({hop_ip, std::to_string(result.data_port())}), dn_ec);
+        if (!dn_ec)
+        {
+          set_pipeline_socket_timeouts(hop_stream, kPipelineSocketTimeoutSec);
+          hop_stream_ok = true;
+        }
+      }
+    }
+  }
+  if (!hop_stream_ok)
+  {
+    close_pipeline_socket(in_socket);
+    close_pipeline_socket(out_socket);
+    close_pipeline_acceptor(acceptor);
+    set_pipeline_error("pipeline hop local stream setup failed hop=" + std::to_string(my_idx));
+    return false;
+  }
 
   auto process_inbound_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
     if (shard < 0 || shard >= shard_count || (int)partial.size() != stripe_len)
@@ -943,9 +1081,11 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
     }
     const int off = shards.byte_off(shard);
     std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-    if (!GetFromDatanodeStripeRangeCompactBreakdown(hop_key, reinterpret_cast<char *>(local.data()), block_size, off,
-                                                    stripe_len, hop_ip.c_str(), hop_port, nullptr, nullptr, nullptr,
-                                                    nullptr, nullptr, nullptr))
+    (void)off;
+    asio::error_code read_ec;
+    tcp_read_with_node_bandwidth(hop_stream, reinterpret_cast<char *>(local.data()), static_cast<size_t>(stripe_len),
+                                 0.0, read_ec);
+    if (read_ec)
     {
       set_pipeline_error("pipeline hop local read failed hop=" + std::to_string(my_idx) + " shard=" +
                          std::to_string(shard));
@@ -1088,6 +1228,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   }
   close_pipeline_socket(in_socket);
   close_pipeline_socket(out_socket);
+  close_pipeline_socket(hop_stream);
   close_pipeline_acceptor(acceptor);
 
   response->set_disk_io_start_time(min_disk);
@@ -1127,7 +1268,6 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
   const int shard_count = shards.local_count;
   const int stripe_len = shards.stripe_len;
   const int chain_id = recovery_request->pipeline_chain_id();
-  const int epoch = recovery_request->pipeline_exchange_epoch();
   const int tail_idx = hops_n - 1;
   const unsigned char tail_coef =
       recovery_request->pipeline_hop_coefs_size() > tail_idx
@@ -1146,131 +1286,163 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
 
   double min_disk = 0.0, max_disk = 0.0, min_net = 0.0, max_net = 0.0;
   double total_wnet = 0.0, total_wdisk = 0.0;
-  auto update_min = [](double &slot, double v) {
-    if (v > 0.0 && (slot == 0.0 || v < slot))
-      slot = v;
-  };
-  auto update_max = [](double &slot, double v) {
-    if (v > slot)
-      slot = v;
-  };
 
-  const int worker_count = std::max(1, std::min(resolve_pipeline_window(m_sys_config, shard_count), shard_count));
-  std::atomic<int> next_shard{0};
-  std::atomic<bool> failed{false};
-  std::mutex metrics_mu;
-  std::mutex err_mu;
-  std::string err_msg;
-  auto set_local_error = [&](const std::string &msg) {
-    std::lock_guard<std::mutex> lock(err_mu);
-    if (err_msg.empty())
-      err_msg = msg;
-    failed.store(true);
-  };
-
-  auto worker = [&]() {
-    std::vector<unsigned char> stripe(static_cast<size_t>(stripe_len), 0);
-
-    while (!failed.load())
+  std::vector<DatanodeReadStream> hop_streams(static_cast<size_t>(hops_n));
+  for (int hi = 0; hi < hops_n; hi++)
+  {
+    const std::string &hop_key = recovery_request->pipeline_hop_block_keys(hi);
+    const std::string &hop_ip = recovery_request->pipeline_hop_datanode_ips(hi);
+    const int hop_port = recovery_request->pipeline_hop_datanode_ports(hi);
+    if (!open_datanode_read_stream(this, hop_key, hop_ip, hop_port, block_size, hop_streams[static_cast<size_t>(hi)]))
     {
-      const int shard = next_shard.fetch_add(1);
-      if (shard >= shard_count)
-        break;
-      const int off = shards.byte_off(shard);
-    std::fill(stripe.begin(), stripe.end(), 0);
+      for (int hj = 0; hj < hi; hj++)
+        close_pipeline_socket(hop_streams[static_cast<size_t>(hj)].socket);
+      set_pipeline_error("pipeline local_direct hop stream setup failed hop=" + std::to_string(hi));
+      return false;
+    }
+  }
+
+  const auto read_begin = std::chrono::high_resolution_clock::now();
+  std::atomic<bool> read_failed{false};
+  std::atomic<bool> write_failed{false};
+  std::string read_err;
+  std::mutex metrics_mu;
+
+  struct LocalDirectWriteTask
+  {
+    int off = 0;
+    std::vector<unsigned char> data;
+  };
+  std::queue<LocalDirectWriteTask> write_q;
+  std::mutex write_mu;
+  std::condition_variable write_cv;
+  bool local_decode_done = false;
+
+  const int write_worker_count =
+      std::max(1, std::min({resolve_pipeline_window(m_sys_config, shard_count), shard_count, 8}));
+  std::vector<std::thread> write_workers;
+  write_workers.reserve(static_cast<size_t>(write_worker_count));
+  for (int wi = 0; wi < write_worker_count; wi++)
+  {
+    write_workers.emplace_back([&, wi]() {
+      (void)wi;
+      while (true)
+      {
+        LocalDirectWriteTask task;
+        {
+          std::unique_lock<std::mutex> lock(write_mu);
+          write_cv.wait(lock, [&]() { return read_failed.load() || local_decode_done || !write_q.empty(); });
+          if ((read_failed.load() || local_decode_done) && write_q.empty())
+            return;
+          task = std::move(write_q.front());
+          write_q.pop();
+        }
+
+        double wnet = 0.0, wdisk = 0.0;
+        if (!RecoveryToDatanodeStripeBreakdown(failed_key, failed_id, reinterpret_cast<char *>(task.data.data()),
+                                               rep_ip, rep_port, task.off, stripe_len, &wnet, &wdisk))
+        {
+          write_failed.store(true);
+          read_failed.store(true);
+          write_cv.notify_all();
+          return;
+        }
+        {
+          std::lock_guard<std::mutex> lock(metrics_mu);
+          total_wnet += wnet;
+          total_wdisk += wdisk;
+        }
+      }
+    });
+  }
+
+  for (int shard = 0; shard < shard_count && !read_failed.load(); shard++)
+  {
+    const int off = shards.byte_off(shard);
+    std::vector<unsigned char> stripe(static_cast<size_t>(stripe_len), 0);
 
     if (hops_n == 1)
     {
-      const std::string &head_key = recovery_request->pipeline_hop_block_keys(0);
-      const std::string &head_ip = recovery_request->pipeline_hop_datanode_ips(0);
-      const int head_port = recovery_request->pipeline_hop_datanode_ports(0);
-      double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
       std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-      if (!GetFromDatanodeStripeRangeCompactBreakdown(head_key, reinterpret_cast<char *>(local.data()), block_size,
-                                                      off, stripe_len, head_ip.c_str(), head_port, &ds, &de, &ns, &ne,
-                                                      nullptr, nullptr, nullptr))
+      if (!read_datanode_stream_shard(hop_streams[0], local.data(), static_cast<size_t>(stripe_len)))
       {
-        set_local_error("pipeline local_direct single-hop read failed shard=" + std::to_string(shard));
+        read_err = "pipeline local_direct single-hop read failed shard=" + std::to_string(shard);
+        read_failed.store(true);
         break;
-      }
-      {
-        std::lock_guard<std::mutex> lock(metrics_mu);
-        update_min(min_disk, ds);
-        update_max(max_disk, de);
-        update_min(min_net, ns);
-        update_max(max_net, ne);
       }
       glrc_pipeline_accumulate_range(stripe.data(), local.data(), tail_coef, stripe_len, eq_codec);
     }
     else
     {
+      std::vector<std::vector<unsigned char>> locals(static_cast<size_t>(hops_n),
+                                                     std::vector<unsigned char>(static_cast<size_t>(stripe_len), 0));
+      std::vector<std::thread> readers;
+      readers.reserve(static_cast<size_t>(hops_n));
+      for (int hi = 0; hi < hops_n; hi++)
+      {
+        readers.emplace_back([&, hi]() {
+          if (!read_datanode_stream_shard(hop_streams[static_cast<size_t>(hi)], locals[static_cast<size_t>(hi)].data(),
+                                          static_cast<size_t>(stripe_len)))
+            read_failed.store(true);
+        });
+      }
+      for (auto &th : readers)
+        if (th.joinable())
+          th.join();
+      if (read_failed.load())
+      {
+        read_err = "pipeline local_direct read failed shard=" + std::to_string(shard);
+        break;
+      }
+
       for (int hi = 0; hi < hops_n; hi++)
       {
         const unsigned char coef =
             recovery_request->pipeline_hop_coefs_size() > hi
                 ? static_cast<unsigned char>(recovery_request->pipeline_hop_coefs(hi) & 0xff)
                 : 1;
-        const std::string &hop_key = recovery_request->pipeline_hop_block_keys(hi);
-        const std::string &hop_ip = recovery_request->pipeline_hop_datanode_ips(hi);
-        const int hop_port = recovery_request->pipeline_hop_datanode_ports(hi);
-        double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
-        std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-        if (!GetFromDatanodeStripeRangeCompactBreakdown(hop_key, reinterpret_cast<char *>(local.data()), block_size,
-                                                        off, stripe_len, hop_ip.c_str(), hop_port, &ds, &de, &ns, &ne,
-                                                        nullptr, nullptr, nullptr))
-        {
-          set_local_error("pipeline local_direct read failed hop=" + std::to_string(hi) + " shard=" +
-                          std::to_string(shard));
-          break;
-        }
-        {
-          std::lock_guard<std::mutex> lock(metrics_mu);
-          update_min(min_disk, ds);
-          update_max(max_disk, de);
-          update_min(min_net, ns);
-          update_max(max_net, ne);
-        }
         if (hi == 0)
-          glrc_pipeline_init_partial_range(stripe.data(), local.data(), coef, stripe_len, eq_codec);
+          glrc_pipeline_init_partial_range(stripe.data(), locals[static_cast<size_t>(hi)].data(), coef, stripe_len,
+                                           eq_codec);
         else
-          glrc_pipeline_accumulate_range(stripe.data(), local.data(), coef, stripe_len, eq_codec);
+          glrc_pipeline_accumulate_range(stripe.data(), locals[static_cast<size_t>(hi)].data(), coef, stripe_len,
+                                         eq_codec);
       }
-      if (failed.load())
-        break;
     }
 
-    double wnet = 0.0, wdisk = 0.0;
-    if (!RecoveryToDatanodeStripeBreakdown(failed_key, failed_id, reinterpret_cast<char *>(stripe.data()), rep_ip,
-                                           rep_port, off, stripe_len, &wnet, &wdisk))
     {
-      set_local_error("pipeline local_direct stripe write-back failed shard=" + std::to_string(shard));
-      pipeline_trace("local_direct write-back failed");
-      break;
+      std::lock_guard<std::mutex> lock(write_mu);
+      write_q.push(LocalDirectWriteTask{off, std::move(stripe)});
     }
-    {
-      std::lock_guard<std::mutex> lock(metrics_mu);
-      total_wnet += wnet;
-      total_wdisk += wdisk;
-    }
-    char tb[128];
-    snprintf(tb, sizeof(tb), "local_direct wrote shard=%d/%d", shard, shard_count);
-    pipeline_trace(tb);
-    }
-  };
+    write_cv.notify_one();
+  }
 
-  std::vector<std::thread> workers;
-  workers.reserve(static_cast<size_t>(worker_count));
-  for (int i = 0; i < worker_count; i++)
-    workers.emplace_back(worker);
-  for (auto &th : workers)
+  const auto read_end = std::chrono::high_resolution_clock::now();
+  for (auto &hs : hop_streams)
+    close_pipeline_socket(hs.socket);
+
+  {
+    std::lock_guard<std::mutex> lock(write_mu);
+    local_decode_done = true;
+  }
+  write_cv.notify_all();
+  for (auto &th : write_workers)
+  {
     if (th.joinable())
       th.join();
+  }
 
-  if (failed.load())
+  if (read_failed.load())
   {
-    set_pipeline_error(err_msg.empty() ? "pipeline local_direct failed" : err_msg);
+    if (write_failed.load())
+      set_pipeline_error("pipeline local_direct stripe write-back failed");
+    else
+      set_pipeline_error(read_err.empty() ? "pipeline local_direct read failed" : read_err);
     return false;
   }
+
+  min_net = std::chrono::duration<double>(read_begin.time_since_epoch()).count();
+  max_net = std::chrono::duration<double>(read_end.time_since_epoch()).count();
 
   pipeline_trace("local_direct write-back ok");
 
@@ -1302,6 +1474,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     set_pipeline_error("invalid pipeline hub geometry");
     return false;
   }
+
   const int shard_count = shards.local_count;
   const int stripe_len = shards.stripe_len;
   const int epoch = recovery_request->pipeline_exchange_epoch();
@@ -1418,18 +1591,42 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
         asio::error_code ec;
         if (hub_failed.load())
           return;
+        asio::io_context hub_dn_io;
+        asio::ip::tcp::socket hub_stream(hub_dn_io);
+        bool hub_stream_open = false;
+        auto open_hub_stream = [&]() -> bool {
+          if (hub_stream_open)
+            return true;
+          if (!openDatanodeGetStream(hub_key, hub_dn_ip, hub_dn_port, block_size, hub_dn_io, hub_stream))
+            return false;
+          hub_stream_open = true;
+          return true;
+        };
+        auto read_hub_stream_shard = [&](unsigned char *dst) -> bool {
+          if (!open_hub_stream())
+            return false;
+          asio::error_code read_ec;
+          tcp_read_with_node_bandwidth(hub_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len),
+                                       0.0, read_ec);
+          return !read_ec;
+        };
+
         if (ctxs[ci].local_only)
         {
+          if (!open_hub_stream())
+          {
+            hub_fail_msg = "hub local_only stream setup failed";
+            hub_failed.store(true);
+            rhs_cv.notify_all();
+            return;
+          }
           for (int shard = 0; shard < shard_count && !hub_failed.load(); shard++)
           {
             const int off = shards.byte_off(shard);
             std::vector<unsigned char> partial(stripe_len, 0);
             std::vector<unsigned char> local(stripe_len, 0);
-            double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
-            if (!GetFromDatanodeStripeRangeCompactBreakdown(hub_key, reinterpret_cast<char *>(local.data()),
-                                                            block_size, off, stripe_len, hub_dn_ip.c_str(),
-                                                            hub_dn_port, &ds, &de, &ns, &ne, nullptr, nullptr,
-                                                            nullptr))
+            (void)off;
+            if (!read_hub_stream_shard(local.data()))
             {
               hub_fail_msg = "hub local_only read failed";
               hub_failed.store(true);
@@ -1445,9 +1642,18 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
             }
             rhs_cv.notify_all();
           }
+          if (hub_stream_open)
+            close_pipeline_socket(hub_stream);
           return;
         }
 
+        if (ctxs[ci].hub_is_tail && ctxs[ci].hub_coef != 0 && !open_hub_stream())
+        {
+          hub_fail_msg = "hub tail stream setup failed";
+          hub_failed.store(true);
+          rhs_cv.notify_all();
+          return;
+        }
         if (hub_failed.load())
           return;
         asio::io_context &accept_io = bound_io != nullptr ? *bound_io : io;
@@ -1527,12 +1733,9 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
 
           if (ctxs[ci].hub_is_tail && ctxs[ci].hub_coef != 0)
           {
-            double ds = 0.0, de = 0.0, ns = 0.0, ne = 0.0;
             std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-            if (!GetFromDatanodeStripeRangeCompactBreakdown(hub_key, reinterpret_cast<char *>(local.data()),
-                                                            block_size, off, stripe_len, hub_dn_ip.c_str(),
-                                                            hub_dn_port, &ds, &de, &ns, &ne, nullptr, nullptr,
-                                                            nullptr))
+            (void)off;
+            if (!read_hub_stream_shard(local.data()))
             {
               hub_fail_msg = "hub tail local read failed";
               hub_failed.store(true);
@@ -1553,6 +1756,8 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           shards_received++;
         }
         close_pipeline_socket(in_socket);
+        if (hub_stream_open)
+          close_pipeline_socket(hub_stream);
       }
       catch (const std::exception &e)
       {
@@ -1759,7 +1964,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   response->set_dest_data_node_network_time(total_write_net);
   response->set_dest_data_node_disk_io_time(total_write_disk);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hub decode success chains=" << hub_chain_n
-            << " shards=" << shard_count << " streaming_writeback=1" << std::endl;
+            << " shards=" << shard_count << std::endl;
   return true;
 }
 

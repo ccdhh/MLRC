@@ -174,6 +174,9 @@ namespace ECProject
     bool glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryRequest *recovery_request,
                                          proxy_proto::RecoveryReply *response);
 
+    bool openDatanodeGetStream(const std::string &block_key, const std::string &ip, int port, int block_size,
+                                 asio::io_context &io, asio::ip::tcp::socket &socket);
+
   private:
     std::mutex m_glrc_phase2_mutex;
     int m_phase2_block_bw_epoch = -1;

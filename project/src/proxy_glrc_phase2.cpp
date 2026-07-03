@@ -106,9 +106,9 @@ int phase2_proxy_index(int proxy_grpc_port)
 int phase2_exchange_port(int proxy_grpc_port, int partition_id, int exchange_epoch)
 {
   const int proxy_idx = phase2_proxy_index(proxy_grpc_port);
-  const int epoch_group = exchange_epoch % PROXY_PHASE2_EPOCH_STRIDE;
+  const int epoch_slot = exchange_epoch % PROXY_PHASE2_EPOCH_STRIDE;
   const int port = PROXY_PHASE2_EXCHANGE_BASE + proxy_idx * PROXY_PHASE2_PER_PROXY_BAND +
-                   epoch_group * 8 + partition_id;
+                   epoch_slot * 8 + partition_id;
   if (port >= PROXY_PIPELINE_EXCHANGE_BASE)
   {
     std::cerr << "[gLRC Phase2] exchange port overflow proxy_idx=" << proxy_idx << " port=" << port
@@ -168,23 +168,24 @@ bool read_all_bw(asio::ip::tcp::socket &socket, char *data, size_t len, SharedBa
   return !ec;
 }
 
-Phase2PeerHeader make_shard_header(int from_partition, int global_shard, int stripe_byte_len)
+Phase2PeerHeader make_shard_header(int from_partition, int global_shard, int stripe_byte_len, int shard_count = 1)
 {
   Phase2PeerHeader hdr{};
   hdr.magic = kPhase2Magic;
   hdr.from_partition = static_cast<uint32_t>(from_partition);
   hdr.stripe_byte_len = static_cast<uint32_t>(stripe_byte_len);
   hdr.shard_begin = static_cast<uint32_t>(global_shard);
-  hdr.shard_count = 1;
+  hdr.shard_count = static_cast<uint32_t>(shard_count);
   return hdr;
 }
 
 bool send_shard_frame(asio::ip::tcp::socket &socket, const Phase2PeerHeader &hdr, const char *payload,
                       SharedBandwidthLimiter *bw, asio::error_code &ec)
 {
+  const size_t payload_len = static_cast<size_t>(hdr.stripe_byte_len) * static_cast<size_t>(hdr.shard_count);
   if (!write_all_bw(socket, reinterpret_cast<const char *>(&hdr), sizeof(hdr), bw, ec))
     return false;
-  return write_all_bw(socket, payload, hdr.stripe_byte_len, bw, ec);
+  return write_all_bw(socket, payload, payload_len, bw, ec);
 }
 
 bool recv_shard_frame(asio::ip::tcp::socket &socket, Phase2PeerHeader &hdr, char *payload, size_t payload_cap,
@@ -192,13 +193,14 @@ bool recv_shard_frame(asio::ip::tcp::socket &socket, Phase2PeerHeader &hdr, char
 {
   if (!read_all_bw(socket, reinterpret_cast<char *>(&hdr), sizeof(hdr), ingress_bw, ec))
     return false;
-  if (hdr.magic != kPhase2Magic || hdr.shard_count != 1 || hdr.stripe_byte_len == 0 ||
-      hdr.stripe_byte_len > payload_cap)
+  const size_t payload_len = static_cast<size_t>(hdr.stripe_byte_len) * static_cast<size_t>(hdr.shard_count);
+  if (hdr.magic != kPhase2Magic || hdr.shard_count < 1 || hdr.stripe_byte_len == 0 ||
+      payload_len > payload_cap)
   {
     ec = asio::error::invalid_argument;
     return false;
   }
-  return read_all_bw(socket, payload, hdr.stripe_byte_len, ingress_bw, ec);
+  return read_all_bw(socket, payload, payload_len, ingress_bw, ec);
 }
 
 bool connect_phase2_exchange(asio::ip::tcp::socket &socket, const std::string &peer_ip, int listen_port,
@@ -244,15 +246,13 @@ bool bind_phase2_acceptor(asio::ip::tcp::acceptor &acceptor, const asio::ip::tcp
     }
     if (!ec)
     {
-      asio::error_code listen_ec;
-      acceptor.listen(asio::socket_base::max_listen_connections, listen_ec);
-      if (!listen_ec)
+      acceptor.listen(asio::socket_base::max_listen_connections, ec);
+      if (!ec)
       {
         std::lock_guard<std::mutex> lock(g_phase2_bind_mutex);
         g_phase2_active_listen_ports.insert(listen_port);
         return true;
       }
-      ec = listen_ec;
     }
     asio::error_code close_ec;
     acceptor.close(close_ec);
@@ -490,6 +490,8 @@ bool ProxyImpl::GetFromDatanodeStripeRangeCompactBreakdown(const std::string &ke
     }
 
     set_exchange_socket_timeouts(socket, 45);
+    if (read_offset < 0 || read_length < 0 || static_cast<size_t>(read_offset + read_length) > full_block_size)
+      return false;
     asio::error_code ec;
     tcp_read_with_shared_bandwidth(socket, value, static_cast<size_t>(read_length), block_bandwidth, ec);
     if (ec)
@@ -554,21 +556,15 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
   }
   const int repair_block_id = recovery_request->failed_block_ids(partition_id);
-  const int local_shard_count = recovery_request->phase2_shard_count_local();
-  const int byte_len = recovery_request->phase2_byte_len();
-  if (local_shard_count <= 0 || byte_len <= 0)
-  {
-    phase2_trace("partition skipped (0 phase2 shards)");
-    return true;
-  }
   const Phase2BlockDuplexBw block_bw = phase2BlockDuplexBandwidth(repair_block_id, exchange_epoch);
   const int f = recovery_request->failed_block_ids_size();
   const int byte_off = recovery_request->phase2_byte_off();
+  const int byte_len = recovery_request->phase2_byte_len();
   const int stripe_byte_len = recovery_request->phase2_stripe_byte_len();
   const int block_size = m_sys_config->BlockSize;
   const int helper_n = recovery_request->datanodeip_size();
 
-  if (f < 1 || helper_n < 1 || stripe_byte_len < 1)
+  if (f < 1 || helper_n < 1 || byte_len < 1 || stripe_byte_len < 1)
   {
     char buf[256];
     snprintf(buf, sizeof(buf), "bad dims f=%d helpers=%d byte_len=%d stripe_len=%d", f, helper_n, byte_len,
@@ -580,12 +576,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   int accept_remaining = 0;
   for (int peer = 0; peer < recovery_request->phase2_peer_partition_ids_size(); peer++)
   {
-    const int peer_part = recovery_request->phase2_peer_partition_ids(peer);
-    if (peer_part >= partition_id)
-      continue;
-    int peer_shard_begin = 0;
-    int peer_shard_count = 0;
-    if (lookup_peer_shards(recovery_request, peer_part, peer_shard_begin, peer_shard_count) && peer_shard_count > 0)
+    if (recovery_request->phase2_peer_partition_ids(peer) < partition_id)
       accept_remaining++;
   }
 
@@ -698,6 +689,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
 
   const int shard_begin = recovery_request->phase2_shard_begin();
+  const int local_shard_count = recovery_request->phase2_shard_count_local();
 
   int max_exchange_rounds = local_shard_count;
   for (int peer = 0; peer < recovery_request->phase2_peer_partition_ids_size(); peer++)
@@ -737,11 +729,21 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     set_phase2_error("phase2 prepare helper decode failed");
     return false;
   }
+  std::vector<std::vector<unsigned char>> phase2_eq_helper_g_tbls(f);
+  for (int ei = 0; ei < f; ei++)
+  {
+    const int term_count = static_cast<int>(phase2_eq_helper_coefs[ei].size());
+    phase2_eq_helper_g_tbls[ei].resize(static_cast<size_t>(term_count) * 32);
+    if (term_count > 0)
+      ec_init_tables(term_count, 1, phase2_eq_helper_coefs[ei].data(), phase2_eq_helper_g_tbls[ei].data());
+  }
+  std::vector<unsigned char> phase2_inv_g_tbls(static_cast<size_t>(f) * static_cast<size_t>(f) * 32);
+  ec_init_tables(f, f, phase2_decode_inverse.data(), phase2_inv_g_tbls.data());
 
   std::vector<char *> get_bufs(helper_n);
   for (int i = 0; i < helper_n; i++)
   {
-    get_bufs[i] = static_cast<char *>(std::aligned_alloc(32, block_size));
+    get_bufs[i] = static_cast<char *>(std::aligned_alloc(32, byte_len));
     if (get_bufs[i] == nullptr)
     {
       set_phase2_error("helper buffer alloc failed");
@@ -750,7 +752,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       join_accept_thread();
       return false;
     }
-    std::memset(get_bufs[i], 0, block_size);
+    std::memset(get_bufs[i], 0, byte_len);
   }
 
   std::vector<unsigned char *> recovered_ptrs(f);
@@ -770,7 +772,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
   constexpr int kExchangeSocketTimeoutSec = 45;
   std::atomic<bool> exchange_failed{false};
-  const auto ex_begin = std::chrono::high_resolution_clock::now();
+  double total_exchange_time = 0.0;
 
   struct ClientPeerConn
   {
@@ -853,11 +855,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       setup_threads.emplace_back([&, peer_part, peer]() {
         if (exchange_failed.load())
           return;
-        int peer_shard_begin = 0;
-        int peer_shard_count = 0;
-        if (!lookup_peer_shards(recovery_request, peer_part, peer_shard_begin, peer_shard_count) ||
-            peer_shard_count <= 0)
-          return;
         const int peer_port = recovery_request->phase2_peer_proxy_ports(peer);
         const std::string peer_ip = recovery_request->phase2_peer_proxy_ips(peer);
         if (partition_id < peer_part)
@@ -890,10 +887,118 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
   }
 
-  auto exchange_shard_with_peer = [&](int shard_k) {
-    if (exchange_failed.load())
-      return;
-    std::vector<std::thread> peer_threads;
+  std::mutex decoded_mu;
+  std::condition_variable decoded_cv;
+  int decoded_shards = 0;
+  bool decode_done = false;
+
+  auto wait_until_decoded = [&](int shard_k) -> bool {
+    if (shard_k >= local_shard_count)
+      return true;
+    std::unique_lock<std::mutex> lk(decoded_mu);
+    decoded_cv.wait(lk, [&]() { return exchange_failed.load() || decoded_shards > shard_k || decode_done; });
+    return !exchange_failed.load() && decoded_shards > shard_k;
+  };
+
+  auto make_exchange_worker = [&](int peer, int peer_part) {
+    return std::thread([&, peer, peer_part]() {
+      if (exchange_failed.load())
+        return;
+
+      int peer_shard_begin = 0;
+      int peer_shard_count = 0;
+      if (!lookup_peer_shards(recovery_request, peer_part, peer_shard_begin, peer_shard_count))
+      {
+        exchange_failed.store(true);
+        decoded_cv.notify_all();
+        return;
+      }
+
+      const int peer_port = recovery_request->phase2_peer_proxy_ports(peer);
+      const std::string peer_ip = recovery_request->phase2_peer_proxy_ips(peer);
+      asio::error_code ec;
+
+      asio::ip::tcp::socket *sock = nullptr;
+      if (partition_id < peer_part)
+        sock = ensure_client_peer(peer_part, peer_ip, peer_port);
+      else
+        sock = ensure_server_peer(peer_part);
+      if (sock == nullptr)
+      {
+        exchange_failed.store(true);
+        decoded_cv.notify_all();
+        return;
+      }
+
+      auto send_one = [&](int shard_k, const char *side) -> bool {
+        if (shard_k >= local_shard_count)
+          return true;
+        if (!wait_until_decoded(shard_k))
+          return false;
+        const int global_shard = shard_begin + shard_k;
+        const int stripe_off = global_shard * stripe_byte_len;
+        Phase2PeerHeader out_hdr = make_shard_header(partition_id, global_shard, stripe_byte_len);
+        if (!send_shard_frame(*sock, out_hdr, reinterpret_cast<char *>(recovered_ptrs[peer_part] + stripe_off),
+                              block_bw.egress, ec))
+        {
+          set_phase2_error(std::string(side) + " shard send to peer " + std::to_string(peer_part) +
+                           " failed: " + ec.message());
+          exchange_failed.store(true);
+          decoded_cv.notify_all();
+          return false;
+        }
+        return true;
+      };
+
+      auto recv_one = [&](int shard_k, const char *side) -> bool {
+        if (shard_k >= peer_shard_count)
+          return true;
+        Phase2PeerHeader rhdr{};
+        std::vector<char> recv_stripe(stripe_byte_len);
+        if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), block_bw.ingress, ec))
+        {
+          set_phase2_error(std::string(side) + " shard recv from peer " + std::to_string(peer_part) +
+                           " failed: " + ec.message());
+          exchange_failed.store(true);
+          decoded_cv.notify_all();
+          return false;
+        }
+        const int recv_global = static_cast<int>(rhdr.shard_begin);
+        const int expected_global = peer_shard_begin + shard_k;
+        if (recv_global != expected_global || rhdr.shard_count != 1)
+        {
+          set_phase2_error(std::string(side) + " shard recv header mismatch from peer " + std::to_string(peer_part));
+          exchange_failed.store(true);
+          decoded_cv.notify_all();
+          return false;
+        }
+        std::memcpy(recovered_ptrs[partition_id] + static_cast<size_t>(recv_global) * stripe_byte_len,
+                    recv_stripe.data(), stripe_byte_len);
+        return true;
+      };
+
+      for (int shard_k = 0; shard_k < max_exchange_rounds && !exchange_failed.load(); shard_k++)
+      {
+        if (partition_id < peer_part)
+        {
+          if (!send_one(shard_k, "client"))
+            return;
+          if (!recv_one(shard_k, "client"))
+            return;
+        }
+        else
+        {
+          if (!recv_one(shard_k, "server"))
+            return;
+          if (!send_one(shard_k, "server"))
+            return;
+        }
+      }
+    });
+  };
+
+  std::vector<std::thread> exchange_workers;
+  auto start_exchange_workers = [&]() {
     for (int peer = 0; peer < recovery_request->phase2_peer_partition_ids_size(); peer++)
     {
       const int peer_part = recovery_request->phase2_peer_partition_ids(peer);
@@ -904,92 +1009,12 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
         exchange_failed.store(true);
         continue;
       }
-
-      peer_threads.emplace_back([&, peer_part, peer]() {
-        if (exchange_failed.load())
-          return;
-
-        int peer_shard_begin = 0;
-        int peer_shard_count = 0;
-        if (!lookup_peer_shards(recovery_request, peer_part, peer_shard_begin, peer_shard_count))
-        {
-          exchange_failed.store(true);
-          return;
-        }
-        if (peer_shard_count <= 0)
-          return;
-
-        const int peer_port = recovery_request->phase2_peer_proxy_ports(peer);
-        const std::string peer_ip = recovery_request->phase2_peer_proxy_ips(peer);
-        const int global_shard = shard_begin + shard_k;
-        const int stripe_off = global_shard * stripe_byte_len;
-        asio::error_code ec;
-
-        if (partition_id < peer_part)
-        {
-          asio::ip::tcp::socket *sock = ensure_client_peer(peer_part, peer_ip, peer_port);
-          if (sock == nullptr)
-            return;
-          if (shard_k < local_shard_count)
-          {
-            Phase2PeerHeader out_hdr = make_shard_header(partition_id, global_shard, stripe_byte_len);
-            if (!send_shard_frame(*sock, out_hdr, reinterpret_cast<char *>(recovered_ptrs[peer_part] + stripe_off),
-                                  block_bw.egress, ec))
-            {
-              set_phase2_error("client shard send to peer " + std::to_string(peer_part) + " failed: " + ec.message());
-              exchange_failed.store(true);
-              return;
-            }
-          }
-          if (shard_k < peer_shard_count)
-          {
-            Phase2PeerHeader rhdr{};
-            std::vector<char> recv_stripe(stripe_byte_len);
-            if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), block_bw.ingress, ec))
-            {
-              set_phase2_error("client shard recv from peer " + std::to_string(peer_part) + " failed: " + ec.message());
-              exchange_failed.store(true);
-              return;
-            }
-            const int recv_global = static_cast<int>(rhdr.shard_begin);
-            std::memcpy(recovered_ptrs[partition_id] + static_cast<size_t>(recv_global) * stripe_byte_len,
-                        recv_stripe.data(), stripe_byte_len);
-          }
-        }
-        else
-        {
-          asio::ip::tcp::socket *sock = ensure_server_peer(peer_part);
-          if (sock == nullptr)
-            return;
-          if (shard_k < peer_shard_count)
-          {
-            Phase2PeerHeader rhdr{};
-            std::vector<char> recv_stripe(stripe_byte_len);
-            if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), block_bw.ingress, ec))
-            {
-              set_phase2_error("server shard recv from peer " + std::to_string(peer_part) + " failed: " + ec.message());
-              exchange_failed.store(true);
-              return;
-            }
-            const int recv_global = static_cast<int>(rhdr.shard_begin);
-            std::memcpy(recovered_ptrs[partition_id] + static_cast<size_t>(recv_global) * stripe_byte_len,
-                        recv_stripe.data(), stripe_byte_len);
-          }
-          if (shard_k < local_shard_count)
-          {
-            Phase2PeerHeader out_hdr = make_shard_header(partition_id, global_shard, stripe_byte_len);
-            if (!send_shard_frame(*sock, out_hdr, reinterpret_cast<char *>(recovered_ptrs[peer_part] + stripe_off),
-                                  block_bw.egress, ec))
-            {
-              set_phase2_error("server shard send to peer " + std::to_string(peer_part) + " failed: " + ec.message());
-              exchange_failed.store(true);
-              return;
-            }
-          }
-        }
-      });
+      exchange_workers.emplace_back(make_exchange_worker(peer, peer_part));
     }
-    for (auto &th : peer_threads)
+  };
+  auto join_exchange_workers = [&]() {
+    decoded_cv.notify_all();
+    for (auto &th : exchange_workers)
     {
       if (th.joinable())
         th.join();
@@ -999,93 +1024,234 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   double total_write_net = 0.0;
   double total_write_disk = 0.0;
 
-  for (int shard_k = 0; shard_k < max_exchange_rounds && !exchange_failed.load(); shard_k++)
-  {
-    if (shard_k < local_shard_count)
+  std::mutex helper_metric_mu;
+  auto update_helper_breakdown_one = [&](double disk_io_start, double disk_io_end, double net_start, double net_end,
+                                         double grpc_notify, double grpc_start) {
+    std::lock_guard<std::mutex> lk(helper_metric_mu);
+    if (!have_disk)
     {
-    const int stripe_off = byte_off + shard_k * stripe_byte_len;
+      min_disk_start = disk_io_start;
+      max_disk_end = disk_io_end;
+      have_disk = true;
+    }
+    else
+    {
+      min_disk_start = std::min(min_disk_start, disk_io_start);
+      max_disk_end = std::max(max_disk_end, disk_io_end);
+    }
+    if (!have_net)
+    {
+      min_net_start = net_start;
+      max_net_end = net_end;
+      have_net = true;
+    }
+    else
+    {
+      min_net_start = std::min(min_net_start, net_start);
+      max_net_end = std::max(max_net_end, net_end);
+    }
+    if (!have_grpc)
+    {
+      min_grpc_notify = grpc_notify;
+      max_grpc_start = grpc_start;
+      have_grpc = true;
+    }
+    else
+    {
+      min_grpc_notify = std::min(min_grpc_notify, grpc_notify);
+      max_grpc_start = std::max(max_grpc_start, grpc_start);
+    }
+  };
 
-    std::unique_ptr<bool[]> status(new bool[helper_n]);
-    std::fill_n(status.get(), helper_n, false);
-    std::vector<double> disk_io_start(helper_n, 0.0), disk_io_end(helper_n, 0.0);
-    std::vector<double> net_start(helper_n, 0.0), net_end(helper_n, 0.0);
-    std::vector<double> grpc_notify(helper_n, 0.0), grpc_start(helper_n, 0.0);
+  std::mutex helper_round_mu;
+  std::condition_variable helper_round_cv;
+  std::vector<int> helper_round_done(std::max(local_shard_count, 0), 0);
+  int helper_round_to_start = -1;
+  bool helper_round_stop = false;
 
-    std::vector<std::thread> get_threads;
+  auto start_helper_round = [&](int shard_k) {
+    if (shard_k < 0 || shard_k >= local_shard_count)
+      return;
+    {
+      std::lock_guard<std::mutex> lk(helper_round_mu);
+      helper_round_to_start = shard_k;
+    }
+    helper_round_cv.notify_all();
+  };
+
+  auto wait_helper_round_done = [&](int shard_k) -> bool {
+    if (shard_k < 0 || shard_k >= local_shard_count)
+      return true;
+    std::unique_lock<std::mutex> lk(helper_round_mu);
+    helper_round_cv.wait(lk, [&]() {
+      return exchange_failed.load() || helper_round_done[shard_k] >= helper_n;
+    });
+    return !exchange_failed.load() && helper_round_done[shard_k] >= helper_n;
+  };
+
+  std::vector<std::thread> helper_workers;
+  auto start_helper_workers = [&]() {
+    helper_workers.reserve(helper_n);
     for (int i = 0; i < helper_n; i++)
     {
-      get_threads.emplace_back(&ProxyImpl::get_from_node_stripe_range_breakdown, this, recovery_request->blockkeys(i),
-                               get_bufs[i], static_cast<size_t>(block_size), stripe_off, stripe_byte_len,
-                               recovery_request->datanodeip(i).c_str(), recovery_request->datanodeport(i), status.get(),
-                               i, &disk_io_start[i], &disk_io_end[i], &net_start[i], &net_end[i], &grpc_notify[i],
-                               &grpc_start[i], block_bw.ingress);
-    }
-    for (auto &th : get_threads)
-      th.join();
-
-    if (!std::all_of(status.get(), status.get() + helper_n, [](bool v) { return v; }))
-    {
-      for (int i = 0; i < helper_n; i++)
-      {
-        if (!status[i])
+      helper_workers.emplace_back([&, i]() {
+        grpc::ClientContext context;
+        datanode_proto::GetInfo get_info;
+        datanode_proto::RequestResult result;
+        get_info.set_block_key(recovery_request->blockkeys(i));
+        get_info.set_block_size(block_size);
+        get_info.set_read_offset(byte_off);
+        get_info.set_read_length(byte_len);
+        get_info.set_proxy_ip(m_ip);
+        get_info.set_proxy_port(m_port);
+        const std::string node_ip_port =
+            recovery_request->datanodeip(i) + ":" + std::to_string(recovery_request->datanodeport(i));
+        auto dn_it = m_datanode_ptrs.find(node_ip_port);
+        if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
         {
-          char buf[384];
-          snprintf(buf, sizeof(buf), "helper read failed shard=%d idx=%d block_id=%d key=%s @ %s:%d", shard_k, i,
-                   recovery_request->blockids(i), recovery_request->blockkeys(i).c_str(),
-                   recovery_request->datanodeip(i).c_str(), recovery_request->datanodeport(i));
-          set_phase2_error(buf);
-          std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
-                    << std::endl;
-          break;
+          set_phase2_error("helper stream datanode stub missing: " + node_ip_port);
+          exchange_failed.store(true);
+          helper_round_cv.notify_all();
+          decoded_cv.notify_all();
+          return;
         }
-      }
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+        const auto grpc_notify_tp = std::chrono::high_resolution_clock::now();
+        grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
+        if (!stat.ok())
+        {
+          set_phase2_error("helper stream grpc failed key=" + recovery_request->blockkeys(i) + " @ " + node_ip_port +
+                           ": " + stat.error_message());
+          exchange_failed.store(true);
+          helper_round_cv.notify_all();
+          decoded_cv.notify_all();
+          return;
+        }
+
+        asio::io_context io_context;
+        asio::ip::tcp::resolver resolver(io_context);
+        asio::ip::tcp::socket socket(io_context);
+        asio::error_code connect_ec;
+        asio::connect(socket,
+                      resolver.resolve({recovery_request->datanodeip(i), std::to_string(result.data_port())}),
+                      connect_ec);
+        if (connect_ec)
+        {
+          set_phase2_error("helper stream tcp connect failed key=" + recovery_request->blockkeys(i) + " @ " +
+                           recovery_request->datanodeip(i) + ":" + std::to_string(result.data_port()) + " " +
+                           connect_ec.message());
+          exchange_failed.store(true);
+          helper_round_cv.notify_all();
+          decoded_cv.notify_all();
+          return;
+        }
+        set_exchange_socket_timeouts(socket, 45);
+        const double grpc_notify =
+            std::chrono::duration_cast<std::chrono::duration<double>>(grpc_notify_tp.time_since_epoch()).count();
+        update_helper_breakdown_one(result.disk_io_start_time(), result.disk_io_end_time(), grpc_notify,
+                                    grpc_notify, grpc_notify, result.grpc_start_time());
+
+        int last_round = -1;
+        while (!exchange_failed.load())
+        {
+          int shard_k = -1;
+          {
+            std::unique_lock<std::mutex> lk(helper_round_mu);
+            helper_round_cv.wait(lk, [&]() {
+              return helper_round_stop || exchange_failed.load() || helper_round_to_start > last_round;
+            });
+            if (helper_round_stop || exchange_failed.load())
+              return;
+            shard_k = helper_round_to_start;
+          }
+          if (shard_k < 0 || shard_k >= local_shard_count)
+            return;
+
+          const int stripe_off = byte_off + shard_k * stripe_byte_len;
+          char *dst = get_bufs[i] + static_cast<size_t>(shard_k) * static_cast<size_t>(stripe_byte_len);
+          (void)stripe_off;
+          asio::error_code read_ec;
+          const auto net_begin = std::chrono::high_resolution_clock::now();
+          tcp_read_with_shared_bandwidth(socket, dst, static_cast<size_t>(stripe_byte_len), block_bw.ingress, read_ec);
+          const auto net_end = std::chrono::high_resolution_clock::now();
+          if (read_ec)
+          {
+            char buf[384];
+            snprintf(buf, sizeof(buf), "helper stream shard read failed idx=%d block_id=%d key=%s off=%d len=%d @ %s:%d: %s",
+                     i, recovery_request->blockids(i), recovery_request->blockkeys(i).c_str(), stripe_off,
+                     stripe_byte_len, recovery_request->datanodeip(i).c_str(), recovery_request->datanodeport(i),
+                     read_ec.message().c_str());
+            set_phase2_error(buf);
+            std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " "
+                      << buf << std::endl;
+            exchange_failed.store(true);
+            helper_round_cv.notify_all();
+            decoded_cv.notify_all();
+            return;
+          }
+
+          update_helper_breakdown_one(result.disk_io_start_time(), result.disk_io_end_time(),
+                                      std::chrono::duration_cast<std::chrono::duration<double>>(
+                                          net_begin.time_since_epoch())
+                                          .count(),
+                                      std::chrono::duration_cast<std::chrono::duration<double>>(
+                                          net_end.time_since_epoch())
+                                          .count(),
+                                      grpc_notify, result.grpc_start_time());
+          {
+            std::lock_guard<std::mutex> lk(helper_round_mu);
+            helper_round_done[shard_k]++;
+          }
+          helper_round_cv.notify_all();
+          last_round = shard_k;
+        }
+        asio::error_code ignore_ec;
+        socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+        socket.close(ignore_ec);
+      });
+    }
+  };
+
+  auto stop_helper_workers = [&]() {
+    {
+      std::lock_guard<std::mutex> lk(helper_round_mu);
+      helper_round_stop = true;
+    }
+    helper_round_cv.notify_all();
+    for (auto &th : helper_workers)
+    {
+      if (th.joinable())
+        th.join();
+    }
+  };
+
+  const auto ex_begin = std::chrono::high_resolution_clock::now();
+  start_exchange_workers();
+  if (local_shard_count > 0)
+  {
+    start_helper_workers();
+    start_helper_round(0);
+  }
+
+  std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs);
+  std::vector<std::vector<unsigned char>> decode_rhs(f, std::vector<unsigned char>(static_cast<size_t>(stripe_byte_len)));
+  std::vector<std::vector<unsigned char>> shard_recovered(f,
+                                                          std::vector<unsigned char>(static_cast<size_t>(stripe_byte_len)));
+  for (int shard_k = 0; shard_k < local_shard_count && !exchange_failed.load(); shard_k++)
+  {
+    const int stripe_off = byte_off + shard_k * stripe_byte_len;
+    if (!wait_helper_round_done(shard_k))
+    {
       exchange_failed.store(true);
       break;
     }
+    start_helper_round(shard_k + 1);
 
-    for (int i = 0; i < helper_n; i++)
-    {
-      if (!have_disk)
-      {
-        min_disk_start = disk_io_start[i];
-        max_disk_end = disk_io_end[i];
-        have_disk = true;
-      }
-      else
-      {
-        min_disk_start = std::min(min_disk_start, disk_io_start[i]);
-        max_disk_end = std::max(max_disk_end, disk_io_end[i]);
-      }
-      if (!have_net)
-      {
-        min_net_start = net_start[i];
-        max_net_end = net_end[i];
-        have_net = true;
-      }
-      else
-      {
-        min_net_start = std::min(min_net_start, net_start[i]);
-        max_net_end = std::max(max_net_end, net_end[i]);
-      }
-      if (!have_grpc)
-      {
-        min_grpc_notify = grpc_notify[i];
-        max_grpc_start = grpc_start[i];
-        have_grpc = true;
-      }
-      else
-      {
-        min_grpc_notify = std::min(min_grpc_notify, grpc_notify[i]);
-        max_grpc_start = std::max(max_grpc_start, grpc_start[i]);
-      }
-    }
-
-    std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs);
     auto t3 = std::chrono::high_resolution_clock::now();
-    std::vector<std::vector<unsigned char>> shard_recovered;
     const bool decode_ok =
-        decode_glrc_ilp_helper_compact(block_ptrs.data(), phase2_decode_inverse, phase2_eq_helper_indices,
-                                       phase2_eq_helper_coefs, f, stripe_off, stripe_byte_len, shard_recovered);
+        decode_glrc_ilp_helper_compact_prepared(block_ptrs.data(), phase2_eq_helper_indices, phase2_eq_helper_g_tbls,
+                                                phase2_inv_g_tbls, f, byte_off, stripe_off, stripe_byte_len,
+                                                decode_rhs, shard_recovered);
     auto t4 = std::chrono::high_resolution_clock::now();
     for (char *p : get_bufs)
       (void)p;
@@ -1116,37 +1282,48 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
     for (int t = 0; t < f; t++)
       std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t].data(), stripe_byte_len);
-    }
-
-    exchange_shard_with_peer(shard_k);
-
-    if (shard_k < local_shard_count && recovery_request->phase2_do_write_back())
     {
-      const int stripe_off = byte_off + shard_k * stripe_byte_len;
-      const int write_idx = partition_id;
-      if (write_idx >= 0 && write_idx < f)
-      {
-        double wnet = 0.0, wdisk = 0.0;
-        if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(write_idx).c_str(),
-                                               failed_ids[write_idx],
-                                               reinterpret_cast<char *>(recovered_ptrs[write_idx] + stripe_off),
-                                               recovery_request->replaced_node_ips(write_idx).c_str(),
-                                               recovery_request->replaced_node_ports(write_idx), stripe_off,
-                                               stripe_byte_len, &wnet, &wdisk))
-        {
-          exchange_failed.store(true);
-          break;
-        }
-        total_write_net += wnet;
-        total_write_disk += wdisk;
-      }
+      std::lock_guard<std::mutex> lk(decoded_mu);
+      decoded_shards = shard_k + 1;
     }
+    decoded_cv.notify_all();
 
     {
       char buf[256];
       snprintf(buf, sizeof(buf), "shard pipeline done proxy=%s:%d partition=%d shard=%d/%d", m_ip.c_str(), m_port,
                partition_id, shard_k + 1, local_shard_count);
       phase2_trace(buf);
+    }
+  }
+  stop_helper_workers();
+  {
+    std::lock_guard<std::mutex> lk(decoded_mu);
+    decode_done = true;
+  }
+  decoded_cv.notify_all();
+  join_exchange_workers();
+  const auto ex_end = std::chrono::high_resolution_clock::now();
+  total_exchange_time += std::chrono::duration<double>(ex_end - ex_begin).count();
+
+  if (!exchange_failed.load() && local_shard_count > 0 && recovery_request->phase2_do_write_back())
+  {
+    const int write_idx = partition_id;
+    if (write_idx >= 0 && write_idx < f)
+    {
+      double wnet = 0.0, wdisk = 0.0;
+      if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(write_idx).c_str(), failed_ids[write_idx],
+                                             reinterpret_cast<char *>(recovered_ptrs[write_idx] + byte_off),
+                                             recovery_request->replaced_node_ips(write_idx).c_str(),
+                                             recovery_request->replaced_node_ports(write_idx), byte_off, byte_len,
+                                             &wnet, &wdisk))
+      {
+        exchange_failed.store(true);
+      }
+      else
+      {
+        total_write_net += wnet;
+        total_write_disk += wdisk;
+      }
     }
   }
 
@@ -1182,9 +1359,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
   }
 
-  const auto ex_end = std::chrono::high_resolution_clock::now();
-  const double exchange_net_time = std::chrono::duration<double>(ex_end - ex_begin).count();
-
   if (have_disk)
   {
     response->set_disk_io_start_time(min_disk_start);
@@ -1205,7 +1379,8 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     response->set_decode_start_time(min_decode_start);
     response->set_decode_end_time(max_decode_end);
   }
-  response->set_cross_rack_time(exchange_net_time);
+  response->set_cross_rack_time(total_exchange_time);
+  response->set_cross_rack_xor_time(total_decode_time);
   if (recovery_request->phase2_do_write_back())
   {
     response->set_dest_data_node_network_time(total_write_net);
