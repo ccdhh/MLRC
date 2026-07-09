@@ -134,6 +134,12 @@ namespace ECProject
     void get_from_node_breakdown(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index, 
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
     void initNodeBandwidth();
+    /** True when ip:port is this repair proxy's paired datanode (see clusterInformation.xml). */
+    bool isLocalDatanode(const char *ip, int port) const;
+    /** nullptr = unlimited for paired local datanode; else shared proxy ingress limiter. */
+    SharedBandwidthLimiter *ingressBandwidthForDatanodeRead(const char *ip, int port) const;
+    /** nullptr = unlimited to paired local datanode; else shared proxy egress limiter. */
+    SharedBandwidthLimiter *egressBandwidthForDatanodeWrite(const char *ip, int port) const;
     bool GetFromDatanodeStripeRangeBreakdown(const std::string &key, char *value, size_t full_block_size,
                                              int read_offset, int read_length, const char *ip, const int port,
                                              double *disk_io_start_time, double *disk_io_end_time,
@@ -153,12 +159,6 @@ namespace ECProject
                                               double *network_start_time, double *network_end_time,
                                               double *grpc_notify_time, double *grpc_start_time,
                                               SharedBandwidthLimiter *block_bandwidth);
-    struct Phase2BlockDuplexBw
-    {
-      SharedBandwidthLimiter *ingress = nullptr;
-      SharedBandwidthLimiter *egress = nullptr;
-    };
-    Phase2BlockDuplexBw phase2BlockDuplexBandwidth(int repair_block_id, int exchange_epoch);
     bool glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recovery_request,
                                proxy_proto::RecoveryReply *response);
     bool glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *recovery_request,
@@ -173,15 +173,13 @@ namespace ECProject
                                             proxy_proto::RecoveryReply *response);
     bool glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryRequest *recovery_request,
                                          proxy_proto::RecoveryReply *response);
+    bool glrcIlpPipelineReadyRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                      proxy_proto::RecoveryReply *response);
 
     bool openDatanodeGetStream(const std::string &block_key, const std::string &ip, int port, int block_size,
                                  asio::io_context &io, asio::ip::tcp::socket &socket);
 
   private:
-    std::mutex m_glrc_phase2_mutex;
-    int m_phase2_block_bw_epoch = -1;
-    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_ingress_bw;
-    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_egress_bw;
     std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
     std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
     std::mutex m_mutex;
@@ -195,6 +193,8 @@ namespace ECProject
     std::string m_ip;
     int m_port;
     int m_self_cluster_id;
+    /** uri of the datanode paired with this repair proxy (empty if unknown). */
+    std::string m_local_datanode_uri;
     asio::io_context io_context;
     asio::ip::tcp::acceptor acceptor;
     sem_t sem;

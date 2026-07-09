@@ -91,9 +91,11 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORIT
 PROTOBUF_CONSTEXPR MergeParityInfo::MergeParityInfo(
     ::_pbi::ConstantInitialized): _impl_{
     /*decltype(_impl_.block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.proxy_ip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.block_id_)*/0
   , /*decltype(_impl_.recovery_offset_)*/0
   , /*decltype(_impl_.recovery_size_)*/0
+  , /*decltype(_impl_.proxy_port_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct MergeParityInfoDefaultTypeInternal {
   PROTOBUF_CONSTEXPR MergeParityInfoDefaultTypeInternal()
@@ -242,6 +244,8 @@ const uint32_t TableStruct_datanode_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE
   PROTOBUF_FIELD_OFFSET(::datanode_proto::MergeParityInfo, _impl_.block_id_),
   PROTOBUF_FIELD_OFFSET(::datanode_proto::MergeParityInfo, _impl_.recovery_offset_),
   PROTOBUF_FIELD_OFFSET(::datanode_proto::MergeParityInfo, _impl_.recovery_size_),
+  PROTOBUF_FIELD_OFFSET(::datanode_proto::MergeParityInfo, _impl_.proxy_ip_),
+  PROTOBUF_FIELD_OFFSET(::datanode_proto::MergeParityInfo, _impl_.proxy_port_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::datanode_proto::GetInfo, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -298,11 +302,11 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 20, -1, -1, sizeof(::datanode_proto::SetInfo)},
   { 32, -1, -1, sizeof(::datanode_proto::AppendInfo)},
   { 43, -1, -1, sizeof(::datanode_proto::MergeParityInfo)},
-  { 53, -1, -1, sizeof(::datanode_proto::GetInfo)},
-  { 66, -1, -1, sizeof(::datanode_proto::StripeMergeParityInfo)},
-  { 79, -1, -1, sizeof(::datanode_proto::ReadBlockBytesRequest)},
-  { 87, -1, -1, sizeof(::datanode_proto::ReadBlockBytesReply)},
-  { 95, -1, -1, sizeof(::datanode_proto::DelInfo)},
+  { 55, -1, -1, sizeof(::datanode_proto::GetInfo)},
+  { 68, -1, -1, sizeof(::datanode_proto::StripeMergeParityInfo)},
+  { 81, -1, -1, sizeof(::datanode_proto::ReadBlockBytesRequest)},
+  { 89, -1, -1, sizeof(::datanode_proto::ReadBlockBytesReply)},
+  { 97, -1, -1, sizeof(::datanode_proto::DelInfo)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -331,50 +335,51 @@ const char descriptor_table_protodef_datanode_2eproto[] PROTOBUF_SECTION_VARIABL
   " \001(\010\"t\n\nAppendInfo\022\021\n\tblock_key\030\001 \001(\t\022\020\n"
   "\010block_id\030\002 \001(\005\022\023\n\013append_size\030\003 \001(\005\022\025\n\r"
   "append_offset\030\004 \001(\005\022\025\n\ris_serialized\030\005 \001"
-  "(\010\"f\n\017MergeParityInfo\022\021\n\tblock_key\030\001 \001(\t"
-  "\022\020\n\010block_id\030\002 \001(\005\022\027\n\017recovery_offset\030\003 "
-  "\001(\005\022\025\n\rrecovery_size\030\004 \001(\005\"\222\001\n\007GetInfo\022\021"
-  "\n\tblock_key\030\001 \001(\t\022\022\n\nblock_size\030\002 \001(\005\022\020\n"
-  "\010block_id\030\003 \001(\005\022\020\n\010proxy_ip\030\004 \001(\t\022\022\n\npro"
-  "xy_port\030\005 \001(\005\022\023\n\013read_offset\030\006 \001(\005\022\023\n\013re"
-  "ad_length\030\007 \001(\005\"\277\001\n\025StripeMergeParityInf"
-  "o\022\024\n\014parity_key_a\030\001 \001(\t\022\024\n\014parity_key_b\030"
-  "\002 \001(\t\022\026\n\016new_parity_key\030\003 \001(\t\022\022\n\nblock_s"
-  "ize\030\004 \001(\005\022\020\n\010gf_coeff\030\005 \001(\005\022\034\n\024parity_b_"
-  "datanode_ip\030\006 \001(\t\022\036\n\026parity_b_datanode_p"
-  "ort\030\007 \001(\005\">\n\025ReadBlockBytesRequest\022\021\n\tbl"
-  "ock_key\030\001 \001(\t\022\022\n\nblock_size\030\002 \001(\005\"/\n\023Rea"
-  "dBlockBytesReply\022\n\n\002ok\030\001 \001(\010\022\014\n\004data\030\002 \001"
-  "(\014\"\034\n\007DelInfo\022\021\n\tblock_key\030\001 \001(\t2\345\007\n\017dat"
-  "anodeService\022J\n\ncheckalive\022\035.datanode_pr"
-  "oto.CheckaliveCMD\032\035.datanode_proto.Reque"
-  "stResult\022C\n\thandleSet\022\027.datanode_proto.S"
-  "etInfo\032\035.datanode_proto.RequestResult\022I\n"
-  "\014handleAppend\022\032.datanode_proto.AppendInf"
-  "o\032\035.datanode_proto.RequestResult\022S\n\021hand"
-  "leMergeParity\022\037.datanode_proto.MergePari"
-  "tyInfo\032\035.datanode_proto.RequestResult\022Z\n"
-  "\030handleMergeParityWithRep\022\037.datanode_pro"
-  "to.MergeParityInfo\032\035.datanode_proto.Requ"
-  "estResult\022P\n\016handleRecovery\022\037.datanode_p"
-  "roto.MergeParityInfo\032\035.datanode_proto.Re"
-  "questResult\022Y\n\027handleRecoveryBreakdown\022\037"
-  ".datanode_proto.MergeParityInfo\032\035.datano"
-  "de_proto.RequestResult\022C\n\thandleGet\022\027.da"
-  "tanode_proto.GetInfo\032\035.datanode_proto.Re"
-  "questResult\022L\n\022handleGetBreakdown\022\027.data"
-  "node_proto.GetInfo\032\035.datanode_proto.Requ"
-  "estResult\022_\n\027handleStripeMergeParity\022%.d"
-  "atanode_proto.StripeMergeParityInfo\032\035.da"
-  "tanode_proto.RequestResult\022\\\n\016readBlockB"
-  "ytes\022%.datanode_proto.ReadBlockBytesRequ"
-  "est\032#.datanode_proto.ReadBlockBytesReply"
-  "\022F\n\014handleDelete\022\027.datanode_proto.DelInf"
-  "o\032\035.datanode_proto.RequestResultb\006proto3"
+  "(\010\"\214\001\n\017MergeParityInfo\022\021\n\tblock_key\030\001 \001("
+  "\t\022\020\n\010block_id\030\002 \001(\005\022\027\n\017recovery_offset\030\003"
+  " \001(\005\022\025\n\rrecovery_size\030\004 \001(\005\022\020\n\010proxy_ip\030"
+  "\005 \001(\t\022\022\n\nproxy_port\030\006 \001(\005\"\222\001\n\007GetInfo\022\021\n"
+  "\tblock_key\030\001 \001(\t\022\022\n\nblock_size\030\002 \001(\005\022\020\n\010"
+  "block_id\030\003 \001(\005\022\020\n\010proxy_ip\030\004 \001(\t\022\022\n\nprox"
+  "y_port\030\005 \001(\005\022\023\n\013read_offset\030\006 \001(\005\022\023\n\013rea"
+  "d_length\030\007 \001(\005\"\277\001\n\025StripeMergeParityInfo"
+  "\022\024\n\014parity_key_a\030\001 \001(\t\022\024\n\014parity_key_b\030\002"
+  " \001(\t\022\026\n\016new_parity_key\030\003 \001(\t\022\022\n\nblock_si"
+  "ze\030\004 \001(\005\022\020\n\010gf_coeff\030\005 \001(\005\022\034\n\024parity_b_d"
+  "atanode_ip\030\006 \001(\t\022\036\n\026parity_b_datanode_po"
+  "rt\030\007 \001(\005\">\n\025ReadBlockBytesRequest\022\021\n\tblo"
+  "ck_key\030\001 \001(\t\022\022\n\nblock_size\030\002 \001(\005\"/\n\023Read"
+  "BlockBytesReply\022\n\n\002ok\030\001 \001(\010\022\014\n\004data\030\002 \001("
+  "\014\"\034\n\007DelInfo\022\021\n\tblock_key\030\001 \001(\t2\345\007\n\017data"
+  "nodeService\022J\n\ncheckalive\022\035.datanode_pro"
+  "to.CheckaliveCMD\032\035.datanode_proto.Reques"
+  "tResult\022C\n\thandleSet\022\027.datanode_proto.Se"
+  "tInfo\032\035.datanode_proto.RequestResult\022I\n\014"
+  "handleAppend\022\032.datanode_proto.AppendInfo"
+  "\032\035.datanode_proto.RequestResult\022S\n\021handl"
+  "eMergeParity\022\037.datanode_proto.MergeParit"
+  "yInfo\032\035.datanode_proto.RequestResult\022Z\n\030"
+  "handleMergeParityWithRep\022\037.datanode_prot"
+  "o.MergeParityInfo\032\035.datanode_proto.Reque"
+  "stResult\022P\n\016handleRecovery\022\037.datanode_pr"
+  "oto.MergeParityInfo\032\035.datanode_proto.Req"
+  "uestResult\022Y\n\027handleRecoveryBreakdown\022\037."
+  "datanode_proto.MergeParityInfo\032\035.datanod"
+  "e_proto.RequestResult\022C\n\thandleGet\022\027.dat"
+  "anode_proto.GetInfo\032\035.datanode_proto.Req"
+  "uestResult\022L\n\022handleGetBreakdown\022\027.datan"
+  "ode_proto.GetInfo\032\035.datanode_proto.Reque"
+  "stResult\022_\n\027handleStripeMergeParity\022%.da"
+  "tanode_proto.StripeMergeParityInfo\032\035.dat"
+  "anode_proto.RequestResult\022\\\n\016readBlockBy"
+  "tes\022%.datanode_proto.ReadBlockBytesReque"
+  "st\032#.datanode_proto.ReadBlockBytesReply\022"
+  "F\n\014handleDelete\022\027.datanode_proto.DelInfo"
+  "\032\035.datanode_proto.RequestResultb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_datanode_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_datanode_2eproto = {
-    false, false, 2080, descriptor_table_protodef_datanode_2eproto,
+    false, false, 2119, descriptor_table_protodef_datanode_2eproto,
     "datanode.proto",
     &descriptor_table_datanode_2eproto_once, nullptr, 0, 10,
     schemas, file_default_instances, TableStruct_datanode_2eproto::offsets,
@@ -1660,9 +1665,11 @@ MergeParityInfo::MergeParityInfo(const MergeParityInfo& from)
   MergeParityInfo* const _this = this; (void)_this;
   new (&_impl_) Impl_{
       decltype(_impl_.block_key_){}
+    , decltype(_impl_.proxy_ip_){}
     , decltype(_impl_.block_id_){}
     , decltype(_impl_.recovery_offset_){}
     , decltype(_impl_.recovery_size_){}
+    , decltype(_impl_.proxy_port_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -1674,9 +1681,17 @@ MergeParityInfo::MergeParityInfo(const MergeParityInfo& from)
     _this->_impl_.block_key_.Set(from._internal_block_key(), 
       _this->GetArenaForAllocation());
   }
+  _impl_.proxy_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.proxy_ip_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_proxy_ip().empty()) {
+    _this->_impl_.proxy_ip_.Set(from._internal_proxy_ip(), 
+      _this->GetArenaForAllocation());
+  }
   ::memcpy(&_impl_.block_id_, &from._impl_.block_id_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.recovery_size_) -
-    reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.recovery_size_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.proxy_port_) -
+    reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.proxy_port_));
   // @@protoc_insertion_point(copy_constructor:datanode_proto.MergeParityInfo)
 }
 
@@ -1686,14 +1701,20 @@ inline void MergeParityInfo::SharedCtor(
   (void)is_message_owned;
   new (&_impl_) Impl_{
       decltype(_impl_.block_key_){}
+    , decltype(_impl_.proxy_ip_){}
     , decltype(_impl_.block_id_){0}
     , decltype(_impl_.recovery_offset_){0}
     , decltype(_impl_.recovery_size_){0}
+    , decltype(_impl_.proxy_port_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.block_key_.InitDefault();
   #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
     _impl_.block_key_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.proxy_ip_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.proxy_ip_.Set("", GetArenaForAllocation());
   #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
 }
 
@@ -1709,6 +1730,7 @@ MergeParityInfo::~MergeParityInfo() {
 inline void MergeParityInfo::SharedDtor() {
   GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
   _impl_.block_key_.Destroy();
+  _impl_.proxy_ip_.Destroy();
 }
 
 void MergeParityInfo::SetCachedSize(int size) const {
@@ -1722,9 +1744,10 @@ void MergeParityInfo::Clear() {
   (void) cached_has_bits;
 
   _impl_.block_key_.ClearToEmpty();
+  _impl_.proxy_ip_.ClearToEmpty();
   ::memset(&_impl_.block_id_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.recovery_size_) -
-      reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.recovery_size_));
+      reinterpret_cast<char*>(&_impl_.proxy_port_) -
+      reinterpret_cast<char*>(&_impl_.block_id_)) + sizeof(_impl_.proxy_port_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -1764,6 +1787,24 @@ const char* MergeParityInfo::_InternalParse(const char* ptr, ::_pbi::ParseContex
       case 4:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 32)) {
           _impl_.recovery_size_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
+          CHK_(ptr);
+        } else
+          goto handle_unusual;
+        continue;
+      // string proxy_ip = 5;
+      case 5:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 42)) {
+          auto str = _internal_mutable_proxy_ip();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "datanode_proto.MergeParityInfo.proxy_ip"));
+        } else
+          goto handle_unusual;
+        continue;
+      // int32 proxy_port = 6;
+      case 6:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 48)) {
+          _impl_.proxy_port_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint32(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -1825,6 +1866,22 @@ uint8_t* MergeParityInfo::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteInt32ToArray(4, this->_internal_recovery_size(), target);
   }
 
+  // string proxy_ip = 5;
+  if (!this->_internal_proxy_ip().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_proxy_ip().data(), static_cast<int>(this->_internal_proxy_ip().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "datanode_proto.MergeParityInfo.proxy_ip");
+    target = stream->WriteStringMaybeAliased(
+        5, this->_internal_proxy_ip(), target);
+  }
+
+  // int32 proxy_port = 6;
+  if (this->_internal_proxy_port() != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteInt32ToArray(6, this->_internal_proxy_port(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -1848,6 +1905,13 @@ size_t MergeParityInfo::ByteSizeLong() const {
         this->_internal_block_key());
   }
 
+  // string proxy_ip = 5;
+  if (!this->_internal_proxy_ip().empty()) {
+    total_size += 1 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_proxy_ip());
+  }
+
   // int32 block_id = 2;
   if (this->_internal_block_id() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_block_id());
@@ -1861,6 +1925,11 @@ size_t MergeParityInfo::ByteSizeLong() const {
   // int32 recovery_size = 4;
   if (this->_internal_recovery_size() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_recovery_size());
+  }
+
+  // int32 proxy_port = 6;
+  if (this->_internal_proxy_port() != 0) {
+    total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_proxy_port());
   }
 
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
@@ -1884,6 +1953,9 @@ void MergeParityInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   if (!from._internal_block_key().empty()) {
     _this->_internal_set_block_key(from._internal_block_key());
   }
+  if (!from._internal_proxy_ip().empty()) {
+    _this->_internal_set_proxy_ip(from._internal_proxy_ip());
+  }
   if (from._internal_block_id() != 0) {
     _this->_internal_set_block_id(from._internal_block_id());
   }
@@ -1892,6 +1964,9 @@ void MergeParityInfo::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   }
   if (from._internal_recovery_size() != 0) {
     _this->_internal_set_recovery_size(from._internal_recovery_size());
+  }
+  if (from._internal_proxy_port() != 0) {
+    _this->_internal_set_proxy_port(from._internal_proxy_port());
   }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
@@ -1916,9 +1991,13 @@ void MergeParityInfo::InternalSwap(MergeParityInfo* other) {
       &_impl_.block_key_, lhs_arena,
       &other->_impl_.block_key_, rhs_arena
   );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.proxy_ip_, lhs_arena,
+      &other->_impl_.proxy_ip_, rhs_arena
+  );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(MergeParityInfo, _impl_.recovery_size_)
-      + sizeof(MergeParityInfo::_impl_.recovery_size_)
+      PROTOBUF_FIELD_OFFSET(MergeParityInfo, _impl_.proxy_port_)
+      + sizeof(MergeParityInfo::_impl_.proxy_port_)
       - PROTOBUF_FIELD_OFFSET(MergeParityInfo, _impl_.block_id_)>(
           reinterpret_cast<char*>(&_impl_.block_id_),
           reinterpret_cast<char*>(&other->_impl_.block_id_));

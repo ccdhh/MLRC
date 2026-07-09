@@ -90,8 +90,16 @@ namespace ECProject
         bool createDirectories(const std::string &path);
         ECProject::Config *m_sys_config;
         void initNodeBandwidth();
+        void initRepairProxyPairing(const std::string &cluster_info_path);
+        bool isLocalRepairProxy(const std::string &proxy_ip, int proxy_port) const;
+        /** nullptr = unlimited to paired local repair proxy; else shared node egress limiter. */
+        SharedBandwidthLimiter *egressBandwidthForRepairProxy(const std::string &proxy_ip, int proxy_port) const;
+        /** nullptr = unlimited from paired local repair proxy; else shared node ingress limiter. */
+        SharedBandwidthLimiter *ingressBandwidthForRepairProxy(const std::string &proxy_ip, int proxy_port) const;
 
     private:
+        std::string m_local_repair_proxy_ip;
+        int m_local_repair_proxy_port = 0;
         std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
         std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
         std::string datanode_ip_port;
@@ -107,10 +115,12 @@ namespace ECProject
     {
     public:
         DataNode(std::string datanode_ip_port) : datanode_ip_port(datanode_ip_port), m_datanodeImpl_ptr(datanode_ip_port) {}
-        DataNode(std::string datanode_ip_port, std::string sys_config_path) : datanode_ip_port(datanode_ip_port), m_datanodeImpl_ptr(datanode_ip_port)
+        DataNode(std::string datanode_ip_port, std::string sys_config_path, std::string cluster_info_path)
+            : datanode_ip_port(datanode_ip_port), m_datanodeImpl_ptr(datanode_ip_port)
         {
             m_datanodeImpl_ptr.m_sys_config = ECProject::Config::getInstance(sys_config_path);
             m_datanodeImpl_ptr.initNodeBandwidth();
+            m_datanodeImpl_ptr.initRepairProxyPairing(cluster_info_path);
         }
 
         void Run()

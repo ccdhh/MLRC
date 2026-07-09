@@ -71,9 +71,81 @@ thread_local std::string g_glrc_pipeline_last_error;
 static std::mutex g_pipeline_bind_mutex;
 static std::unordered_set<int> g_pipeline_active_listen_ports;
 
+struct PipelineHopReadyAcceptor
+{
+  std::shared_ptr<asio::io_context> io;
+  std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
+  int listen_port = 0;
+};
+
+struct PipelineHubReadyAcceptor
+{
+  int ci = 0;
+  std::shared_ptr<asio::io_context> io;
+  std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
+  int listen_port = 0;
+};
+
+struct PipelineReadySession
+{
+  int exchange_epoch = -1;
+  std::vector<PipelineHubReadyAcceptor> hub_acceptors;
+  std::map<std::string, PipelineHopReadyAcceptor> hop_acceptors;
+};
+
+static std::mutex g_pipeline_ready_mutex;
+static PipelineReadySession g_pipeline_ready_session;
+
 void close_pipeline_acceptor(asio::ip::tcp::acceptor &acceptor);
-bool open_pipeline_acceptor(asio::io_context &io, int listen_port, asio::ip::tcp::acceptor &acceptor,
-                            asio::error_code &ec);
+
+static std::string hop_ready_key(int epoch, int chain_id, int hop_idx)
+{
+  return std::to_string(epoch) + ":" + std::to_string(chain_id) + ":" + std::to_string(hop_idx);
+}
+
+static void reset_pipeline_ready_session()
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_ready_mutex);
+  for (auto &h : g_pipeline_ready_session.hub_acceptors)
+  {
+    if (h.acceptor)
+      close_pipeline_acceptor(*h.acceptor);
+  }
+  for (auto &kv : g_pipeline_ready_session.hop_acceptors)
+  {
+    if (kv.second.acceptor)
+      close_pipeline_acceptor(*kv.second.acceptor);
+  }
+  g_pipeline_ready_session = PipelineReadySession{};
+}
+
+static bool take_hop_ready_acceptor(int epoch, int chain_id, int hop_idx, int listen_port,
+                                    std::shared_ptr<asio::io_context> &io_out,
+                                    std::shared_ptr<asio::ip::tcp::acceptor> &acceptor_out)
+{
+  const std::string key = hop_ready_key(epoch, chain_id, hop_idx);
+  std::lock_guard<std::mutex> lock(g_pipeline_ready_mutex);
+  if (g_pipeline_ready_session.exchange_epoch != epoch)
+    return false;
+  auto it = g_pipeline_ready_session.hop_acceptors.find(key);
+  if (it == g_pipeline_ready_session.hop_acceptors.end() || !it->second.acceptor ||
+      it->second.listen_port != listen_port)
+    return false;
+  io_out = std::move(it->second.io);
+  acceptor_out = std::move(it->second.acceptor);
+  g_pipeline_ready_session.hop_acceptors.erase(it);
+  return true;
+}
+
+static std::vector<PipelineHubReadyAcceptor> take_hub_ready_acceptors(int epoch)
+{
+  std::lock_guard<std::mutex> lock(g_pipeline_ready_mutex);
+  if (g_pipeline_ready_session.exchange_epoch != epoch)
+    return {};
+  std::vector<PipelineHubReadyAcceptor> out = std::move(g_pipeline_ready_session.hub_acceptors);
+  g_pipeline_ready_session.hub_acceptors.clear();
+  return out;
+}
 
 void pipeline_trace(const char *msg)
 {
@@ -530,6 +602,8 @@ struct DatanodeReadStream
   asio::io_context io;
   asio::ip::tcp::socket socket{io};
   bool ok = false;
+  std::string ip;
+  int port = 0;
 };
 
 bool open_datanode_read_stream(ProxyImpl *self, const std::string &key, const std::string &ip, int port,
@@ -537,26 +611,30 @@ bool open_datanode_read_stream(ProxyImpl *self, const std::string &key, const st
 {
   if (!self->openDatanodeGetStream(key, ip, port, block_size, out.io, out.socket))
     return false;
+  out.ip = ip;
+  out.port = port;
   out.ok = true;
   return true;
 }
 
-bool read_datanode_stream_block(DatanodeReadStream &stream, unsigned char *dst, size_t len)
+bool read_datanode_stream_block(ProxyImpl *self, DatanodeReadStream &stream, unsigned char *dst, size_t len)
 {
   if (!stream.ok)
     return false;
   asio::error_code read_ec;
-  tcp_read_with_node_bandwidth(stream.socket, reinterpret_cast<char *>(dst), len, 0.0, read_ec);
+  SharedBandwidthLimiter *read_bw = self->ingressBandwidthForDatanodeRead(stream.ip.c_str(), stream.port);
+  tcp_read_with_shared_bandwidth(stream.socket, reinterpret_cast<char *>(dst), len, read_bw, read_ec);
   return !read_ec;
 }
 
-bool read_datanode_stream_shard(DatanodeReadStream &stream, unsigned char *dst, size_t len)
+bool read_datanode_stream_shard(ProxyImpl *self, DatanodeReadStream &stream, unsigned char *dst, size_t len)
 {
-  return read_datanode_stream_block(stream, dst, len);
+  return read_datanode_stream_block(self, stream, dst, len);
 }
 
 void clear_glrc_pipeline_session_state()
 {
+  reset_pipeline_ready_session();
   {
     std::lock_guard<std::mutex> lock(g_pipeline_bind_mutex);
     g_pipeline_active_listen_ports.clear();
@@ -616,6 +694,8 @@ bool ProxyImpl::glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *reco
     return glrcIlpPipelineLocalDirectRecovery(recovery_request, response);
   if (role == static_cast<int>(GlrcPipelineRole::TEARDOWN))
     return glrcIlpPipelineTeardownRecovery(recovery_request, response);
+  if (role == static_cast<int>(GlrcPipelineRole::READY))
+    return glrcIlpPipelineReadyRecovery(recovery_request, response);
   set_pipeline_error("invalid pipeline_role");
   return false;
 }
@@ -627,6 +707,101 @@ bool ProxyImpl::glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryReque
   clear_glrc_pipeline_session_state();
   response->Clear();
   pipeline_trace("pipeline session teardown");
+  return true;
+}
+
+bool ProxyImpl::glrcIlpPipelineReadyRecovery(const proxy_proto::RecoveryRequest *recovery_request,
+                                             proxy_proto::RecoveryReply *response)
+{
+  response->Clear();
+  const int epoch = recovery_request->pipeline_exchange_epoch();
+  const int role = recovery_request->pipeline_role();
+
+  if (role == static_cast<int>(GlrcPipelineRole::HUB))
+  {
+    const int hub_chain_n = recovery_request->pipeline_hub_chain_eq_slots_size();
+    std::vector<PipelineHubReadyAcceptor> bound;
+    bound.reserve(static_cast<size_t>(hub_chain_n));
+    for (int ci = 0; ci < hub_chain_n; ci++)
+    {
+      if (recovery_request->pipeline_hub_chain_local_only_flags_size() > ci &&
+          recovery_request->pipeline_hub_chain_local_only_flags(ci) != 0)
+        continue;
+      const int eq_slot = recovery_request->pipeline_hub_chain_eq_slots(ci);
+      const int listen_port = resolve_hub_listener_port(recovery_request, ci, m_port, epoch, eq_slot);
+      PipelineHubReadyAcceptor pb;
+      pb.ci = ci;
+      pb.listen_port = listen_port;
+      pb.io = std::make_shared<asio::io_context>();
+      pb.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*pb.io);
+      asio::error_code bind_ec;
+      if (!open_pipeline_acceptor(*pb.io, listen_port, *pb.acceptor, bind_ec))
+      {
+        for (auto &prev : bound)
+          if (prev.acceptor)
+            close_pipeline_acceptor(*prev.acceptor);
+        set_pipeline_error("pipeline ready hub bind failed port=" + std::to_string(listen_port) + " " +
+                           bind_ec.message());
+        return false;
+      }
+      bound.push_back(std::move(pb));
+    }
+    {
+      std::lock_guard<std::mutex> lock(g_pipeline_ready_mutex);
+      if (g_pipeline_ready_session.exchange_epoch != epoch)
+      {
+        for (auto &prev : g_pipeline_ready_session.hub_acceptors)
+          if (prev.acceptor)
+            close_pipeline_acceptor(*prev.acceptor);
+        for (auto &kv : g_pipeline_ready_session.hop_acceptors)
+          if (kv.second.acceptor)
+            close_pipeline_acceptor(*kv.second.acceptor);
+        g_pipeline_ready_session = PipelineReadySession{};
+        g_pipeline_ready_session.exchange_epoch = epoch;
+      }
+      for (auto &pb : bound)
+        g_pipeline_ready_session.hub_acceptors.push_back(std::move(pb));
+    }
+    pipeline_trace("pipeline ready hub listeners bound");
+    return true;
+  }
+
+  if (role == static_cast<int>(GlrcPipelineRole::HOP_SERVER))
+  {
+    const int chain_id = recovery_request->pipeline_chain_id();
+    const int my_idx = recovery_request->pipeline_my_hop_index();
+    const int listen_port = resolve_my_hop_bind_port(recovery_request, m_port, epoch, chain_id, my_idx);
+    PipelineHopReadyAcceptor hop;
+    hop.listen_port = listen_port;
+    hop.io = std::make_shared<asio::io_context>();
+    hop.acceptor = std::make_shared<asio::ip::tcp::acceptor>(*hop.io);
+    asio::error_code bind_ec;
+    if (!open_pipeline_acceptor(*hop.io, listen_port, *hop.acceptor, bind_ec))
+    {
+      set_pipeline_error("pipeline ready hop bind failed port=" + std::to_string(listen_port) + " " +
+                         bind_ec.message());
+      return false;
+    }
+    const std::string key = hop_ready_key(epoch, chain_id, my_idx);
+    {
+      std::lock_guard<std::mutex> lock(g_pipeline_ready_mutex);
+      if (g_pipeline_ready_session.exchange_epoch != epoch)
+      {
+        for (auto &prev : g_pipeline_ready_session.hub_acceptors)
+          if (prev.acceptor)
+            close_pipeline_acceptor(*prev.acceptor);
+        for (auto &kv : g_pipeline_ready_session.hop_acceptors)
+          if (kv.second.acceptor)
+            close_pipeline_acceptor(*kv.second.acceptor);
+        g_pipeline_ready_session = PipelineReadySession{};
+        g_pipeline_ready_session.exchange_epoch = epoch;
+      }
+      g_pipeline_ready_session.hop_acceptors[key] = std::move(hop);
+    }
+    pipeline_trace("pipeline ready hop listener bound");
+    return true;
+  }
+
   return true;
 }
 
@@ -752,8 +927,9 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
       pipeline_trace(tb);
     }
     asio::error_code read_ec;
-    tcp_read_with_node_bandwidth(head_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len), 0.0,
-                                 read_ec);
+    SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(head_ip.c_str(), head_port);
+    tcp_read_with_shared_bandwidth(head_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len),
+                                   read_bw, read_ec);
     if (read_ec)
     {
       const std::string msg = "pipeline chain head local read failed key=" + head_key + " @" + head_ip + ":" +
@@ -924,13 +1100,18 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
             << " hop=" << my_idx
             << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
             << " port=" << listen_port << std::endl;
-  asio::io_context io;
+  std::shared_ptr<asio::io_context> hop_io;
+  std::shared_ptr<asio::ip::tcp::acceptor> hop_acceptor;
   asio::error_code ec;
-  asio::ip::tcp::acceptor acceptor(io);
-  if (!open_pipeline_acceptor(io, listen_port, acceptor, ec))
+  if (!take_hop_ready_acceptor(epoch, chain_id, my_idx, listen_port, hop_io, hop_acceptor))
   {
-    set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
-    return false;
+    hop_io = std::make_shared<asio::io_context>();
+    hop_acceptor = std::make_shared<asio::ip::tcp::acceptor>(*hop_io);
+    if (!open_pipeline_acceptor(*hop_io, listen_port, *hop_acceptor, ec))
+    {
+      set_pipeline_error("pipeline hop bind failed port=" + std::to_string(listen_port) + " " + ec.message());
+      return false;
+    }
   }
   struct PipelineAcceptorGuard
   {
@@ -940,7 +1121,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       if (acceptor)
         close_pipeline_acceptor(*acceptor);
     }
-  } acceptor_guard{&acceptor};
+  } acceptor_guard{hop_acceptor.get()};
 
   double min_disk = 0.0, max_disk = 0.0, min_net = 0.0, max_net = 0.0;
   auto update_min = [](double &slot, double v) {
@@ -954,7 +1135,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
 
   const bool connects_to_hub = pipeline_hop_connects_to_hub(recovery_request, my_idx, hops_n);
 
-  asio::ip::tcp::socket out_socket(io);
+  asio::ip::tcp::socket out_socket(*hop_io);
   if (connects_to_hub)
   {
     const std::string hub_ip = recovery_request->pipeline_hub_proxy_ip();
@@ -976,8 +1157,8 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hop_server downstream ready chain=" << chain_id
             << " hop=" << my_idx << std::endl;
 
-  asio::ip::tcp::socket in_socket(io);
-  if (!accept_pipeline_socket(acceptor, in_socket, ec, 45))
+  asio::ip::tcp::socket in_socket(*hop_io);
+  if (!accept_pipeline_socket(*hop_acceptor, in_socket, ec, 45))
   {
     close_pipeline_socket(out_socket);
     set_pipeline_error("pipeline hop accept failed: " + ec.message());
@@ -992,6 +1173,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   const std::string hop_ip = recovery_request->pipeline_hop_datanode_ips(my_idx);
   const int hop_port = recovery_request->pipeline_hop_datanode_ports(my_idx);
   SharedBandwidthLimiter *egress_bw = m_egress_bandwidth.get();
+  SharedBandwidthLimiter *ingress_bw = m_ingress_bandwidth.get();
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
   int shards_forwarded = 0;
@@ -1031,12 +1213,12 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   {
     close_pipeline_socket(in_socket);
     close_pipeline_socket(out_socket);
-    close_pipeline_acceptor(acceptor);
+    close_pipeline_acceptor(*hop_acceptor);
     set_pipeline_error("pipeline hop local stream setup failed hop=" + std::to_string(my_idx));
     return false;
   }
 
-  auto process_inbound_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
+  auto compute_inbound_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
     if (shard < 0 || shard >= shard_count || (int)partial.size() != stripe_len)
     {
       set_pipeline_error("pipeline hop shard mismatch");
@@ -1046,8 +1228,9 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
     std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
     (void)off;
     asio::error_code read_ec;
-    tcp_read_with_node_bandwidth(hop_stream, reinterpret_cast<char *>(local.data()), static_cast<size_t>(stripe_len),
-                                 0.0, read_ec);
+    SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(hop_ip.c_str(), hop_port);
+    tcp_read_with_shared_bandwidth(hop_stream, reinterpret_cast<char *>(local.data()), static_cast<size_t>(stripe_len),
+                                   read_bw, read_ec);
     if (read_ec)
     {
       set_pipeline_error("pipeline hop local read failed hop=" + std::to_string(my_idx) + " shard=" +
@@ -1055,6 +1238,12 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       return false;
     }
     glrc_pipeline_accumulate_range(partial.data(), local.data(), my_coef, stripe_len, eq_codec);
+    return true;
+  };
+
+  auto process_inbound_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
+    if (!compute_inbound_shard(shard, partial))
+      return false;
     if (!send_pipeline_shard(out_socket, eq_slot, shard, stripe_len, partial.data(), egress_bw, ec))
     {
       set_pipeline_error("pipeline hop forward failed: " + ec.message());
@@ -1071,7 +1260,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       PipelineShardHeader hdr{};
       PipelineStreamEndHeader end_hdr{};
       std::vector<unsigned char> partial;
-      const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
+      const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, ingress_bw, ec);
       if (frame == PipelineFrameType::ERROR)
       {
         close_pipeline_socket(in_socket);
@@ -1109,7 +1298,9 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   else
   {
     PipelineBoundedQueue inbound_q(static_cast<size_t>(pipe_window));
+    PipelineBoundedQueue outbound_q(static_cast<size_t>(pipe_window));
     std::atomic<bool> reader_failed{false};
+    std::atomic<bool> pipeline_failed{false};
     std::mutex reader_err_mu;
     std::string reader_err;
     int upstream_end_count = -1;
@@ -1120,13 +1311,14 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
         PipelineShardHeader hdr{};
         PipelineStreamEndHeader end_hdr{};
         std::vector<unsigned char> partial;
-        const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, nullptr, ec);
+        const PipelineFrameType frame = recv_pipeline_frame(in_socket, hdr, end_hdr, partial, ingress_bw, ec);
         if (frame == PipelineFrameType::ERROR)
         {
           std::lock_guard<std::mutex> lock(reader_err_mu);
           reader_err = "pipeline hop recv frame failed: " + ec.message();
           reader_failed.store(true);
           inbound_q.close();
+          outbound_q.close();
           return;
         }
         if (frame == PipelineFrameType::END)
@@ -1146,7 +1338,33 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       inbound_q.close();
     });
 
-    bool processor_ok = true;
+    std::thread sender([&]() {
+      PipelineQueuedShard send_item;
+      while (outbound_q.pop(send_item))
+      {
+        if (send_item.end_of_stream)
+          break;
+        if (!send_pipeline_shard(out_socket, eq_slot, send_item.shard_id, stripe_len, send_item.payload.data(),
+                                 egress_bw, ec))
+        {
+          set_pipeline_error("pipeline hop forward failed: " + ec.message());
+          pipeline_failed.store(true);
+          inbound_q.close();
+          outbound_q.close();
+          return;
+        }
+        shards_forwarded++;
+      }
+      if (!pipeline_failed.load())
+      {
+        if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
+        {
+          set_pipeline_error("pipeline hop stream end forward failed");
+          pipeline_failed.store(true);
+        }
+      }
+    });
+
     PipelineQueuedShard item;
     while (inbound_q.pop(item))
     {
@@ -1155,18 +1373,25 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
         upstream_end_count = item.end_shard_count;
         break;
       }
-      if (!process_inbound_shard(item.shard_id, item.payload))
+      if (!compute_inbound_shard(item.shard_id, item.payload))
       {
-        processor_ok = false;
+        pipeline_failed.store(true);
         reader_failed.store(true);
         break;
       }
+      outbound_q.push(std::move(item));
     }
+    PipelineQueuedShard outbound_end;
+    outbound_end.end_of_stream = true;
+    outbound_q.push(std::move(outbound_end));
     inbound_q.close();
+    outbound_q.close();
     if (reader.joinable())
       reader.join();
+    if (sender.joinable())
+      sender.join();
 
-    if (!processor_ok || reader_failed.load())
+    if (pipeline_failed.load() || reader_failed.load())
     {
       close_pipeline_socket(in_socket);
       close_pipeline_socket(out_socket);
@@ -1181,18 +1406,10 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
       set_pipeline_error("pipeline hop stream shard count mismatch");
       return false;
     }
-    if (!send_pipeline_stream_end(out_socket, eq_slot, shard_count, egress_bw, ec))
-    {
-      close_pipeline_socket(in_socket);
-      close_pipeline_socket(out_socket);
-      set_pipeline_error("pipeline hop stream end forward failed");
-      return false;
-    }
   }
   close_pipeline_socket(in_socket);
   close_pipeline_socket(out_socket);
   close_pipeline_socket(hop_stream);
-  close_pipeline_acceptor(acceptor);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -1277,7 +1494,7 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
   bool local_decode_done = false;
 
   const int write_worker_count =
-      std::max(1, std::min({resolve_pipeline_window(m_sys_config, shard_count), shard_count, 8}));
+      std::max(1, std::min(resolve_pipeline_window(m_sys_config, shard_count), shard_count));
   std::vector<std::thread> write_workers;
   write_workers.reserve(static_cast<size_t>(write_worker_count));
   for (int wi = 0; wi < write_worker_count; wi++)
@@ -1322,7 +1539,7 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
     if (hops_n == 1)
     {
       std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-      if (!read_datanode_stream_shard(hop_streams[0], local.data(), static_cast<size_t>(stripe_len)))
+      if (!read_datanode_stream_shard(this, hop_streams[0], local.data(), static_cast<size_t>(stripe_len)))
       {
         read_err = "pipeline local_direct single-hop read failed shard=" + std::to_string(shard);
         read_failed.store(true);
@@ -1339,8 +1556,8 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
       for (int hi = 0; hi < hops_n; hi++)
       {
         readers.emplace_back([&, hi]() {
-          if (!read_datanode_stream_shard(hop_streams[static_cast<size_t>(hi)], locals[static_cast<size_t>(hi)].data(),
-                                          static_cast<size_t>(stripe_len)))
+          if (!read_datanode_stream_shard(this, hop_streams[static_cast<size_t>(hi)],
+                                          locals[static_cast<size_t>(hi)].data(), static_cast<size_t>(stripe_len)))
             read_failed.store(true);
         });
       }
@@ -1504,9 +1721,18 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     std::shared_ptr<asio::ip::tcp::acceptor> acceptor;
   };
   std::unordered_map<int, HubPreboundAcceptor> prebound_acceptors;
+  for (auto &ready_pb : take_hub_ready_acceptors(epoch))
+  {
+    HubPreboundAcceptor pb;
+    pb.ci = ready_pb.ci;
+    pb.listen_port = ready_pb.listen_port;
+    pb.io = std::move(ready_pb.io);
+    pb.acceptor = std::move(ready_pb.acceptor);
+    prebound_acceptors.emplace(pb.ci, std::move(pb));
+  }
   for (int ci = 0; ci < hub_chain_n; ci++)
   {
-    if (ctxs[ci].local_only)
+    if (ctxs[ci].local_only || prebound_acceptors.count(ci) > 0)
       continue;
     HubPreboundAcceptor pb;
     pb.ci = ci;
@@ -1564,8 +1790,9 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           if (!open_hub_stream())
             return false;
           asio::error_code read_ec;
-          tcp_read_with_node_bandwidth(hub_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len),
-                                       0.0, read_ec);
+          SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(hub_dn_ip.c_str(), hub_dn_port);
+          tcp_read_with_shared_bandwidth(hub_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len),
+                                         read_bw, read_ec);
           return !read_ec;
         };
 
@@ -1652,59 +1879,30 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
         set_pipeline_socket_timeouts(in_socket, kPipelineSocketTimeoutSec);
 
         int shards_received = 0;
-        while (!hub_failed.load())
-        {
-          PipelineShardHeader hdr{};
-          PipelineStreamEndHeader end_hdr{};
-          std::vector<unsigned char> partial;
-          const PipelineFrameType frame =
-              recv_pipeline_frame(in_socket, hdr, end_hdr, partial, hub_repair_ingress, ec);
-          if (frame == PipelineFrameType::ERROR)
-          {
-            hub_fail_msg = "hub recv frame failed: " + ec.message();
-            hub_failed.store(true);
-            rhs_cv.notify_all();
-            close_pipeline_socket(in_socket);
-            return;
-          }
-          if (frame == PipelineFrameType::END)
-          {
-            if ((int)end_hdr.shard_count != shards_received)
-            {
-              hub_fail_msg = "hub stream shard count mismatch";
-              hub_failed.store(true);
-              rhs_cv.notify_all();
-            }
-            break;
-          }
+        const bool needs_tail_local = ctxs[ci].hub_is_tail && ctxs[ci].hub_coef != 0;
+        const int hub_pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
 
-          const int shard = static_cast<int>(hdr.shard_id);
+        auto finalize_hub_shard = [&](int shard, std::vector<unsigned char> &partial) -> bool {
           if (shard < 0 || shard >= shard_count || (int)partial.size() != stripe_len)
           {
             hub_fail_msg = "hub shard mismatch";
             hub_failed.store(true);
             rhs_cv.notify_all();
-            close_pipeline_socket(in_socket);
-            return;
+            return false;
           }
-          const int off = shard * stripe_len;
-
-          if (ctxs[ci].hub_is_tail && ctxs[ci].hub_coef != 0)
+          if (needs_tail_local)
           {
             std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-            (void)off;
             if (!read_hub_stream_shard(local.data()))
             {
               hub_fail_msg = "hub tail local read failed";
               hub_failed.store(true);
               rhs_cv.notify_all();
-              close_pipeline_socket(in_socket);
-              return;
+              return false;
             }
             glrc_pipeline_accumulate_range(partial.data(), local.data(), ctxs[ci].hub_coef, stripe_len,
                                            ctxs[ci].eq_codec);
           }
-
           {
             std::lock_guard<std::mutex> lock(rhs_mutex);
             rhs_bufs[ci][shard] = std::move(partial);
@@ -1712,6 +1910,117 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
           }
           rhs_cv.notify_all();
           shards_received++;
+          return true;
+        };
+
+        if (hub_pipe_window <= 1 || !needs_tail_local)
+        {
+          while (!hub_failed.load())
+          {
+            PipelineShardHeader hdr{};
+            PipelineStreamEndHeader end_hdr{};
+            std::vector<unsigned char> partial;
+            const PipelineFrameType frame =
+                recv_pipeline_frame(in_socket, hdr, end_hdr, partial, hub_repair_ingress, ec);
+            if (frame == PipelineFrameType::ERROR)
+            {
+              hub_fail_msg = "hub recv frame failed: " + ec.message();
+              hub_failed.store(true);
+              rhs_cv.notify_all();
+              close_pipeline_socket(in_socket);
+              return;
+            }
+            if (frame == PipelineFrameType::END)
+            {
+              if ((int)end_hdr.shard_count != shards_received)
+              {
+                hub_fail_msg = "hub stream shard count mismatch";
+                hub_failed.store(true);
+                rhs_cv.notify_all();
+              }
+              break;
+            }
+            const int shard = static_cast<int>(hdr.shard_id);
+            if (!finalize_hub_shard(shard, partial))
+            {
+              close_pipeline_socket(in_socket);
+              return;
+            }
+          }
+        }
+        else
+        {
+          PipelineBoundedQueue hub_inbound_q(static_cast<size_t>(hub_pipe_window));
+          std::atomic<bool> hub_reader_failed{false};
+          std::mutex hub_reader_err_mu;
+          std::string hub_reader_err;
+          int upstream_end_count = -1;
+
+          std::thread hub_reader([&]() {
+            while (!hub_reader_failed.load())
+            {
+              PipelineShardHeader hdr{};
+              PipelineStreamEndHeader end_hdr{};
+              std::vector<unsigned char> partial;
+              const PipelineFrameType frame =
+                  recv_pipeline_frame(in_socket, hdr, end_hdr, partial, hub_repair_ingress, ec);
+              if (frame == PipelineFrameType::ERROR)
+              {
+                std::lock_guard<std::mutex> lock(hub_reader_err_mu);
+                hub_reader_err = "hub recv frame failed: " + ec.message();
+                hub_reader_failed.store(true);
+                hub_inbound_q.close();
+                return;
+              }
+              if (frame == PipelineFrameType::END)
+              {
+                PipelineQueuedShard end_item;
+                end_item.end_of_stream = true;
+                end_item.end_shard_count = static_cast<int>(end_hdr.shard_count);
+                hub_inbound_q.push(std::move(end_item));
+                hub_inbound_q.close();
+                return;
+              }
+              PipelineQueuedShard item;
+              item.shard_id = static_cast<int>(hdr.shard_id);
+              item.payload = std::move(partial);
+              hub_inbound_q.push(std::move(item));
+            }
+            hub_inbound_q.close();
+          });
+
+          PipelineQueuedShard hub_item;
+          while (hub_inbound_q.pop(hub_item))
+          {
+            if (hub_item.end_of_stream)
+            {
+              upstream_end_count = hub_item.end_shard_count;
+              break;
+            }
+            if (!finalize_hub_shard(hub_item.shard_id, hub_item.payload))
+            {
+              hub_reader_failed.store(true);
+              break;
+            }
+          }
+          hub_inbound_q.close();
+          if (hub_reader.joinable())
+            hub_reader.join();
+          if (hub_reader_failed.load())
+          {
+            if (!hub_reader_err.empty())
+              hub_fail_msg = hub_reader_err;
+            hub_failed.store(true);
+            rhs_cv.notify_all();
+            close_pipeline_socket(in_socket);
+            return;
+          }
+          if (upstream_end_count >= 0 && upstream_end_count != shards_received)
+          {
+            hub_fail_msg = "hub stream shard count mismatch";
+            hub_failed.store(true);
+            rhs_cv.notify_all();
+          }
         }
         close_pipeline_socket(in_socket);
         if (hub_stream_open)
@@ -1760,8 +2069,8 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   };
 
   const int worker_window = resolve_pipeline_window(m_sys_config, shard_count);
-  const int decode_worker_count = std::max(1, std::min({worker_window, shard_count, 8}));
-  const int write_worker_count = std::max(1, std::min({worker_window, shard_count, 8}));
+  const int decode_worker_count = std::max(1, std::min(worker_window, shard_count));
+  const int write_worker_count = std::max(1, std::min(worker_window, shard_count));
 
   std::vector<std::thread> write_workers;
   write_workers.reserve(static_cast<size_t>(write_worker_count));

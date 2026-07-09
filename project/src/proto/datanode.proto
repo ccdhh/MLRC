@@ -82,6 +82,8 @@ message MergeParityInfo {
     // recovery_size==0 keeps legacy full-block recovery (trunc + BlockSize bytes).
     int32 recovery_offset = 3;
     int32 recovery_size = 4;
+    string proxy_ip = 5;
+    int32 proxy_port = 6;
 }
 
 message GetInfo {

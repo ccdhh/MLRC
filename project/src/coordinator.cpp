@@ -3359,6 +3359,25 @@ namespace ECProject
     std::mutex result_mutex;
     std::vector<std::thread> workers;
     std::vector<PipelineRpcResult> results;
+    auto sync_pipeline_rpc = [&](const std::string &proxy_key,
+                                 const proxy_proto::RecoveryRequest &req) -> PipelineRpcResult {
+      PipelineRpcResult out;
+      auto proxy_it = m_proxy_ptrs.find(proxy_key);
+      if (proxy_it == m_proxy_ptrs.end() || !proxy_it->second)
+      {
+        out.ok = false;
+        out.error = "pipeline proxy not found: " + proxy_key;
+        return out;
+      }
+      grpc::ClientContext ctx;
+      ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+      grpc::Status st = proxy_it->second->recoveryBreakdown(&ctx, req, &out.reply);
+      out.ok = st.ok();
+      if (!st.ok())
+        out.error = st.error_message();
+      return out;
+    };
+
     auto launch_pipeline_rpc = [&](const std::string &proxy_key, const proxy_proto::RecoveryRequest &req) {
       workers.emplace_back([this, proxy_key, req, &result_mutex, &results]() {
         PipelineRpcResult out;
@@ -3544,6 +3563,66 @@ namespace ECProject
 
     if (!pipeline_plan.hub_chains.empty())
     {
+      proxy_proto::RecoveryRequest hub_ready_req = make_base_request();
+      hub_ready_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::READY));
+      hub_ready_req.set_pipeline_hub_proxy_ip(pipeline_plan.hub_proxy_ip);
+      hub_ready_req.set_pipeline_hub_proxy_port(pipeline_plan.hub_proxy_port);
+      hub_ready_req.set_pipeline_hub_block_key(pipeline_plan.hub_block_key);
+      hub_ready_req.add_pipeline_hop_datanode_ips(pipeline_plan.hub_datanode_ip);
+      hub_ready_req.add_pipeline_hop_datanode_ports(pipeline_plan.hub_datanode_port);
+      hub_ready_req.clear_failed_block_ids();
+      hub_ready_req.clear_failed_block_keys();
+      hub_ready_req.clear_replaced_node_ips();
+      hub_ready_req.clear_replaced_node_ports();
+      hub_ready_req.clear_selected_equation_indices();
+      for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+      {
+        hub_ready_req.add_selected_equation_indices(chain.equation_index);
+        hub_ready_req.add_pipeline_hub_chain_eq_slots(chain.eq_slot);
+        hub_ready_req.add_pipeline_hub_is_chain_tail_flags(chain.hub_is_chain_tail ? 1 : 0);
+        hub_ready_req.add_pipeline_hub_chain_equation_is_local(chain.equation_index < cz ? 1 : 0);
+        hub_ready_req.add_pipeline_hub_chain_local_only_flags(0);
+        unsigned char hub_coef = 0;
+        if (chain.hub_is_chain_tail && !chain.hops.empty())
+          hub_coef = chain.hops.back().coef;
+        hub_ready_req.add_pipeline_hub_chain_hub_coefs(hub_coef);
+        const auto cp_it = chain_ports.find(chain.chain_id);
+        if (cp_it != chain_ports.end())
+          hub_ready_req.add_pipeline_hub_listener_ports(cp_it->second.hub_listen_port);
+      }
+      const PipelineRpcResult hub_ready = sync_pipeline_rpc(hub_proxy_key, hub_ready_req);
+      if (!hub_ready.ok)
+      {
+        recovery_reply->set_message("pipeline hub ready failed: " + hub_ready.error);
+        return false;
+      }
+
+      for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
+      {
+        const int last_hop_server =
+            chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
+                                    : static_cast<int>(chain.hops.size()) - 1;
+        for (int hi = last_hop_server; hi >= 1; hi--)
+        {
+          proxy_proto::RecoveryRequest ready_req = make_base_request();
+          const GlrcPipelineChainPorts *cp = nullptr;
+          const auto cp_it = chain_ports.find(chain.chain_id);
+          if (cp_it != chain_ports.end())
+            cp = &cp_it->second;
+          fill_pipeline_chain_fields(ready_req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::READY, hi,
+                                     cp);
+          const PipelineRpcResult hop_ready = sync_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), ready_req);
+          if (!hop_ready.ok)
+          {
+            recovery_reply->set_message("pipeline hop ready failed: " + hop_ready.error);
+            return false;
+          }
+        }
+      }
+    }
+
+    if (!pipeline_plan.hub_chains.empty())
+    {
       proxy_proto::RecoveryRequest hub_req = make_base_request();
       hub_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::HUB));
       hub_req.set_pipeline_hub_proxy_ip(pipeline_plan.hub_proxy_ip);
@@ -3585,10 +3664,6 @@ namespace ECProject
       launch_pipeline_rpc(hub_proxy_key, hub_req);
     }
 
-    // Start the hub first: it pre-binds all hub listener ports before waiting for chain inputs.
-    // This removes the race where tail hops connect before the hub is listening.
-    orchestration_sleep(800);
-
     for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
     {
       const int last_hop_server =
@@ -3603,11 +3678,8 @@ namespace ECProject
           cp = &cp_it->second;
         fill_pipeline_chain_fields(req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::HOP_SERVER, hi, cp);
         launch_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), req);
-        orchestration_sleep(50);
       }
     }
-
-    orchestration_sleep(800);
 
     for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
     {

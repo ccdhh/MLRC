@@ -991,9 +991,11 @@ class MergeParityInfo final :
 
   enum : int {
     kBlockKeyFieldNumber = 1,
+    kProxyIpFieldNumber = 5,
     kBlockIdFieldNumber = 2,
     kRecoveryOffsetFieldNumber = 3,
     kRecoverySizeFieldNumber = 4,
+    kProxyPortFieldNumber = 6,
   };
   // string block_key = 1;
   void clear_block_key();
@@ -1007,6 +1009,20 @@ class MergeParityInfo final :
   const std::string& _internal_block_key() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_block_key(const std::string& value);
   std::string* _internal_mutable_block_key();
+  public:
+
+  // string proxy_ip = 5;
+  void clear_proxy_ip();
+  const std::string& proxy_ip() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_proxy_ip(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_proxy_ip();
+  PROTOBUF_NODISCARD std::string* release_proxy_ip();
+  void set_allocated_proxy_ip(std::string* proxy_ip);
+  private:
+  const std::string& _internal_proxy_ip() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_proxy_ip(const std::string& value);
+  std::string* _internal_mutable_proxy_ip();
   public:
 
   // int32 block_id = 2;
@@ -1036,6 +1052,15 @@ class MergeParityInfo final :
   void _internal_set_recovery_size(int32_t value);
   public:
 
+  // int32 proxy_port = 6;
+  void clear_proxy_port();
+  int32_t proxy_port() const;
+  void set_proxy_port(int32_t value);
+  private:
+  int32_t _internal_proxy_port() const;
+  void _internal_set_proxy_port(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:datanode_proto.MergeParityInfo)
  private:
   class _Internal;
@@ -1045,9 +1070,11 @@ class MergeParityInfo final :
   typedef void DestructorSkippable_;
   struct Impl_ {
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr block_key_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr proxy_ip_;
     int32_t block_id_;
     int32_t recovery_offset_;
     int32_t recovery_size_;
+    int32_t proxy_port_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -2627,6 +2654,76 @@ inline void MergeParityInfo::_internal_set_recovery_size(int32_t value) {
 inline void MergeParityInfo::set_recovery_size(int32_t value) {
   _internal_set_recovery_size(value);
   // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_size)
+}
+
+// string proxy_ip = 5;
+inline void MergeParityInfo::clear_proxy_ip() {
+  _impl_.proxy_ip_.ClearToEmpty();
+}
+inline const std::string& MergeParityInfo::proxy_ip() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.proxy_ip)
+  return _internal_proxy_ip();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void MergeParityInfo::set_proxy_ip(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.proxy_ip_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.proxy_ip)
+}
+inline std::string* MergeParityInfo::mutable_proxy_ip() {
+  std::string* _s = _internal_mutable_proxy_ip();
+  // @@protoc_insertion_point(field_mutable:datanode_proto.MergeParityInfo.proxy_ip)
+  return _s;
+}
+inline const std::string& MergeParityInfo::_internal_proxy_ip() const {
+  return _impl_.proxy_ip_.Get();
+}
+inline void MergeParityInfo::_internal_set_proxy_ip(const std::string& value) {
+  
+  _impl_.proxy_ip_.Set(value, GetArenaForAllocation());
+}
+inline std::string* MergeParityInfo::_internal_mutable_proxy_ip() {
+  
+  return _impl_.proxy_ip_.Mutable(GetArenaForAllocation());
+}
+inline std::string* MergeParityInfo::release_proxy_ip() {
+  // @@protoc_insertion_point(field_release:datanode_proto.MergeParityInfo.proxy_ip)
+  return _impl_.proxy_ip_.Release();
+}
+inline void MergeParityInfo::set_allocated_proxy_ip(std::string* proxy_ip) {
+  if (proxy_ip != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.proxy_ip_.SetAllocated(proxy_ip, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.proxy_ip_.IsDefault()) {
+    _impl_.proxy_ip_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:datanode_proto.MergeParityInfo.proxy_ip)
+}
+
+// int32 proxy_port = 6;
+inline void MergeParityInfo::clear_proxy_port() {
+  _impl_.proxy_port_ = 0;
+}
+inline int32_t MergeParityInfo::_internal_proxy_port() const {
+  return _impl_.proxy_port_;
+}
+inline int32_t MergeParityInfo::proxy_port() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.proxy_port)
+  return _internal_proxy_port();
+}
+inline void MergeParityInfo::_internal_set_proxy_port(int32_t value) {
+  
+  _impl_.proxy_port_ = value;
+}
+inline void MergeParityInfo::set_proxy_port(int32_t value) {
+  _internal_set_proxy_port(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.proxy_port)
 }
 
 // -------------------------------------------------------------------
