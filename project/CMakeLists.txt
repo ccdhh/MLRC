@@ -104,15 +104,35 @@ set(dn_proto_hdrs "${CMAKE_CURRENT_SOURCE_DIR}/src/proto/datanode.pb.h")
 set(dn_grpc_srcs "${CMAKE_CURRENT_SOURCE_DIR}/src/proto/datanode.grpc.pb.cc")
 set(dn_grpc_hdrs "${CMAKE_CURRENT_SOURCE_DIR}/src/proto/datanode.grpc.pb.h")
 
+set(ALL_PROTO_OUTPUTS
+        ${cn_proto_srcs} ${cn_proto_hdrs} ${cn_grpc_srcs} ${cn_grpc_hdrs}
+        ${pn_proto_srcs} ${pn_proto_hdrs} ${pn_grpc_srcs} ${pn_grpc_hdrs}
+        ${dn_proto_srcs} ${dn_proto_hdrs} ${dn_grpc_srcs} ${dn_grpc_hdrs})
+set(PROTO_GEN_STAMP "${CMAKE_CURRENT_BINARY_DIR}/proto_gen.stamp")
+
 add_custom_command(
-        OUTPUT ${cn_proto_srcs} ${cn_proto_hdrs} ${cn_grpc_srcs} ${cn_grpc_hdrs} ${pn_proto_srcs} ${pn_proto_hdrs} ${pn_grpc_srcs} ${pn_grpc_hdrs} ${dn_proto_srcs} ${dn_proto_hdrs} ${dn_grpc_srcs} ${dn_grpc_hdrs}
+        OUTPUT ${PROTO_GEN_STAMP} ${ALL_PROTO_OUTPUTS}
         COMMAND ${_PROTOBUF_PROTOC}
         ARGS --grpc_out "${CMAKE_CURRENT_SOURCE_DIR}/src/proto"
         --cpp_out "${CMAKE_CURRENT_SOURCE_DIR}/src/proto"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/src/proto"
         --plugin=protoc-gen-grpc="${_GRPC_CPP_PLUGIN_EXECUTABLE}"
         "${cn_proto}" "${pn_proto}" "${dn_proto}"
-        DEPENDS "${cn_proto}" "${pn_proto}" "${dn_proto}")
+        COMMAND ${CMAKE_COMMAND} -E touch ${PROTO_GEN_STAMP}
+        DEPENDS "${cn_proto}" "${pn_proto}" "${dn_proto}"
+        COMMENT "Generating protobuf/gRPC sources")
+
+# Single proto generation step; avoid parallel protoc races when multiple targets build together.
+add_custom_target(proto_gen DEPENDS ${PROTO_GEN_STAMP})
+
+set(ALL_PROTO_SRCS
+        ${cn_proto_srcs} ${cn_grpc_srcs}
+        ${pn_proto_srcs} ${pn_grpc_srcs}
+        ${dn_proto_srcs} ${dn_grpc_srcs})
+add_library(proto_objs OBJECT ${ALL_PROTO_SRCS})
+add_dependencies(proto_objs proto_gen)
+target_link_libraries(proto_objs PUBLIC ${_PROTOBUF_LIBPROTOBUF} ${_GRPC_GRPCPP})
+set_property(SOURCE ${ALL_PROTO_SRCS} PROPERTY GENERATED TRUE)
 
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src/proto")
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/libmemcached/include)
@@ -141,12 +161,7 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/   PROJECT_SRC)
 foreach (_target
        run_coordinator run_proxy run_datanode main_client)
     add_executable(${_target}
-            ${cn_proto_srcs}
-            ${cn_grpc_srcs}
-            ${pn_proto_srcs}
-            ${pn_grpc_srcs}
-            ${dn_proto_srcs}
-            ${dn_grpc_srcs}
+            $<TARGET_OBJECTS:proto_objs>
             ${ASM_SOURCES}
             ${CMAKE_CURRENT_SOURCE_DIR}/src/client.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/src/coordinator.cpp
@@ -167,6 +182,7 @@ foreach (_target
             ${CMAKE_CURRENT_SOURCE_DIR}/src/glrc_pipeline_codec.cpp
             #${_target}.cpp
             )
+    add_dependencies(${_target} proto_gen)
     target_link_libraries(${_target}
             ${_REFLECTION}
             ${_GRPC_GRPCPP}

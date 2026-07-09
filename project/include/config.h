@@ -14,6 +14,7 @@ namespace ECProject
    */
   const int PROXY_PHASE2_EXCHANGE_BASE = 10240;
   /** Port band per proxy (epoch groups * max partitions per group). */
+
   const int PROXY_PHASE2_EPOCH_STRIDE = 64;
   /** Must match generate_local_cluster.py BASE_PROXY / PROXY_STRIDE. */
   const int PROXY_GRPC_BASE = 50405;

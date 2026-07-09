@@ -23,7 +23,10 @@ int main(int argc, char **argv)
     const std::string sys_config_path =
         resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
                                             "../../config/parameterConfiguration.xml");
-    ECProject::DataNode datanode(ip_and_port, sys_config_path);
+    const std::string cluster_info_path =
+        resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
+                                            "../../config/clusterInformation.xml");
+    ECProject::DataNode datanode(ip_and_port, sys_config_path, cluster_info_path);
     datanode.Run();
     return 0;
 }

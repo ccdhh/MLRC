@@ -14,7 +14,9 @@ namespace ECProject
     HOP_SERVER = 2,
     LOCAL_DIRECT = 3,
     /** Release listen-port tracking after a recovery; no data transfer. */
-    TEARDOWN = 4
+    TEARDOWN = 4,
+    /** Bind pipeline listen ports only; coordinator waits before starting data plane. */
+    READY = 5
   };
 
   struct GlrcPipelineHopInfo

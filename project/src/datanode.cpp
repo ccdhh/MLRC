@@ -2,6 +2,7 @@
 #include "link_bandwidth.h"
 #include "toolbox.h"
 #include "unilrc_encoder.h"
+#include "tinyxml2.h"
 #include <chrono>
 #include <cstring>
 #include <fstream>
@@ -22,6 +23,70 @@ namespace ECProject
             m_egress_bandwidth =
                 std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
         }
+    }
+
+    void DatanodeImpl::initRepairProxyPairing(const std::string &cluster_info_path)
+    {
+        m_local_repair_proxy_ip.clear();
+        m_local_repair_proxy_port = 0;
+        tinyxml2::XMLDocument xml;
+        if (xml.LoadFile(cluster_info_path.c_str()) != tinyxml2::XML_SUCCESS)
+            return;
+        tinyxml2::XMLElement *root = xml.RootElement();
+        if (root == nullptr)
+            return;
+        for (tinyxml2::XMLElement *cluster = root->FirstChildElement(); cluster != nullptr;
+             cluster = cluster->NextSiblingElement())
+        {
+            const char *cluster_proxy = cluster->Attribute("proxy");
+            if (cluster_proxy == nullptr)
+                continue;
+            tinyxml2::XMLElement *nodes = cluster->FirstChildElement();
+            if (nodes == nullptr)
+                continue;
+            for (tinyxml2::XMLElement *node = nodes->FirstChildElement(); node != nullptr;
+                 node = node->NextSiblingElement())
+            {
+                const char *node_uri = node->Attribute("uri");
+                if (node_uri == nullptr)
+                    continue;
+                const std::string uri(node_uri);
+                const size_t colon = uri.rfind(':');
+                if (colon == std::string::npos)
+                    continue;
+                const int node_port = std::stoi(uri.substr(colon + 1));
+                if (node_port != m_port)
+                    continue;
+                std::string repair_proxy = cluster_proxy;
+                if (const char *dn_proxy = node->Attribute("proxy"))
+                    repair_proxy = std::string(dn_proxy);
+                const size_t proxy_colon = repair_proxy.rfind(':');
+                if (proxy_colon == std::string::npos)
+                    return;
+                m_local_repair_proxy_ip = repair_proxy.substr(0, proxy_colon);
+                m_local_repair_proxy_port = std::stoi(repair_proxy.substr(proxy_colon + 1));
+                return;
+            }
+        }
+    }
+
+    bool DatanodeImpl::isLocalRepairProxy(const std::string &proxy_ip, int proxy_port) const
+    {
+        if (m_local_repair_proxy_port <= 0 || proxy_ip.empty() || proxy_port <= 0)
+            return false;
+        return m_local_repair_proxy_ip == proxy_ip && m_local_repair_proxy_port == proxy_port;
+    }
+
+    SharedBandwidthLimiter *DatanodeImpl::egressBandwidthForRepairProxy(const std::string &proxy_ip,
+                                                                        int proxy_port) const
+    {
+        return isLocalRepairProxy(proxy_ip, proxy_port) ? nullptr : m_egress_bandwidth.get();
+    }
+
+    SharedBandwidthLimiter *DatanodeImpl::ingressBandwidthForRepairProxy(const std::string &proxy_ip,
+                                                                         int proxy_port) const
+    {
+        return isLocalRepairProxy(proxy_ip, proxy_port) ? nullptr : m_ingress_bandwidth.get();
     }
 
     grpc::Status DatanodeImpl::checkalive(
@@ -294,8 +359,10 @@ namespace ECProject
     {
         std::string block_key = recovery_info->block_key();
         int block_id = recovery_info->block_id();
+        SharedBandwidthLimiter *ingress_bw =
+            ingressBandwidthForRepairProxy(recovery_info->proxy_ip(), recovery_info->proxy_port());
 
-        auto handler = [this, &response](std::string block_key, int block_id) mutable
+        auto handler = [this, ingress_bw](std::string block_key, int block_id) mutable
         {
             try
             {
@@ -304,8 +371,7 @@ namespace ECProject
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                tcp_read_with_shared_bandwidth(socket, buf.data(), m_sys_config->BlockSize, m_ingress_bandwidth.get(),
-                                               ec);
+                tcp_read_with_shared_bandwidth(socket, buf.data(), m_sys_config->BlockSize, ingress_bw, ec);
 
                 asio::error_code ignore_ec;
                 socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
@@ -367,16 +433,18 @@ namespace ECProject
         const int recovery_size =
             recovery_info->recovery_size() > 0 ? recovery_info->recovery_size() : m_sys_config->BlockSize;
         const bool stripe_mode = recovery_info->recovery_size() > 0;
+        SharedBandwidthLimiter *ingress_bw =
+            ingressBandwidthForRepairProxy(recovery_info->proxy_ip(), recovery_info->proxy_port());
 
-        auto handler = [this, &response](std::string block_key, int block_id, int recovery_offset, int recovery_size,
-                                          bool stripe_mode) mutable {
+        auto handler = [this, ingress_bw, &response](std::string block_key, int block_id, int recovery_offset,
+                                                     int recovery_size, bool stripe_mode) mutable {
             try
             {
                 std::vector<char> buf(recovery_size);
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                tcp_read_with_shared_bandwidth(socket, buf.data(), recovery_size, m_ingress_bandwidth.get(), ec);
+                tcp_read_with_shared_bandwidth(socket, buf.data(), recovery_size, ingress_bw, ec);
 
                 asio::error_code ignore_ec;
                 socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
@@ -708,8 +776,8 @@ namespace ECProject
             read_offset = 0;
             read_length = block_size;
         }
-        (void)get_info->proxy_ip();
-        (void)get_info->proxy_port();
+        SharedBandwidthLimiter *egress_bw =
+            egressBandwidthForRepairProxy(get_info->proxy_ip(), get_info->proxy_port());
         std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
         std::string readpath = targetdir + block_key;
         char *buf = new char[read_length];
@@ -754,9 +822,8 @@ namespace ECProject
         }
         response->set_data_port(data_acceptor->local_endpoint().port());
 
-        const bool stripe_local_read =
-            read_length > 0 && read_length < block_size;
-        auto handler = [this, read_length, stripe_local_read, data_acceptor](char *payload) mutable
+        const bool stripe_pipeline_read = read_length > 0 && read_length < block_size;
+        auto handler = [this, read_length, stripe_pipeline_read, egress_bw, data_acceptor](char *payload) mutable
         {
             int data_port = data_acceptor->local_endpoint().port();
             asio::error_code error;
@@ -771,11 +838,11 @@ namespace ECProject
             else
             {
                 size_t wrote = 0;
-                if (stripe_local_read)
+                if (stripe_pipeline_read || egress_bw == nullptr)
                     wrote = asio::write(socket, asio::buffer(payload, read_length), error);
                 else
                 {
-                    tcp_write_with_shared_bandwidth(socket, payload, read_length, m_egress_bandwidth.get(), error);
+                    tcp_write_with_shared_bandwidth(socket, payload, read_length, egress_bw, error);
                     wrote = error ? 0 : read_length;
                 }
                 if (IF_DEBUG)
@@ -817,6 +884,7 @@ namespace ECProject
         int block_size = get_info->block_size();
         std::string proxy_ip = get_info->proxy_ip();
         int proxy_port = get_info->proxy_port();
+        SharedBandwidthLimiter *egress_bw = egressBandwidthForRepairProxy(proxy_ip, proxy_port);
         std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
         std::string readpath = targetdir + block_key;
         char *buf = new char[block_size];
@@ -834,12 +902,12 @@ namespace ECProject
             ifs.read(buf, block_size);
             ifs.close();
         }
-        auto handler = [this](std::string block_key, int block_size, std::string proxy_ip, int proxy_port, char* buf) mutable
+        auto handler = [this, block_size, egress_bw](char *buf) mutable
         {
             asio::error_code error;
             asio::ip::tcp::socket socket(io_context);
             acceptor.accept(socket);
-            tcp_write_with_shared_bandwidth(socket, buf, block_size, m_egress_bandwidth.get(), error);
+            tcp_write_with_shared_bandwidth(socket, buf, block_size, egress_bw, error);
             asio::error_code ignore_ec;
             socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
             socket.close(ignore_ec);
@@ -855,7 +923,7 @@ namespace ECProject
             {
                 std::cout << "[Datanode" << m_port << "][GET] ready to handle get!" << std::endl;
             }
-            std::thread my_thread(handler, block_key, block_size, proxy_ip, proxy_port, buf);
+            std::thread my_thread(handler, buf);
             my_thread.detach();
             response->set_message(true);
         }

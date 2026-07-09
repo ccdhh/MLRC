@@ -48,6 +48,28 @@ namespace ECProject
     }
   }
 
+  bool ProxyImpl::isLocalDatanode(const char *ip, int port) const
+  {
+    if (m_local_datanode_uri.empty() || ip == nullptr || port <= 0)
+      return false;
+    return m_local_datanode_uri == (std::string(ip) + ":" + std::to_string(port));
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::ingressBandwidthForDatanodeRead(const char *ip, int port) const
+  {
+    // DN→proxy link rate is enforced on datanode egress (see handleGetBreakdown). Do not
+    // also throttle on proxy ingress: a shared m_ingress bucket would serialize parallel
+    // survivor reads in local_direct and double-count the same link.
+    (void)ip;
+    (void)port;
+    return nullptr;
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::egressBandwidthForDatanodeWrite(const char *ip, int port) const
+  {
+    return isLocalDatanode(ip, port) ? nullptr : m_egress_bandwidth.get();
+  }
+
   bool ProxyImpl::init_coordinator()
   {
     m_coordinator_ptr = coordinator_proto::coordinatorService::NewStub(grpc::CreateChannel(m_coordinator_address, grpc::InsecureChannelCredentials()));
@@ -88,7 +110,10 @@ namespace ECProject
         if (const char *dn_proxy = node->Attribute("proxy"))
           node_proxy = std::string(dn_proxy);
         if (node_proxy == proxy_ip_port)
+        {
           m_self_cluster_id = std::stoi(cluster_id);
+          m_local_datanode_uri = node_uri;
+        }
         auto _stub = datanode_proto::datanodeService::NewStub(grpc::CreateChannel(node_uri, grpc::InsecureChannelCredentials()));
         // datanode_proto::CheckaliveCMD cmd;
         // datanode_proto::RequestResult result;
@@ -212,6 +237,8 @@ namespace ECProject
       datanode_proto::RequestResult result;
       recovery_info.set_block_key(std::string(block_key));
       recovery_info.set_block_id(block_id);
+      recovery_info.set_proxy_ip(m_ip);
+      recovery_info.set_proxy_port(m_port);
       std::string node_ip_port = std::string(ip) + ":" + std::to_string(port);
       std::thread notify_datanode_thread([this, &context, &recovery_info, &result, &node_ip_port, &block_key, &block_id]()
       {
@@ -238,7 +265,8 @@ namespace ECProject
       }
       std::cout << "[RecoveryToDatanode] Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT
                 << " success! block_key: " << block_key << " block_id: " << block_id << std::endl;
-      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize, m_egress_bandwidth.get(), error);
+      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize,
+                                      egressBandwidthForDatanodeWrite(ip, port), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -262,6 +290,8 @@ namespace ECProject
       datanode_proto::RequestResult result;
       recovery_info.set_block_key(std::string(block_key));
       recovery_info.set_block_id(block_id);
+      recovery_info.set_proxy_ip(m_ip);
+      recovery_info.set_proxy_port(m_port);
       std::string node_ip_port = std::string(ip) + ":" + std::to_string(port);
       auto dn_it = m_datanode_ptrs.find(node_ip_port);
       if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
@@ -298,7 +328,8 @@ namespace ECProject
       }
       std::cout << "[RecoveryToDatanode] Connect to " << ip << ":" << port + ECProject::DATANODE_PORT_SHIFT
                 << " success! block_key: " << block_key << " block_id: " << block_id << std::endl;
-      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize, m_egress_bandwidth.get(), error);
+      tcp_write_with_shared_bandwidth(socket, buf, m_sys_config->BlockSize,
+                                      egressBandwidthForDatanodeWrite(ip, port), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -331,6 +362,8 @@ namespace ECProject
       recovery_info.set_block_id(block_id);
       recovery_info.set_recovery_offset(recovery_offset);
       recovery_info.set_recovery_size(recovery_size);
+      recovery_info.set_proxy_ip(m_ip);
+      recovery_info.set_proxy_port(m_port);
       std::string node_ip_port = std::string(ip) + ":" + std::to_string(port);
       auto dn_it = m_datanode_ptrs.find(node_ip_port);
       if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
@@ -367,7 +400,7 @@ namespace ECProject
         notify_datanode_thread.join();
         return false;
       }
-      tcp_write_with_shared_bandwidth(socket, buf, recovery_size, m_egress_bandwidth.get(), error);
+      tcp_write_with_shared_bandwidth(socket, buf, recovery_size, egressBandwidthForDatanodeWrite(ip, port), error);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -483,7 +516,8 @@ namespace ECProject
         return false;
       }
       asio::error_code ec;
-      tcp_read_with_shared_bandwidth(socket, value, value_length, m_ingress_bandwidth.get(), ec);
+      SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(ip, port);
+      tcp_read_with_shared_bandwidth(socket, value, value_length, read_bw, ec);
       if (ec)
       {
         std::cerr << "read: " << ec.message() << std::endl;
@@ -541,7 +575,8 @@ namespace ECProject
       asio::ip::tcp::socket socket(io_context);
       asio::connect(socket, resolver.resolve({std::string(ip), std::to_string(port + ECProject::DATANODE_PORT_SHIFT)}));
       asio::error_code ec;
-      tcp_read_with_shared_bandwidth(socket, buf, value_length, m_ingress_bandwidth.get(), ec);
+      SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(ip, port);
+      tcp_read_with_shared_bandwidth(socket, buf, value_length, read_bw, ec);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
@@ -599,7 +634,8 @@ namespace ECProject
       asio::ip::tcp::socket socket(io_context);
       asio::connect(socket, resolver.resolve({std::string(ip), std::to_string(port + ECProject::DATANODE_PORT_SHIFT)}));
       asio::error_code ec;
-      tcp_read_with_shared_bandwidth(socket, value, value_length, m_ingress_bandwidth.get(), ec);
+      SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(ip, port);
+      tcp_read_with_shared_bandwidth(socket, value, value_length, read_bw, ec);
       asio::error_code ignore_ec;
       socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
       socket.close(ignore_ec);
