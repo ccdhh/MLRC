@@ -168,7 +168,8 @@ namespace ECProject
     bool recovery_glrc_ilp_phase2_breakdown_ex(int stripe_id, const std::vector<int> &failed_block_ids,
                                                  coordinator_proto::RecoveryReply *recovery_reply,
                                                  const GlrcIlpRepairPlan *preset_plan, int shard_count_override,
-                                                 bool acquire_mutex, double *out_orchestration_wait_sec);
+                                                 bool acquire_mutex, double *out_orchestration_wait_sec,
+                                                 bool share_proxy_node_bandwidth = false);
     bool recovery_glrc_ilp_pipeline_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                               coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_glrc_ilp_pipeline_breakdown_ex(int stripe_id, const std::vector<int> &failed_block_ids,

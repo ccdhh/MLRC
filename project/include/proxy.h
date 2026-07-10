@@ -159,6 +159,12 @@ namespace ECProject
                                               double *network_start_time, double *network_end_time,
                                               double *grpc_notify_time, double *grpc_start_time,
                                               SharedBandwidthLimiter *block_bandwidth);
+    struct Phase2BlockDuplexBw
+    {
+      SharedBandwidthLimiter *ingress = nullptr;
+      SharedBandwidthLimiter *egress = nullptr;
+    };
+    Phase2BlockDuplexBw phase2BlockDuplexBandwidth(int repair_block_id, int exchange_epoch);
     bool glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recovery_request,
                                proxy_proto::RecoveryReply *response);
     bool glrcIlpPipelineRecovery(const proxy_proto::RecoveryRequest *recovery_request,
@@ -180,6 +186,10 @@ namespace ECProject
                                  asio::io_context &io, asio::ip::tcp::socket &socket);
 
   private:
+    std::mutex m_glrc_phase2_mutex;
+    int m_phase2_block_bw_epoch = -1;
+    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_ingress_bw;
+    std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_egress_bw;
     std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
     std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
     std::mutex m_mutex;

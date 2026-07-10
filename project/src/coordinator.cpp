@@ -2974,7 +2974,7 @@ namespace ECProject
                                                          coordinator_proto::RecoveryReply *recovery_reply)
   {
     return recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, recovery_reply, nullptr, 0, true,
-                                                 nullptr);
+                                                 nullptr, false);
   }
 
   bool CoordinatorImpl::recovery_glrc_ilp_phase2_breakdown_ex(int stripe_id,
@@ -2982,7 +2982,8 @@ namespace ECProject
                                                             coordinator_proto::RecoveryReply *recovery_reply,
                                                             const GlrcIlpRepairPlan *preset_plan,
                                                             int shard_count_override, bool acquire_mutex,
-                                                            double *out_orchestration_wait_sec)
+                                                            double *out_orchestration_wait_sec,
+                                                            bool share_proxy_node_bandwidth)
   {
     if (m_sys_config->CodeType != "gLRC")
     {
@@ -3153,6 +3154,7 @@ namespace ECProject
       req.set_phase2_byte_len(part.byte_len);
       req.set_phase2_do_write_back(m_sys_config->GlrcPhase2WriteBack);
       req.set_phase2_exchange_epoch(static_cast<int32_t>(exchange_epoch));
+      req.set_phase2_share_proxy_node_bandwidth(share_proxy_node_bandwidth);
 
       for (int fid : failed_block_ids)
       {
@@ -4038,7 +4040,7 @@ if (ports_released)
     {
       std::thread phase2_thread([&]() {
         recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, &reply_phase2, &plan_ilp, p, false,
-                                              &orch_phase2);
+                                              &orch_phase2, true);
       });
       std::thread pipeline_thread([&]() {
         recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, &reply_pipeline, &plan_lf,

@@ -4052,7 +4052,6 @@ class RecoveryRequest final :
     kPhase2ByteOffFieldNumber = 27,
     kPhase2ByteLenFieldNumber = 28,
     kPhase2ExchangeEpochFieldNumber = 30,
-    kGlrcIlpPipelineFieldNumber = 36,
     kPipelineShardCountFieldNumber = 37,
     kPipelineHubBlockIdFieldNumber = 38,
     kPipelineExchangeEpochFieldNumber = 40,
@@ -4062,6 +4061,8 @@ class RecoveryRequest final :
     kPipelineEqSlotFieldNumber = 44,
     kPipelineMyHopIndexFieldNumber = 52,
     kPipelineHubProxyPortFieldNumber = 54,
+    kGlrcIlpPipelineFieldNumber = 36,
+    kPhase2ShareProxyNodeBandwidthFieldNumber = 73,
     kPipelineLocalFailedBlockIdFieldNumber = 55,
     kPipelineLocalReplacedNodePortFieldNumber = 58,
     kPipelineChainHubIsTailFlagFieldNumber = 63,
@@ -5023,15 +5024,6 @@ class RecoveryRequest final :
   void _internal_set_phase2_exchange_epoch(int32_t value);
   public:
 
-  // bool glrc_ilp_pipeline = 36;
-  void clear_glrc_ilp_pipeline();
-  bool glrc_ilp_pipeline() const;
-  void set_glrc_ilp_pipeline(bool value);
-  private:
-  bool _internal_glrc_ilp_pipeline() const;
-  void _internal_set_glrc_ilp_pipeline(bool value);
-  public:
-
   // int32 pipeline_shard_count = 37;
   void clear_pipeline_shard_count();
   int32_t pipeline_shard_count() const;
@@ -5111,6 +5103,24 @@ class RecoveryRequest final :
   private:
   int32_t _internal_pipeline_hub_proxy_port() const;
   void _internal_set_pipeline_hub_proxy_port(int32_t value);
+  public:
+
+  // bool glrc_ilp_pipeline = 36;
+  void clear_glrc_ilp_pipeline();
+  bool glrc_ilp_pipeline() const;
+  void set_glrc_ilp_pipeline(bool value);
+  private:
+  bool _internal_glrc_ilp_pipeline() const;
+  void _internal_set_glrc_ilp_pipeline(bool value);
+  public:
+
+  // bool phase2_share_proxy_node_bandwidth = 73;
+  void clear_phase2_share_proxy_node_bandwidth();
+  bool phase2_share_proxy_node_bandwidth() const;
+  void set_phase2_share_proxy_node_bandwidth(bool value);
+  private:
+  bool _internal_phase2_share_proxy_node_bandwidth() const;
+  void _internal_set_phase2_share_proxy_node_bandwidth(bool value);
   public:
 
   // int32 pipeline_local_failed_block_id = 55;
@@ -5269,7 +5279,6 @@ class RecoveryRequest final :
     int32_t phase2_byte_off_;
     int32_t phase2_byte_len_;
     int32_t phase2_exchange_epoch_;
-    bool glrc_ilp_pipeline_;
     int32_t pipeline_shard_count_;
     int32_t pipeline_hub_block_id_;
     int32_t pipeline_exchange_epoch_;
@@ -5279,6 +5288,8 @@ class RecoveryRequest final :
     int32_t pipeline_eq_slot_;
     int32_t pipeline_my_hop_index_;
     int32_t pipeline_hub_proxy_port_;
+    bool glrc_ilp_pipeline_;
+    bool phase2_share_proxy_node_bandwidth_;
     int32_t pipeline_local_failed_block_id_;
     int32_t pipeline_local_replaced_node_port_;
     int32_t pipeline_chain_hub_is_tail_flag_;
@@ -13125,6 +13136,26 @@ inline void RecoveryRequest::_internal_set_pipeline_global_shard_count(int32_t v
 inline void RecoveryRequest::set_pipeline_global_shard_count(int32_t value) {
   _internal_set_pipeline_global_shard_count(value);
   // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.pipeline_global_shard_count)
+}
+
+// bool phase2_share_proxy_node_bandwidth = 73;
+inline void RecoveryRequest::clear_phase2_share_proxy_node_bandwidth() {
+  _impl_.phase2_share_proxy_node_bandwidth_ = false;
+}
+inline bool RecoveryRequest::_internal_phase2_share_proxy_node_bandwidth() const {
+  return _impl_.phase2_share_proxy_node_bandwidth_;
+}
+inline bool RecoveryRequest::phase2_share_proxy_node_bandwidth() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryRequest.phase2_share_proxy_node_bandwidth)
+  return _internal_phase2_share_proxy_node_bandwidth();
+}
+inline void RecoveryRequest::_internal_set_phase2_share_proxy_node_bandwidth(bool value) {
+  
+  _impl_.phase2_share_proxy_node_bandwidth_ = value;
+}
+inline void RecoveryRequest::set_phase2_share_proxy_node_bandwidth(bool value) {
+  _internal_set_phase2_share_proxy_node_bandwidth(value);
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.phase2_share_proxy_node_bandwidth)
 }
 
 // -------------------------------------------------------------------

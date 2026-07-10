@@ -269,6 +269,8 @@ message RecoveryRequest{
   int32 pipeline_shard_global_begin = 71;
   /** Total stripe shard count S (stripe_len = block_size / S). 0 = same as pipeline_shard_count. */
   int32 pipeline_global_shard_count = 72;
+  /** Hybrid: phase2 half shares this proxy's node ingress/egress with concurrent pipeline RPCs. */
+  bool phase2_share_proxy_node_bandwidth = 73;
 }
 
 message MultipleRecoveryRequest{
