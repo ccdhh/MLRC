@@ -518,6 +518,30 @@ void ProxyImpl::get_from_node_stripe_range_breakdown(const std::string &block_ke
                                                       grpc_start_time, block_bandwidth);
 }
 
+ProxyImpl::Phase2BlockDuplexBw ProxyImpl::phase2BlockDuplexBandwidth(int repair_block_id, int exchange_epoch)
+{
+  Phase2BlockDuplexBw out;
+  if (m_sys_config == nullptr || m_sys_config->NodeBlockBandwidthMBps <= 0.0)
+    return out;
+  std::lock_guard<std::mutex> lock(m_glrc_phase2_mutex);
+  if (m_phase2_block_bw_epoch != exchange_epoch)
+  {
+    m_phase2_block_ingress_bw.clear();
+    m_phase2_block_egress_bw.clear();
+    m_phase2_block_bw_epoch = exchange_epoch;
+  }
+  const double mbps = m_sys_config->NodeBlockBandwidthMBps;
+  auto &in_slot = m_phase2_block_ingress_bw[repair_block_id];
+  auto &out_slot = m_phase2_block_egress_bw[repair_block_id];
+  if (!in_slot)
+    in_slot = std::make_shared<SharedBandwidthLimiter>(mbps);
+  if (!out_slot)
+    out_slot = std::make_shared<SharedBandwidthLimiter>(mbps);
+  out.ingress = in_slot.get();
+  out.egress = out_slot.get();
+  return out;
+}
+
 std::string glrc_phase2_take_last_error()
 {
   return g_glrc_phase2_last_error;
@@ -540,8 +564,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
   }
   const int repair_block_id = recovery_request->failed_block_ids(partition_id);
-  SharedBandwidthLimiter *phase2_ingress_bw = m_ingress_bandwidth.get();
-  SharedBandwidthLimiter *phase2_egress_bw = m_egress_bandwidth.get();
+  const Phase2BlockDuplexBw block_bw = phase2BlockDuplexBandwidth(repair_block_id, exchange_epoch);
   const int f = recovery_request->failed_block_ids_size();
   const int byte_off = recovery_request->phase2_byte_off();
   const int byte_len = recovery_request->phase2_byte_len();
@@ -924,7 +947,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
         const int stripe_off = global_shard * stripe_byte_len;
         Phase2PeerHeader out_hdr = make_shard_header(partition_id, global_shard, stripe_byte_len);
         if (!send_shard_frame(*sock, out_hdr, reinterpret_cast<char *>(recovered_ptrs[peer_part] + stripe_off),
-                              phase2_egress_bw, ec))
+                              block_bw.egress, ec))
         {
           set_phase2_error(std::string(side) + " shard send to peer " + std::to_string(peer_part) +
                            " failed: " + ec.message());
@@ -940,7 +963,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
           return true;
         Phase2PeerHeader rhdr{};
         std::vector<char> recv_stripe(stripe_byte_len);
-        if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), phase2_ingress_bw, ec))
+        if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), block_bw.ingress, ec))
         {
           set_phase2_error(std::string(side) + " shard recv from peer " + std::to_string(peer_part) +
                            " failed: " + ec.message());
@@ -1157,9 +1180,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
           (void)stripe_off;
           asio::error_code read_ec;
           const auto net_begin = std::chrono::high_resolution_clock::now();
-          SharedBandwidthLimiter *helper_read_bw =
-              ingressBandwidthForDatanodeRead(recovery_request->datanodeip(i).c_str(),
-                                              recovery_request->datanodeport(i));
+          SharedBandwidthLimiter *helper_read_bw = block_bw.ingress;
           tcp_read_with_shared_bandwidth(socket, dst, static_cast<size_t>(stripe_byte_len), helper_read_bw, read_ec);
           const auto net_end = std::chrono::high_resolution_clock::now();
           if (read_ec)
