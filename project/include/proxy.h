@@ -24,6 +24,8 @@ namespace ECProject
 {
   /** Last error from glrcIlpPhase2Recovery on this thread (for gRPC status). */
   std::string glrc_phase2_take_last_error();
+  /** Drop any phase2 READY acceptors left from a failed or completed recovery. */
+  void glrc_phase2_clear_ready_session();
   /** Last error from glrcIlpPipelineRecovery on this thread (for gRPC status). */
   std::string glrc_pipeline_take_last_error();
 

@@ -2,6 +2,7 @@
 #include "glrc_repair_ilp.h"
 #include "glrc_pipeline_plan.h"
 #include "glrc_shard_plan.h"
+#include "proxy.h"
 #include "config.h"
 #include "tinyxml2.h"
 #include <random>
@@ -3081,6 +3082,59 @@ namespace ECProject
     std::vector<PartitionOutcome> outcomes(f);
     const uint32_t exchange_epoch = g_glrc_phase2_exchange_epoch.fetch_add(1);
 
+    auto fill_phase2_request = [&](proxy_proto::RecoveryRequest &req, int pi, bool ready_only) {
+      const GlrcPartitionShardPlan &part = shard_plan.partitions[pi];
+      req.set_glrc_ilp_recovery(true);
+      req.set_glrc_ilp_phase2(true);
+      req.set_cross_rack_num(0);
+      req.set_phase2_partition_id(pi);
+      req.set_phase2_shard_count(shard_plan.shard_count);
+      req.set_phase2_stripe_byte_len(shard_plan.stripe_byte_len);
+      req.set_phase2_shard_begin(part.shard_begin);
+      req.set_phase2_shard_count_local(part.shard_count);
+      req.set_phase2_byte_off(part.byte_off);
+      req.set_phase2_byte_len(part.byte_len);
+      req.set_phase2_do_write_back(m_sys_config->GlrcPhase2WriteBack);
+      req.set_phase2_exchange_epoch(static_cast<int32_t>(exchange_epoch));
+      req.set_phase2_ready_only(ready_only);
+
+      for (int fid : failed_block_ids)
+      {
+        req.add_failed_block_ids(fid);
+        req.add_failed_block_keys(t_stripe.blocks[fid]->block_key);
+        int node_id = t_stripe.blocks[fid]->map2node;
+        req.add_replaced_node_ips(m_node_table[node_id].node_ip);
+        req.add_replaced_node_ports(m_node_table[node_id].node_port);
+      }
+      if (!ready_only)
+      {
+        for (const auto &eq : plan.selected_equations)
+          req.add_selected_equations(eq);
+        for (int eq_idx : plan.selected_equation_indices)
+          req.add_selected_equation_indices(eq_idx);
+        for (int hid : plan.helper_block_ids)
+        {
+          Block *t_block = t_stripe.blocks[hid];
+          req.add_datanodeip(m_node_table[t_block->map2node].node_ip);
+          req.add_datanodeport(m_node_table[t_block->map2node].node_port);
+          req.add_blockkeys(t_block->block_key);
+          req.add_blockids(t_block->block_id);
+        }
+      }
+
+      for (int pj = 0; pj < (int)shard_plan.partitions.size(); pj++)
+      {
+        if (pj == pi)
+          continue;
+        const GlrcPartitionShardPlan &peer = shard_plan.partitions[pj];
+        req.add_phase2_peer_proxy_ips(peer.proxy_ip);
+        req.add_phase2_peer_proxy_ports(peer.proxy_port);
+        req.add_phase2_peer_partition_ids(pj);
+        req.add_phase2_peer_shard_begins(peer.shard_begin);
+        req.add_phase2_peer_shard_counts(peer.shard_count);
+      }
+    };
+
     auto run_partition = [&](int pi) {
       const GlrcPartitionShardPlan &part = shard_plan.partitions[pi];
       std::string chosen_proxy = part.proxy_ip + ":" + std::to_string(part.proxy_port);
@@ -3098,52 +3152,7 @@ namespace ECProject
       ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(300));
       proxy_proto::RecoveryRequest req;
       proxy_proto::RecoveryReply &rep = outcomes[pi].reply;
-
-      req.set_glrc_ilp_recovery(true);
-      req.set_glrc_ilp_phase2(true);
-      req.set_cross_rack_num(0);
-      req.set_phase2_partition_id(pi);
-      req.set_phase2_shard_count(shard_plan.shard_count);
-      req.set_phase2_stripe_byte_len(shard_plan.stripe_byte_len);
-      req.set_phase2_shard_begin(part.shard_begin);
-      req.set_phase2_shard_count_local(part.shard_count);
-      req.set_phase2_byte_off(part.byte_off);
-      req.set_phase2_byte_len(part.byte_len);
-      req.set_phase2_do_write_back(m_sys_config->GlrcPhase2WriteBack);
-      req.set_phase2_exchange_epoch(static_cast<int32_t>(exchange_epoch));
-
-      for (int fid : failed_block_ids)
-      {
-        req.add_failed_block_ids(fid);
-        req.add_failed_block_keys(t_stripe.blocks[fid]->block_key);
-        int node_id = t_stripe.blocks[fid]->map2node;
-        req.add_replaced_node_ips(m_node_table[node_id].node_ip);
-        req.add_replaced_node_ports(m_node_table[node_id].node_port);
-      }
-      for (const auto &eq : plan.selected_equations)
-        req.add_selected_equations(eq);
-      for (int eq_idx : plan.selected_equation_indices)
-        req.add_selected_equation_indices(eq_idx);
-      for (int hid : plan.helper_block_ids)
-      {
-        Block *t_block = t_stripe.blocks[hid];
-        req.add_datanodeip(m_node_table[t_block->map2node].node_ip);
-        req.add_datanodeport(m_node_table[t_block->map2node].node_port);
-        req.add_blockkeys(t_block->block_key);
-        req.add_blockids(t_block->block_id);
-      }
-
-      for (int pj = 0; pj < (int)shard_plan.partitions.size(); pj++)
-      {
-        if (pj == pi)
-          continue;
-        const GlrcPartitionShardPlan &peer = shard_plan.partitions[pj];
-        req.add_phase2_peer_proxy_ips(peer.proxy_ip);
-        req.add_phase2_peer_proxy_ports(peer.proxy_port);
-        req.add_phase2_peer_partition_ids(pj);
-        req.add_phase2_peer_shard_begins(peer.shard_begin);
-        req.add_phase2_peer_shard_counts(peer.shard_count);
-      }
+      fill_phase2_request(req, pi, false);
 
       grpc::Status st = proxy_it->second->recoveryBreakdown(&ctx, req, &rep);
       outcomes[pi].ok = st.ok();
@@ -3154,31 +3163,64 @@ namespace ECProject
       }
     };
 
+    auto run_partition_ready = [&](int pi) -> bool {
+      const GlrcPartitionShardPlan &part = shard_plan.partitions[pi];
+      std::string chosen_proxy = part.proxy_ip + ":" + std::to_string(part.proxy_port);
+      auto proxy_it = m_proxy_ptrs.find(chosen_proxy);
+      if (proxy_it == m_proxy_ptrs.end() || !proxy_it->second)
+      {
+        std::cout << "[Coordinator] Phase2 ready partition " << pi << " proxy not found: " << chosen_proxy
+                  << std::endl;
+        return false;
+      }
+
+      grpc::ClientContext ctx;
+      ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+      proxy_proto::RecoveryRequest req;
+      proxy_proto::RecoveryReply rep;
+      fill_phase2_request(req, pi, true);
+
+      grpc::Status st = proxy_it->second->recoveryBreakdown(&ctx, req, &rep);
+      if (!st.ok())
+      {
+        std::cout << "[Coordinator] Phase2 ready partition " << pi << " grpc error: " << st.error_message()
+                  << std::endl;
+        return false;
+      }
+      return true;
+    };
+
     std::vector<std::thread> partition_threads;
     partition_threads.reserve(f);
-    std::vector<bool> partition_started(f, false);
-    // Phase A: listener partitions (id >= 1) bind exchange acceptors first.
     if (f >= 2)
     {
+      std::vector<std::thread> ready_threads;
+      ready_threads.reserve(static_cast<size_t>(f - 1));
+      std::atomic<bool> ready_failed{false};
       for (int pi = f - 1; pi >= 1; pi--)
       {
-        partition_threads.emplace_back(run_partition, pi);
-        partition_started[pi] = true;
-        if (pi > 1)
-          orchestration_sleep(100);
+        ready_threads.emplace_back([&, pi]() {
+          if (!run_partition_ready(pi))
+            ready_failed.store(true);
+        });
       }
-      orchestration_sleep(800);
+      for (auto &th : ready_threads)
+        th.join();
+      if (ready_failed.load())
+      {
+        glrc_phase2_clear_ready_session();
+        recovery_reply->set_success(false);
+        recovery_reply->set_message("phase2 exchange acceptor ready failed");
+        return false;
+      }
     }
-    // Phase B: client-heavy partition 0 (and f==1) starts after acceptors are ready.
+
     for (int pi = 0; pi < f; pi++)
-    {
-      if (!partition_started[pi])
-        partition_threads.emplace_back(run_partition, pi);
-    }
+      partition_threads.emplace_back(run_partition, pi);
     for (auto &th : partition_threads)
       th.join();
 
-    orchestration_sleep(500);
+    glrc_phase2_clear_ready_session();
 
     bool all_ok = true;
     double max_disk = 0.0, max_net = 0.0, max_decode = 0.0, sum_write_net = 0.0, sum_write_disk = 0.0;

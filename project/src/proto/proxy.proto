@@ -265,6 +265,8 @@ message RecoveryRequest{
   int32 pipeline_my_listen_port = 68;
   int32 pipeline_chain_hub_listen_port = 69;
   repeated int32 pipeline_hub_listener_ports = 70;
+  /** Phase2 only: bind exchange acceptor and return (coordinator READY handshake). */
+  bool phase2_ready_only = 71;
 }
 
 message MultipleRecoveryRequest{

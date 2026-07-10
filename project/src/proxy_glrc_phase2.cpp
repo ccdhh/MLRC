@@ -271,6 +271,143 @@ void release_phase2_listen_port(int listen_port)
   g_phase2_active_listen_ports.erase(listen_port);
 }
 
+struct Phase2ExchangeAcceptor
+{
+  std::shared_ptr<asio::io_context> accept_io;
+  std::unique_ptr<asio::ip::tcp::acceptor> acceptor;
+  std::mutex incoming_mu;
+  std::condition_variable incoming_cv;
+  std::map<int, std::unique_ptr<asio::ip::tcp::socket>> server_peer_socks;
+  std::atomic<bool> accept_failed{false};
+  std::atomic<bool> accept_stop{false};
+  std::thread accept_thread;
+  bool accept_started = false;
+  int listen_port = 0;
+  int accept_remaining = 0;
+
+  void stop_acceptor()
+  {
+    accept_stop.store(true);
+    if (acceptor)
+    {
+      asio::error_code close_ec;
+      acceptor->close(close_ec);
+    }
+  }
+
+  void join_acceptor()
+  {
+    if (!accept_started)
+      return;
+    stop_acceptor();
+    incoming_cv.notify_all();
+    if (accept_thread.joinable())
+      accept_thread.join();
+    accept_started = false;
+    release_phase2_listen_port(listen_port);
+    listen_port = 0;
+  }
+};
+
+struct Phase2ReadySession
+{
+  int exchange_epoch = -1;
+  std::map<int, std::unique_ptr<Phase2ExchangeAcceptor>> by_partition;
+};
+
+std::mutex g_phase2_ready_mutex;
+Phase2ReadySession g_phase2_ready_session;
+
+void clear_phase2_ready_session()
+{
+  std::lock_guard<std::mutex> lock(g_phase2_ready_mutex);
+  for (auto &kv : g_phase2_ready_session.by_partition)
+  {
+    if (kv.second)
+      kv.second->join_acceptor();
+  }
+  g_phase2_ready_session = Phase2ReadySession{};
+}
+
+bool phase2_start_exchange_acceptor(Phase2ExchangeAcceptor &acc, const std::string &ip, int proxy_grpc_port,
+                                    int partition_id, int exchange_epoch, int accept_remaining)
+{
+  if (accept_remaining <= 0 || acc.accept_started)
+    return true;
+  acc.accept_remaining = accept_remaining;
+  acc.accept_stop.store(false);
+  acc.accept_failed.store(false);
+  acc.accept_io = std::make_shared<asio::io_context>();
+  acc.listen_port = phase2_exchange_port(proxy_grpc_port, partition_id, exchange_epoch);
+  try
+  {
+    acc.acceptor = std::make_unique<asio::ip::tcp::acceptor>(*acc.accept_io);
+    asio::ip::tcp::endpoint listen_ep(asio::ip::address::from_string(ip), acc.listen_port);
+    asio::error_code bind_ec;
+    if (!bind_phase2_acceptor(*acc.acceptor, listen_ep, acc.listen_port, bind_ec))
+    {
+      char buf[384];
+      snprintf(buf, sizeof(buf), "exchange bind failed port=%d: %s", acc.listen_port, bind_ec.message().c_str());
+      set_phase2_error(buf);
+      std::cerr << "[Proxy][gLRC ILP Phase2] partition " << partition_id << " " << buf << std::endl;
+      acc.acceptor.reset();
+      return false;
+    }
+    acc.acceptor->non_blocking(true);
+  }
+  catch (const std::exception &e)
+  {
+    char buf[384];
+    snprintf(buf, sizeof(buf), "exchange bind failed port=%d: %s", acc.listen_port, e.what());
+    set_phase2_error(buf);
+    std::cerr << "[Proxy][gLRC ILP Phase2] partition " << partition_id << " " << buf << std::endl;
+    acc.acceptor.reset();
+    return false;
+  }
+
+  Phase2ExchangeAcceptor *acc_ptr = &acc;
+  acc.accept_thread = std::thread([acc_ptr]() {
+    int accepted = 0;
+    while (!acc_ptr->accept_stop.load() && accepted < acc_ptr->accept_remaining)
+    {
+      auto sock = std::make_unique<asio::ip::tcp::socket>(*acc_ptr->accept_io);
+      asio::error_code accept_ec;
+      acc_ptr->acceptor->accept(*sock, accept_ec);
+      if (accept_ec)
+      {
+        if (accept_ec == asio::error::would_block || accept_ec == asio::error::try_again)
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(5));
+          continue;
+        }
+        if (!acc_ptr->accept_stop.load())
+          acc_ptr->accept_failed.store(true);
+        break;
+      }
+      set_exchange_socket_timeouts(*sock, 45);
+      asio::error_code ec;
+      Phase2ConnectHello hello{};
+      if (!read_all(*sock, reinterpret_cast<char *>(&hello), sizeof(hello), ec) ||
+          hello.magic != kPhase2HelloMagic)
+      {
+        if (!acc_ptr->accept_stop.load())
+          acc_ptr->accept_failed.store(true);
+        close_phase2_socket(*sock);
+        break;
+      }
+      const int from_part = static_cast<int>(hello.from_partition);
+      {
+        std::lock_guard<std::mutex> lk(acc_ptr->incoming_mu);
+        acc_ptr->server_peer_socks[from_part] = std::move(sock);
+      }
+      acc_ptr->incoming_cv.notify_all();
+      accepted++;
+    }
+  });
+  acc.accept_started = true;
+  return true;
+}
+
 class JoinThreadGuard
 {
 public:
@@ -547,6 +684,11 @@ std::string glrc_phase2_take_last_error()
   return g_glrc_phase2_last_error;
 }
 
+void glrc_phase2_clear_ready_session()
+{
+  clear_phase2_ready_session();
+}
+
 bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recovery_request,
                                       proxy_proto::RecoveryReply *response)
 {
@@ -572,12 +714,9 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   const int block_size = m_sys_config->BlockSize;
   const int helper_n = recovery_request->datanodeip_size();
 
-  if (f < 1 || helper_n < 1 || byte_len < 1 || stripe_byte_len < 1)
+  if (f < 1)
   {
-    char buf[256];
-    snprintf(buf, sizeof(buf), "bad dims f=%d helpers=%d byte_len=%d stripe_len=%d", f, helper_n, byte_len,
-             stripe_byte_len);
-    set_phase2_error(buf);
+    set_phase2_error("bad dims f");
     return false;
   }
 
@@ -588,113 +727,75 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       accept_remaining++;
   }
 
-  asio::io_context accept_io;
-  std::unique_ptr<asio::ip::tcp::acceptor> acceptor;
-  std::mutex incoming_mu;
-  std::condition_variable incoming_cv;
-  std::map<int, std::unique_ptr<asio::ip::tcp::socket>> server_peer_socks;
-  std::atomic<bool> accept_failed{false};
-  std::atomic<bool> accept_stop{false};
-  std::thread accept_thread;
-  bool accept_started = false;
-  int listen_port = 0;
-
-  auto stop_acceptor = [&]() {
-    accept_stop.store(true);
-    if (acceptor)
-    {
-      asio::error_code close_ec;
-      acceptor->close(close_ec);
-    }
-  };
+  Phase2ExchangeAcceptor exchange_acc;
+  std::unique_ptr<Phase2ExchangeAcceptor> exchange_acc_ptr;
   auto join_accept_thread = [&]() {
-    if (!accept_started)
-      return;
-    stop_acceptor();
-    incoming_cv.notify_all();
-    if (accept_thread.joinable())
-      accept_thread.join();
-    accept_started = false;
-    release_phase2_listen_port(listen_port);
-    listen_port = 0;
+    if (exchange_acc_ptr)
+      exchange_acc_ptr->join_acceptor();
+    else
+      exchange_acc.join_acceptor();
   };
-  auto start_exchange_acceptor = [&]() -> bool {
-    if (accept_remaining <= 0 || accept_started)
-      return true;
-    accept_stop.store(false);
-    accept_failed.store(false);
-    listen_port = phase2_exchange_port(m_port, partition_id, exchange_epoch);
-    try
-    {
-      acceptor = std::make_unique<asio::ip::tcp::acceptor>(accept_io);
-      asio::ip::tcp::endpoint listen_ep(asio::ip::address::from_string(m_ip), listen_port);
-      asio::error_code bind_ec;
-      if (!bind_phase2_acceptor(*acceptor, listen_ep, listen_port, bind_ec))
-      {
-        char buf[384];
-        snprintf(buf, sizeof(buf), "exchange bind failed port=%d: %s", listen_port, bind_ec.message().c_str());
-        set_phase2_error(buf);
-        std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
-                  << std::endl;
-        acceptor.reset();
-        return false;
-      }
-      acceptor->non_blocking(true);
-    }
-    catch (const std::exception &e)
-    {
-      char buf[384];
-      snprintf(buf, sizeof(buf), "exchange bind failed port=%d: %s", listen_port, e.what());
-      set_phase2_error(buf);
-      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
-                << std::endl;
-      acceptor.reset();
-      return false;
-    }
-    accept_thread = std::thread([&]() {
-      int accepted = 0;
-      while (!accept_stop.load() && accepted < accept_remaining)
-      {
-        auto sock = std::make_unique<asio::ip::tcp::socket>(accept_io);
-        asio::error_code accept_ec;
-        acceptor->accept(*sock, accept_ec);
-        if (accept_ec)
-        {
-          if (accept_ec == asio::error::would_block || accept_ec == asio::error::try_again)
-          {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-          }
-          if (!accept_stop.load())
-            accept_failed.store(true);
-          break;
-        }
-        set_exchange_socket_timeouts(*sock, 45);
-        asio::error_code ec;
-        Phase2ConnectHello hello{};
-        if (!read_all(*sock, reinterpret_cast<char *>(&hello), sizeof(hello), ec) ||
-            hello.magic != kPhase2HelloMagic)
-        {
-          if (!accept_stop.load())
-            accept_failed.store(true);
-          close_phase2_socket(*sock);
-          break;
-        }
-        const int from_part = static_cast<int>(hello.from_partition);
-        {
-          std::lock_guard<std::mutex> lk(incoming_mu);
-          server_peer_socks[from_part] = std::move(sock);
-        }
-        incoming_cv.notify_all();
-        accepted++;
-      }
-    });
-    accept_started = true;
-    return true;
+  auto active_acceptor = [&]() -> Phase2ExchangeAcceptor & {
+    return exchange_acc_ptr ? *exchange_acc_ptr : exchange_acc;
   };
 
-  if (!start_exchange_acceptor())
+  if (recovery_request->phase2_ready_only())
+  {
+    if (accept_remaining > 0)
+    {
+      exchange_acc_ptr = std::make_unique<Phase2ExchangeAcceptor>();
+      if (!phase2_start_exchange_acceptor(*exchange_acc_ptr, m_ip, m_port, partition_id, exchange_epoch,
+                                          accept_remaining))
+        return false;
+      std::lock_guard<std::mutex> lock(g_phase2_ready_mutex);
+      if (g_phase2_ready_session.exchange_epoch != exchange_epoch)
+      {
+        for (auto &kv : g_phase2_ready_session.by_partition)
+        {
+          if (kv.second)
+            kv.second->join_acceptor();
+        }
+        g_phase2_ready_session = Phase2ReadySession{};
+        g_phase2_ready_session.exchange_epoch = exchange_epoch;
+      }
+      auto &slot = g_phase2_ready_session.by_partition[partition_id];
+      if (slot)
+        slot->join_acceptor();
+      slot = std::move(exchange_acc_ptr);
+    }
+    return true;
+  }
+
+  if (helper_n < 1 || byte_len < 1 || stripe_byte_len < 1)
+  {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "bad dims f=%d helpers=%d byte_len=%d stripe_len=%d", f, helper_n, byte_len,
+             stripe_byte_len);
+    set_phase2_error(buf);
     return false;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(g_phase2_ready_mutex);
+    if (g_phase2_ready_session.exchange_epoch == exchange_epoch)
+    {
+      auto it = g_phase2_ready_session.by_partition.find(partition_id);
+      if (it != g_phase2_ready_session.by_partition.end())
+      {
+        exchange_acc_ptr = std::move(it->second);
+        g_phase2_ready_session.by_partition.erase(it);
+      }
+    }
+  }
+
+  if (!active_acceptor().accept_started && accept_remaining > 0)
+  {
+    if (!exchange_acc_ptr)
+      exchange_acc_ptr = std::make_unique<Phase2ExchangeAcceptor>();
+    if (!phase2_start_exchange_acceptor(*exchange_acc_ptr, m_ip, m_port, partition_id, exchange_epoch,
+                                        accept_remaining))
+      return false;
+  }
 
   const int shard_begin = recovery_request->phase2_shard_begin();
   const int local_shard_count = recovery_request->phase2_shard_count_local();
@@ -800,7 +901,10 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
     asio::error_code ec;
     const int target_port = phase2_exchange_port(peer_port, peer_part, exchange_epoch);
-    auto connected_sock = std::make_unique<asio::ip::tcp::socket>(accept_io);
+    Phase2ExchangeAcceptor &acc = active_acceptor();
+    if (!acc.accept_io)
+      acc.accept_io = std::make_shared<asio::io_context>();
+    auto connected_sock = std::make_unique<asio::ip::tcp::socket>(*acc.accept_io);
     if (!connect_phase2_exchange(*connected_sock, peer_ip, target_port, ec))
     {
       char buf[384];
@@ -831,21 +935,21 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   };
 
   auto ensure_server_peer = [&](int peer_part) -> asio::ip::tcp::socket * {
-    std::unique_lock<std::mutex> lk(incoming_mu);
+    std::unique_lock<std::mutex> lk(active_acceptor().incoming_mu);
     const auto wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(90);
-    while (server_peer_socks.find(peer_part) == server_peer_socks.end() && !accept_failed.load() &&
-           !exchange_failed.load())
+    while (active_acceptor().server_peer_socks.find(peer_part) == active_acceptor().server_peer_socks.end() &&
+           !active_acceptor().accept_failed.load() && !exchange_failed.load())
     {
-      if (incoming_cv.wait_until(lk, wait_deadline) == std::cv_status::timeout)
+      if (active_acceptor().incoming_cv.wait_until(lk, wait_deadline) == std::cv_status::timeout)
         break;
     }
-    if (server_peer_socks.find(peer_part) == server_peer_socks.end())
+    if (active_acceptor().server_peer_socks.find(peer_part) == active_acceptor().server_peer_socks.end())
     {
       set_phase2_error("exchange wait peer " + std::to_string(peer_part) + " timed out");
       exchange_failed.store(true);
       return nullptr;
     }
-    return server_peer_socks[peer_part].get();
+    return active_acceptor().server_peer_socks[peer_part].get();
   };
 
   auto setup_peer_connections = [&]() {
@@ -885,7 +989,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   };
 
   setup_peer_connections();
-  if (exchange_failed.load() || accept_failed.load())
+  if (exchange_failed.load() || active_acceptor().accept_failed.load())
   {
     for (char *p : get_bufs)
       free(p);
@@ -1246,9 +1350,94 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   std::vector<std::vector<unsigned char>> decode_rhs(f, std::vector<unsigned char>(static_cast<size_t>(stripe_byte_len)));
   std::vector<std::vector<unsigned char>> shard_recovered(f,
                                                           std::vector<unsigned char>(static_cast<size_t>(stripe_byte_len)));
+
+  std::atomic<bool> decode_worker_failed{false};
+  std::atomic<bool> decode_worker_stop{false};
+  std::mutex decode_submit_mu;
+  std::condition_variable decode_submit_cv;
+  std::atomic<int> decode_submit_shard{-1};
+  std::atomic<int> decode_inflight_shard{-1};
+  std::mutex decode_metric_mu;
+
+  std::thread decode_worker;
+  if (local_shard_count > 0)
+  {
+    decode_worker = std::thread([&]() {
+      while (true)
+      {
+        int shard_k = -1;
+        {
+          std::unique_lock<std::mutex> lk(decode_submit_mu);
+          decode_submit_cv.wait(lk, [&]() {
+            return decode_worker_stop.load() || decode_submit_shard.load() >= 0;
+          });
+          if (decode_worker_stop.load() && decode_submit_shard.load() < 0)
+            return;
+          shard_k = decode_submit_shard.exchange(-1);
+          if (shard_k < 0)
+            continue;
+          decode_inflight_shard.store(shard_k);
+        }
+
+        const int stripe_off = byte_off + shard_k * stripe_byte_len;
+        const auto t3 = std::chrono::high_resolution_clock::now();
+        const bool decode_ok =
+            decode_glrc_ilp_helper_compact_prepared(block_ptrs.data(), phase2_eq_helper_indices, phase2_eq_helper_g_tbls,
+                                                    phase2_inv_g_tbls, f, byte_off, stripe_off, stripe_byte_len,
+                                                    decode_rhs, shard_recovered);
+        const auto t4 = std::chrono::high_resolution_clock::now();
+        if (!decode_ok)
+        {
+          char buf[256];
+          snprintf(buf, sizeof(buf), "decode failed shard=%d off=%d len=%d repair_block=%d", shard_k, stripe_off,
+                   stripe_byte_len, repair_block_id);
+          set_phase2_error(buf);
+          std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
+                    << std::endl;
+          decode_worker_failed.store(true);
+          exchange_failed.store(true);
+          decoded_cv.notify_all();
+          decode_inflight_shard.store(-1);
+          decode_submit_cv.notify_all();
+          return;
+        }
+
+        const double decode_duration = std::chrono::duration<double>(t4 - t3).count();
+        {
+          std::lock_guard<std::mutex> lk(decode_metric_mu);
+          total_decode_time += decode_duration;
+          if (!have_decode)
+          {
+            min_decode_start = 0.0;
+            max_decode_end = total_decode_time;
+            have_decode = true;
+          }
+          else
+          {
+            max_decode_end = total_decode_time;
+          }
+        }
+
+        for (int t = 0; t < f; t++)
+          std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t].data(), stripe_byte_len);
+        {
+          std::lock_guard<std::mutex> lk(decoded_mu);
+          decoded_shards = shard_k + 1;
+        }
+        decoded_cv.notify_all();
+        decode_inflight_shard.store(-1);
+        decode_submit_cv.notify_all();
+
+        char buf[256];
+        snprintf(buf, sizeof(buf), "shard pipeline done proxy=%s:%d partition=%d shard=%d/%d", m_ip.c_str(), m_port,
+                 partition_id, shard_k + 1, local_shard_count);
+        phase2_trace(buf);
+      }
+    });
+  }
+
   for (int shard_k = 0; shard_k < local_shard_count && !exchange_failed.load(); shard_k++)
   {
-    const int stripe_off = byte_off + shard_k * stripe_byte_len;
     if (!wait_helper_round_done(shard_k))
     {
       exchange_failed.store(true);
@@ -1256,54 +1445,71 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     }
     start_helper_round(shard_k + 1);
 
-    auto t3 = std::chrono::high_resolution_clock::now();
-    const bool decode_ok =
-        decode_glrc_ilp_helper_compact_prepared(block_ptrs.data(), phase2_eq_helper_indices, phase2_eq_helper_g_tbls,
-                                                phase2_inv_g_tbls, f, byte_off, stripe_off, stripe_byte_len,
-                                                decode_rhs, shard_recovered);
-    auto t4 = std::chrono::high_resolution_clock::now();
-    for (char *p : get_bufs)
-      (void)p;
-    if (!decode_ok)
     {
-      char buf[256];
-      snprintf(buf, sizeof(buf), "decode failed shard=%d off=%d len=%d repair_block=%d", shard_k, stripe_off,
-               stripe_byte_len, repair_block_id);
-      set_phase2_error(buf);
-      std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id << " " << buf
-                << std::endl;
+      std::unique_lock<std::mutex> lk(decode_submit_mu);
+      decode_submit_cv.wait(lk, [&]() {
+        return exchange_failed.load() || decode_submit_shard.load() < 0;
+      });
+      if (exchange_failed.load())
+        break;
+      decode_submit_shard.store(shard_k);
+    }
+    decode_submit_cv.notify_one();
+  }
+
+  if (local_shard_count > 0)
+  {
+    {
+      std::unique_lock<std::mutex> lk(decode_submit_mu);
+      decode_submit_cv.wait(lk, [&]() {
+        if (exchange_failed.load())
+          return true;
+        if (decode_submit_shard.load() >= 0 || decode_inflight_shard.load() >= 0)
+          return false;
+        std::lock_guard<std::mutex> dlk(decoded_mu);
+        return decoded_shards >= local_shard_count;
+      });
+    }
+    decode_worker_stop.store(true);
+    decode_submit_cv.notify_all();
+    if (decode_worker.joinable())
+      decode_worker.join();
+    if (decode_worker_failed.load())
       exchange_failed.store(true);
-      break;
-    }
+  }
 
-    const double decode_duration = std::chrono::duration<double>(t4 - t3).count();
-    total_decode_time += decode_duration;
-    if (!have_decode)
+  std::thread write_thread;
+  std::atomic<bool> write_failed{false};
+  double write_net_result = 0.0;
+  double write_disk_result = 0.0;
+  const bool do_write_back =
+      !exchange_failed.load() && local_shard_count > 0 && recovery_request->phase2_do_write_back();
+  if (do_write_back)
+  {
+    const int write_idx = partition_id;
+    if (write_idx >= 0 && write_idx < f)
     {
-      min_decode_start = 0.0;
-      max_decode_end = total_decode_time;
-      have_decode = true;
-    }
-    else
-    {
-      max_decode_end = total_decode_time;
-    }
-
-    for (int t = 0; t < f; t++)
-      std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t].data(), stripe_byte_len);
-    {
-      std::lock_guard<std::mutex> lk(decoded_mu);
-      decoded_shards = shard_k + 1;
-    }
-    decoded_cv.notify_all();
-
-    {
-      char buf[256];
-      snprintf(buf, sizeof(buf), "shard pipeline done proxy=%s:%d partition=%d shard=%d/%d", m_ip.c_str(), m_port,
-               partition_id, shard_k + 1, local_shard_count);
-      phase2_trace(buf);
+      write_thread = std::thread([&, write_idx]() {
+        double wnet = 0.0, wdisk = 0.0;
+        if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(write_idx).c_str(),
+                                               failed_ids[write_idx],
+                                               reinterpret_cast<char *>(recovered_ptrs[write_idx] + byte_off),
+                                               recovery_request->replaced_node_ips(write_idx).c_str(),
+                                               recovery_request->replaced_node_ports(write_idx), byte_off, byte_len,
+                                               &wnet, &wdisk))
+        {
+          write_failed.store(true);
+          exchange_failed.store(true);
+        }
+        else
+        {
+          write_net_result = wnet;
+          write_disk_result = wdisk;
+        }
+      });
     }
   }
+
   stop_helper_workers();
   {
     std::lock_guard<std::mutex> lk(decoded_mu);
@@ -1311,30 +1517,15 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   }
   decoded_cv.notify_all();
   join_exchange_workers();
+  if (write_thread.joinable())
+    write_thread.join();
+  if (write_failed.load())
+    exchange_failed.store(true);
+  total_write_net += write_net_result;
+  total_write_disk += write_disk_result;
+
   const auto ex_end = std::chrono::high_resolution_clock::now();
   total_exchange_time += std::chrono::duration<double>(ex_end - ex_begin).count();
-
-  if (!exchange_failed.load() && local_shard_count > 0 && recovery_request->phase2_do_write_back())
-  {
-    const int write_idx = partition_id;
-    if (write_idx >= 0 && write_idx < f)
-    {
-      double wnet = 0.0, wdisk = 0.0;
-      if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(write_idx).c_str(), failed_ids[write_idx],
-                                             reinterpret_cast<char *>(recovered_ptrs[write_idx] + byte_off),
-                                             recovery_request->replaced_node_ips(write_idx).c_str(),
-                                             recovery_request->replaced_node_ports(write_idx), byte_off, byte_len,
-                                             &wnet, &wdisk))
-      {
-        exchange_failed.store(true);
-      }
-      else
-      {
-        total_write_net += wnet;
-        total_write_disk += wdisk;
-      }
-    }
-  }
 
   for (char *p : get_bufs)
     free(p);
@@ -1348,8 +1539,8 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     }
   }
   {
-    std::lock_guard<std::mutex> lk(incoming_mu);
-    for (auto &kv : server_peer_socks)
+    std::lock_guard<std::mutex> lk(active_acceptor().incoming_mu);
+    for (auto &kv : active_acceptor().server_peer_socks)
     {
       if (kv.second)
         close_phase2_socket(*kv.second);
@@ -1357,7 +1548,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   }
   join_accept_thread();
 
-  if (exchange_failed.load() || accept_failed.load())
+  if (exchange_failed.load() || active_acceptor().accept_failed.load())
   {
     std::cerr << "[Proxy" << m_self_cluster_id << "][gLRC ILP Phase2] partition " << partition_id
               << " streaming peer exchange failed" << std::endl;
