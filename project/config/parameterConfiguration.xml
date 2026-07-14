@@ -56,9 +56,9 @@
     <alpha>2</alpha>
 
     <CodeType>gLRC</CodeType>
-    <!-- n=55: k=48 数据块, r=4 全局校验 G, z=3 局部校验 L；group z-1 为缺陷组(global) -->
-    <k>48</k>
-    <r>4</r>
-    <z>3</z>
+    <!-- n=28: k=24 数据块, r=2 全局校验 G, z=2 局部校验 L；global 组为缺陷组 -->
+    <k>24</k>
+    <r>2</r>
+    <z>2</z>
 
 </Configuration>
