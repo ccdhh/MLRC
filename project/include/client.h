@@ -26,6 +26,10 @@ namespace ECProject
     double network_time = 0.0;
     double decode_time = 0.0;
     double disk_write_time = 0.0;
+    double setup_time = 0.0;
+    double data_plane_time = 0.0;
+    double teardown_time = 0.0;
+    double client_wall_time = 0.0;
     int helper_block_count = 0;
     std::string repair_mode;
     std::string equation_policy;

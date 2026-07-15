@@ -6,6 +6,7 @@ CLOUDLAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$CLOUDLAB_DIR/.." && pwd)"
 HOSTS_FILE="${DDRT_HOSTS_FILE:-$HOME/optimallrc/conf/cloudlab_hosts}"
 SSH_USER="${DDRT_SSH_USER:-$USER}"
+SSH_KEY="${DDRT_SSH_KEY:-$HOME/.ssh/id_rsa}"
 REMOTE_ROOT="${DDRT_REMOTE_ROOT:-~/DdlRT}"
 DATANODE_PORT="${DDRT_DATANODE_PORT:-17600}"
 PROXY_PORT="${DDRT_PROXY_PORT:-50405}"
@@ -29,7 +30,13 @@ load_hosts() {
 remote() {
   local host="$1"
   shift
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${host}" "$@"
+  # Do not let a remotely backgrounded service retain this script's stdin.
+  # This is required for start.sh to return after launching a daemon over SSH.
+  local ssh_args=(-n -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new)
+  if [[ -f "$SSH_KEY" ]]; then
+    ssh_args+=(-i "$SSH_KEY" -o IdentitiesOnly=yes)
+  fi
+  ssh "${ssh_args[@]}" "${SSH_USER}@${host}" "$@"
 }
 
 usage_hosts() {

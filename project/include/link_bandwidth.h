@@ -115,7 +115,10 @@ inline void tcp_write_with_shared_bandwidth(asio::ip::tcp::socket &socket, const
     asio::write(socket, asio::buffer(buf, len), ec);
     return;
   }
-  const size_t chunk_size = 64 * 1024;
+  // A 64 KiB reservation needs a 0.5 ms sleep at 125 MB/s; scheduler
+  // wake-up granularity dominates that interval on real hosts.  One MiB
+  // aligns with the default gLRC shard and reserves 8 ms per limiter slot.
+  const size_t chunk_size = 1024 * 1024;
   size_t offset = 0;
   while (offset < len && !ec)
   {
@@ -135,7 +138,7 @@ inline void tcp_read_with_shared_bandwidth(asio::ip::tcp::socket &socket, char *
     asio::read(socket, asio::buffer(buf, len), ec);
     return;
   }
-  const size_t chunk_size = 64 * 1024;
+  const size_t chunk_size = 1024 * 1024;
   size_t offset = 0;
   while (offset < len && !ec)
   {

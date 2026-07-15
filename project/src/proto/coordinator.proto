@@ -202,6 +202,11 @@ message RecoveryReply {
   string equation_policy = 14;
   repeated int32 partition_shard_counts = 15;
   int32 max_partition_shard_count = 16;
+  // Pipeline wall-clock phases.  setup and teardown are reported separately
+  // so data_plane_time is directly comparable with the shard pipeline model.
+  double setup_time = 17;
+  double data_plane_time = 18;
+  double teardown_time = 19;
 }
 
 message StripePos {

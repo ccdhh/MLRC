@@ -6,7 +6,9 @@ load_hosts
 
 for host in "${ALL_HOSTS[@]}"; do
   printf '%-20s ' "$host"
-  remote "$host" "pgrep -af 'run_coordinator|run_proxy|run_datanode|main_client' || true" \
+  # Exact-name pgrep so the remote ssh/pgrep argv is not listed as a hit.
+  remote "$host" \
+    "pgrep -ax run_coordinator || true; pgrep -ax run_proxy || true; pgrep -ax run_datanode || true; pgrep -ax main_client || true" \
     | tr '\n' ';'
   echo
 done

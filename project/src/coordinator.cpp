@@ -3492,11 +3492,6 @@ namespace ECProject
         pipeline_proxy_keys.insert(node_lookup[fid].proxy_ip + ":" + std::to_string(node_lookup[fid].proxy_port));
     }
 
-    auto orchestration_sleep = [&](int ms) {
-      orchestration_wait_sec += static_cast<double>(ms) / 1000.0;
-      std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-    };
-
     bool workers_joined = false;
     auto join_pipeline_workers = [&]() {
       if (workers_joined)
@@ -3511,28 +3506,33 @@ namespace ECProject
 
     auto finalize_pipeline_session = [&]() {
       join_pipeline_workers();
-      // Session teardown (not counted in repair_time).
-      std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      // Session teardown is acknowledged by every proxy RPC.  The previous
+      // coordinator-local bind probe tested listener ports on the wrong host,
+      // so it could wait the full 60 seconds despite all remote listeners
+      // already being closed.
       proxy_proto::RecoveryRequest tear_req;
       tear_req.set_glrc_ilp_recovery(true);
       tear_req.set_glrc_ilp_pipeline(true);
       tear_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::TEARDOWN));
+      std::vector<std::thread> teardown_workers;
+      teardown_workers.reserve(pipeline_proxy_keys.size());
       for (const std::string &pk : pipeline_proxy_keys)
       {
-        auto pit = m_proxy_ptrs.find(pk);
-        if (pit == m_proxy_ptrs.end() || !pit->second)
-          continue;
-        proxy_proto::RecoveryReply tear_rep;
-        grpc::ClientContext ctx;
-        ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
-        pit->second->recoveryBreakdown(&ctx, tear_req, &tear_rep);
+        teardown_workers.emplace_back([this, pk, tear_req]() {
+          auto pit = m_proxy_ptrs.find(pk);
+          if (pit == m_proxy_ptrs.end() || !pit->second)
+            return;
+          proxy_proto::RecoveryReply tear_rep;
+          grpc::ClientContext ctx;
+          ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(10));
+          pit->second->recoveryBreakdown(&ctx, tear_req, &tear_rep);
+        });
       }
-      const bool ports_released = wait_pipeline_ports_released(chain_ports, pipeline_plan, 60000);
-      if (ports_released)
-        GlrcPipelinePortAllocator::release_inflight_ports(chain_ports, pipeline_plan.hub_proxy_ip,
-                                                          pipeline_plan.hub_proxy_port, pipeline_plan);
-      else
-        pipeline_plan_trace("pipeline session kept inflight port reservations after release timeout");
+      for (std::thread &worker : teardown_workers)
+        if (worker.joinable())
+          worker.join();
+      GlrcPipelinePortAllocator::release_inflight_ports(chain_ports, pipeline_plan.hub_proxy_ip,
+                                                        pipeline_plan.hub_proxy_port, pipeline_plan);
       pipeline_plan_trace("pipeline session finalize ok");
     };
     struct PipelineSessionGuard
@@ -3610,6 +3610,25 @@ namespace ECProject
 
     if (!pipeline_plan.hub_chains.empty())
     {
+      // READY only binds each listener; no listener depends on another one
+      // being ready.  Dispatch them together instead of paying one gRPC RTT
+      // for every hop in the chain.
+      std::mutex ready_error_mu;
+      std::string ready_error;
+      std::vector<std::thread> ready_workers;
+      auto launch_ready = [&](const std::string &proxy_key, const proxy_proto::RecoveryRequest &ready_req,
+                              const std::string &role) {
+        ready_workers.emplace_back([&, proxy_key, ready_req, role]() {
+          const PipelineRpcResult result = sync_pipeline_rpc(proxy_key, ready_req);
+          if (!result.ok)
+          {
+            std::lock_guard<std::mutex> lock(ready_error_mu);
+            if (ready_error.empty())
+              ready_error = role + " ready failed: " + result.error;
+          }
+        });
+      };
+
       proxy_proto::RecoveryRequest hub_ready_req = make_base_request();
       hub_ready_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::READY));
       hub_ready_req.set_pipeline_hub_proxy_ip(pipeline_plan.hub_proxy_ip);
@@ -3637,19 +3656,14 @@ namespace ECProject
         if (cp_it != chain_ports.end())
           hub_ready_req.add_pipeline_hub_listener_ports(cp_it->second.hub_listen_port);
       }
-      const PipelineRpcResult hub_ready = sync_pipeline_rpc(hub_proxy_key, hub_ready_req);
-      if (!hub_ready.ok)
-      {
-        recovery_reply->set_message("pipeline hub ready failed: " + hub_ready.error);
-        return false;
-      }
+      launch_ready(hub_proxy_key, hub_ready_req, "pipeline hub");
 
       for (const GlrcPipelineChainPlan &chain : pipeline_plan.hub_chains)
       {
         const int last_hop_server =
             chain.hub_is_chain_tail ? static_cast<int>(chain.hops.size()) - 2
                                     : static_cast<int>(chain.hops.size()) - 1;
-        for (int hi = last_hop_server; hi >= 1; hi--)
+        for (int hi = last_hop_server; hi >= 1; --hi)
         {
           proxy_proto::RecoveryRequest ready_req = make_base_request();
           const GlrcPipelineChainPorts *cp = nullptr;
@@ -3658,16 +3672,23 @@ namespace ECProject
             cp = &cp_it->second;
           fill_pipeline_chain_fields(ready_req, chain, pipeline_plan, shard_count, cz, GlrcPipelineRole::READY, hi,
                                      cp);
-          const PipelineRpcResult hop_ready = sync_pipeline_rpc(proxy_key_from_hop(chain.hops[hi]), ready_req);
-          if (!hop_ready.ok)
-          {
-            recovery_reply->set_message("pipeline hop ready failed: " + hop_ready.error);
-            return false;
-          }
+          launch_ready(proxy_key_from_hop(chain.hops[hi]), ready_req, "pipeline hop");
         }
+      }
+      for (std::thread &worker : ready_workers)
+        if (worker.joinable())
+          worker.join();
+      if (!ready_error.empty())
+      {
+        recovery_reply->set_message(ready_error);
+        return false;
       }
     }
 
+    // Everything before this point is control-plane setup: planning, port
+    // allocation, and listener readiness.  Start the comparable data-plane
+    // wall clock only once all listeners are ready.
+    const auto data_plane_start = std::chrono::high_resolution_clock::now();
     if (!pipeline_plan.hub_chains.empty())
     {
       proxy_proto::RecoveryRequest hub_req = make_base_request();
@@ -3752,12 +3773,7 @@ namespace ECProject
     }
 
     join_pipeline_workers();
-    const auto repair_end = std::chrono::high_resolution_clock::now();
-    double repair_time_sec =
-        std::chrono::duration<double>(repair_end - repair_start).count() - orchestration_wait_sec;
-    if (repair_time_sec < 0.0)
-      repair_time_sec = 0.0;
-    recovery_reply->set_total_time(repair_time_sec);
+    const auto data_plane_end = std::chrono::high_resolution_clock::now();
 
     double max_disk = 0.0;
     double max_net = 0.0;
@@ -3780,9 +3796,26 @@ namespace ECProject
     }
 
     recovery_reply->set_disk_read_time(max_disk);
-    recovery_reply->set_network_time(max_net + total_write_net);
+    // Proxy write durations overlap across shards.  They are diagnostic work
+    // totals, not a wall-clock network phase, so use the data-plane span for
+    // the user-facing pipeline network metric.
+    const double data_plane_time_sec =
+        std::chrono::duration<double>(data_plane_end - data_plane_start).count();
+    recovery_reply->set_network_time(data_plane_time_sec);
     recovery_reply->set_decode_time(max_decode);
     recovery_reply->set_disk_write_time(total_write_disk);
+    recovery_reply->set_setup_time(
+        std::chrono::duration<double>(data_plane_start - repair_start).count());
+    recovery_reply->set_data_plane_time(data_plane_time_sec);
+
+    // Run cleanup before replying, record it separately, and disarm the
+    // guard to prevent a second teardown during scope exit.
+    const auto teardown_start = std::chrono::high_resolution_clock::now();
+    session_guard.armed = false;
+    finalize_pipeline_session();
+    recovery_reply->set_teardown_time(
+        std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - teardown_start).count());
+    recovery_reply->set_total_time(data_plane_time_sec);
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
     std::cout << "[Coordinator] gLRC Pipeline chain recovery stripe " << stripe_id << " success via hub "

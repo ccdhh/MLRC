@@ -888,39 +888,8 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
             << " -> " << next_ip << ":" << listen_port << " streaming=" << shard_count << std::endl;
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
-  asio::io_context dn_io;
-  asio::ip::tcp::socket head_stream(dn_io);
-  bool head_stream_ok = false;
-  {
-    grpc::ClientContext context;
-    datanode_proto::GetInfo get_info;
-    datanode_proto::RequestResult result;
-    get_info.set_block_key(head_key);
-    get_info.set_block_size(block_size);
-    get_info.set_read_offset(0);
-    get_info.set_read_length(block_size);
-    get_info.set_proxy_ip(m_ip);
-    get_info.set_proxy_port(m_port);
-    const std::string node_ip_port = head_ip + ":" + std::to_string(head_port);
-    auto dn_it = m_datanode_ptrs.find(node_ip_port);
-    if (dn_it != m_datanode_ptrs.end() && dn_it->second)
-    {
-      context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
-      grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
-      if (stat.ok())
-      {
-        asio::ip::tcp::resolver resolver(dn_io);
-        asio::error_code dn_ec;
-        asio::connect(head_stream, resolver.resolve({head_ip, std::to_string(result.data_port())}), dn_ec);
-        if (!dn_ec)
-        {
-          set_pipeline_socket_timeouts(head_stream, kPipelineSocketTimeoutSec);
-          head_stream_ok = true;
-        }
-      }
-    }
-  }
-  if (!head_stream_ok)
+  DatanodeReadStream head_read_stream;
+  if (!open_datanode_read_stream(this, head_key, head_ip, head_port, block_size, head_read_stream))
   {
     close_pipeline_socket(out_socket);
     set_pipeline_error("pipeline chain head stream setup failed key=" + head_key);
@@ -934,11 +903,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
                head_ip.c_str(), head_port, off, stripe_len);
       pipeline_trace(tb);
     }
-    asio::error_code read_ec;
-    SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(head_ip.c_str(), head_port);
-    tcp_read_with_shared_bandwidth(head_stream, reinterpret_cast<char *>(dst), static_cast<size_t>(stripe_len),
-                                   read_bw, read_ec);
-    if (read_ec)
+    if (!read_datanode_stream_shard(this, head_read_stream, dst, static_cast<size_t>(stripe_len)))
     {
       const std::string msg = "pipeline chain head local read failed key=" + head_key + " @" + head_ip + ":" +
                               std::to_string(head_port) + " shard=" + std::to_string(shard);
@@ -1035,7 +1000,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
       return false;
     }
     close_pipeline_socket(out_socket);
-    close_pipeline_socket(head_stream);
+    close_pipeline_socket(head_read_stream.socket);
     response->set_disk_io_start_time(min_disk);
     response->set_disk_io_end_time(max_disk);
     response->set_network_start_time(min_net);
@@ -1053,7 +1018,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
     return false;
   }
   close_pipeline_socket(out_socket);
-  close_pipeline_socket(head_stream);
+  close_pipeline_socket(head_read_stream.socket);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -1185,39 +1150,8 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
 
   const int pipe_window = resolve_pipeline_window(m_sys_config, shard_count);
   int shards_forwarded = 0;
-  asio::io_context dn_io;
-  asio::ip::tcp::socket hop_stream(dn_io);
-  bool hop_stream_ok = false;
-  {
-    grpc::ClientContext context;
-    datanode_proto::GetInfo get_info;
-    datanode_proto::RequestResult result;
-    get_info.set_block_key(hop_key);
-    get_info.set_block_size(block_size);
-    get_info.set_read_offset(0);
-    get_info.set_read_length(block_size);
-    get_info.set_proxy_ip(m_ip);
-    get_info.set_proxy_port(m_port);
-    const std::string node_ip_port = hop_ip + ":" + std::to_string(hop_port);
-    auto dn_it = m_datanode_ptrs.find(node_ip_port);
-    if (dn_it != m_datanode_ptrs.end() && dn_it->second)
-    {
-      context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
-      grpc::Status stat = dn_it->second->handleGetBreakdown(&context, get_info, &result);
-      if (stat.ok())
-      {
-        asio::ip::tcp::resolver resolver(dn_io);
-        asio::error_code dn_ec;
-        asio::connect(hop_stream, resolver.resolve({hop_ip, std::to_string(result.data_port())}), dn_ec);
-        if (!dn_ec)
-        {
-          set_pipeline_socket_timeouts(hop_stream, kPipelineSocketTimeoutSec);
-          hop_stream_ok = true;
-        }
-      }
-    }
-  }
-  if (!hop_stream_ok)
+  DatanodeReadStream hop_read_stream;
+  if (!open_datanode_read_stream(this, hop_key, hop_ip, hop_port, block_size, hop_read_stream))
   {
     close_pipeline_socket(in_socket);
     close_pipeline_socket(out_socket);
@@ -1235,11 +1169,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
     const int off = shard * stripe_len;
     std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
     (void)off;
-    asio::error_code read_ec;
-    SharedBandwidthLimiter *read_bw = ingressBandwidthForDatanodeRead(hop_ip.c_str(), hop_port);
-    tcp_read_with_shared_bandwidth(hop_stream, reinterpret_cast<char *>(local.data()), static_cast<size_t>(stripe_len),
-                                   read_bw, read_ec);
-    if (read_ec)
+    if (!read_datanode_stream_shard(this, hop_read_stream, local.data(), static_cast<size_t>(stripe_len)))
     {
       set_pipeline_error("pipeline hop local read failed hop=" + std::to_string(my_idx) + " shard=" +
                          std::to_string(shard));
@@ -1417,7 +1347,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   }
   close_pipeline_socket(in_socket);
   close_pipeline_socket(out_socket);
-  close_pipeline_socket(hop_stream);
+  close_pipeline_socket(hop_read_stream.socket);
 
   response->set_disk_io_start_time(min_disk);
   response->set_disk_io_end_time(max_disk);
@@ -1451,11 +1381,6 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
                                                                  : m_sys_config->GlrcShardCount;
   const int stripe_len = block_size / shard_count;
   const int chain_id = recovery_request->pipeline_chain_id();
-  const int tail_idx = hops_n - 1;
-  const unsigned char tail_coef =
-      recovery_request->pipeline_hop_coefs_size() > tail_idx
-          ? static_cast<unsigned char>(recovery_request->pipeline_hop_coefs(tail_idx) & 0xff)
-          : 1;
   const GlrcPipelineEqCodec eq_codec = pipeline_codec_from_request(recovery_request);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] local_direct start chain="
             << recovery_request->pipeline_chain_id() << " hops=" << hops_n
@@ -1471,156 +1396,298 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
   double total_wnet = 0.0, total_wdisk = 0.0;
 
   std::vector<DatanodeReadStream> hop_streams(static_cast<size_t>(hops_n));
-  for (int hi = 0; hi < hops_n; hi++)
+  // handleGetBreakdown now returns its data port before reading from disk.
+  // Establish all helper streams concurrently so a local equation never
+  // serializes its helper disk-read preparation on this proxy.
+  std::atomic<int> stream_setup_failed{-1};
+  std::vector<std::thread> stream_setup_workers;
+  stream_setup_workers.reserve(static_cast<size_t>(hops_n));
+  for (int hi = 0; hi < hops_n; ++hi)
   {
-    const std::string &hop_key = recovery_request->pipeline_hop_block_keys(hi);
-    const std::string &hop_ip = recovery_request->pipeline_hop_datanode_ips(hi);
-    const int hop_port = recovery_request->pipeline_hop_datanode_ports(hi);
-    if (!open_datanode_read_stream(this, hop_key, hop_ip, hop_port, block_size, hop_streams[static_cast<size_t>(hi)]))
-    {
-      for (int hj = 0; hj < hi; hj++)
-        close_pipeline_socket(hop_streams[static_cast<size_t>(hj)].socket);
-      set_pipeline_error("pipeline local_direct hop stream setup failed hop=" + std::to_string(hi));
-      return false;
-    }
+    stream_setup_workers.emplace_back([&, hi]() {
+      const std::string &hop_key = recovery_request->pipeline_hop_block_keys(hi);
+      const std::string &hop_ip = recovery_request->pipeline_hop_datanode_ips(hi);
+      const int hop_port = recovery_request->pipeline_hop_datanode_ports(hi);
+      if (!open_datanode_read_stream(this, hop_key, hop_ip, hop_port, block_size,
+                                     hop_streams[static_cast<size_t>(hi)]))
+      {
+        int expected = -1;
+        stream_setup_failed.compare_exchange_strong(expected, hi);
+      }
+    });
+  }
+  for (std::thread &worker : stream_setup_workers)
+    if (worker.joinable())
+      worker.join();
+  if (stream_setup_failed.load() >= 0)
+  {
+    for (DatanodeReadStream &stream : hop_streams)
+      close_pipeline_socket(stream.socket);
+    set_pipeline_error("pipeline local_direct hop stream setup failed hop=" +
+                       std::to_string(stream_setup_failed.load()));
+    return false;
   }
 
+  // Hub-style pipeline: per-helper readers mark shard readiness, decode workers
+  // pick any ready shard (out-of-order), and a single recovery TCP stream carries
+  // the reconstructed block in shard order (one gRPC setup instead of 64).
   const auto read_begin = std::chrono::high_resolution_clock::now();
-  std::atomic<bool> read_failed{false};
-  std::atomic<bool> write_failed{false};
-  std::string read_err;
-  std::mutex metrics_mu;
+  std::atomic<bool> ld_failed{false};
+  std::string ld_fail_msg;
 
-  struct LocalDirectWriteTask
-  {
-    int off = 0;
-    std::vector<unsigned char> data;
-  };
-  std::queue<LocalDirectWriteTask> write_q;
-  std::mutex write_mu;
-  std::condition_variable write_cv;
-  bool local_decode_done = false;
+  std::vector<std::vector<std::vector<unsigned char>>> rhs_bufs(
+      static_cast<size_t>(hops_n), std::vector<std::vector<unsigned char>>(static_cast<size_t>(shard_count)));
+  std::vector<std::vector<bool>> rhs_ready(static_cast<size_t>(hops_n),
+                                           std::vector<bool>(static_cast<size_t>(shard_count), false));
+  std::mutex rhs_mutex;
+  std::condition_variable rhs_cv;
 
-  const int write_worker_count =
-      std::max(1, std::min(resolve_pipeline_window(m_sys_config, shard_count), shard_count));
-  std::vector<std::thread> write_workers;
-  write_workers.reserve(static_cast<size_t>(write_worker_count));
-  for (int wi = 0; wi < write_worker_count; wi++)
+  datanode_proto::RequestResult recovery_result;
+  asio::io_context write_io;
+  asio::ip::tcp::socket write_socket(write_io);
+  std::thread recovery_grpc_thread;
+  grpc::ClientContext recovery_context;
+  datanode_proto::MergeParityInfo recovery_info;
+  recovery_info.set_block_key(std::string(failed_key));
+  recovery_info.set_block_id(failed_id);
+  recovery_info.set_proxy_ip(m_ip);
+  recovery_info.set_proxy_port(m_port);
+  const std::string node_ip_port = std::string(rep_ip) + ":" + std::to_string(rep_port);
+  auto dn_it = m_datanode_ptrs.find(node_ip_port);
+  if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
   {
-    write_workers.emplace_back([&, wi]() {
-      (void)wi;
-      while (true)
+    for (DatanodeReadStream &stream : hop_streams)
+      close_pipeline_socket(stream.socket);
+    set_pipeline_error("pipeline local_direct write datanode stub missing");
+    return false;
+  }
+  recovery_context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(120));
+  datanode_proto::datanodeService::Stub *dn_stub = dn_it->second.get();
+  recovery_grpc_thread = std::thread([dn_stub, &recovery_context, &recovery_info, &recovery_result]() {
+    (void)dn_stub->handleRecoveryBreakdown(&recovery_context, recovery_info, &recovery_result);
+  });
+  {
+    asio::ip::tcp::resolver resolver(write_io);
+    asio::error_code con_error;
+    asio::connect(write_socket,
+                  resolver.resolve({std::string(rep_ip), std::to_string(rep_port + ECProject::DATANODE_PORT_SHIFT)}),
+                  con_error);
+    if (con_error)
+    {
+      if (recovery_grpc_thread.joinable())
+        recovery_grpc_thread.join();
+      for (DatanodeReadStream &stream : hop_streams)
+        close_pipeline_socket(stream.socket);
+      set_pipeline_error("pipeline local_direct write stream connect failed");
+      return false;
+    }
+    set_pipeline_socket_timeouts(write_socket, kPipelineSocketTimeoutSec);
+  }
+
+  std::vector<std::thread> read_workers;
+  read_workers.reserve(static_cast<size_t>(hops_n));
+  for (int hi = 0; hi < hops_n; ++hi)
+  {
+    read_workers.emplace_back([&, hi]() {
+      for (int shard = 0; shard < shard_count && !ld_failed.load(); ++shard)
       {
-        LocalDirectWriteTask task;
+        std::vector<unsigned char> data(static_cast<size_t>(stripe_len), 0);
+        if (!read_datanode_stream_shard(this, hop_streams[static_cast<size_t>(hi)], data.data(),
+                                        static_cast<size_t>(stripe_len)))
         {
-          std::unique_lock<std::mutex> lock(write_mu);
-          write_cv.wait(lock, [&]() { return read_failed.load() || local_decode_done || !write_q.empty(); });
-          if ((read_failed.load() || local_decode_done) && write_q.empty())
-            return;
-          task = std::move(write_q.front());
-          write_q.pop();
-        }
-
-        double wnet = 0.0, wdisk = 0.0;
-        if (!RecoveryToDatanodeStripeBreakdown(failed_key, failed_id, reinterpret_cast<char *>(task.data.data()),
-                                               rep_ip, rep_port, task.off, stripe_len, &wnet, &wdisk))
-        {
-          write_failed.store(true);
-          read_failed.store(true);
-          write_cv.notify_all();
+          ld_fail_msg = "pipeline local_direct read failed helper=" + std::to_string(hi) +
+                        " shard=" + std::to_string(shard);
+          ld_failed.store(true);
+          rhs_cv.notify_all();
           return;
         }
         {
-          std::lock_guard<std::mutex> lock(metrics_mu);
-          total_wnet += wnet;
-          total_wdisk += wdisk;
+          std::lock_guard<std::mutex> lock(rhs_mutex);
+          rhs_bufs[static_cast<size_t>(hi)][static_cast<size_t>(shard)] = std::move(data);
+          rhs_ready[static_cast<size_t>(hi)][static_cast<size_t>(shard)] = true;
         }
+        rhs_cv.notify_all();
       }
     });
   }
 
-  for (int shard = 0; shard < shard_count && !read_failed.load(); shard++)
+  struct LocalDirectDecodedShard
   {
-    const int off = shard * stripe_len;
-    std::vector<unsigned char> stripe(static_cast<size_t>(stripe_len), 0);
+    int shard = -1;
+    std::vector<unsigned char> data;
+  };
+  std::queue<LocalDirectDecodedShard> decoded_q;
+  std::mutex decoded_mu;
+  std::condition_variable decoded_cv;
+  bool decode_done = false;
 
-    if (hops_n == 1)
-    {
-      std::vector<unsigned char> local(static_cast<size_t>(stripe_len), 0);
-      if (!read_datanode_stream_shard(this, hop_streams[0], local.data(), static_cast<size_t>(stripe_len)))
-      {
-        read_err = "pipeline local_direct single-hop read failed shard=" + std::to_string(shard);
-        read_failed.store(true);
-        break;
-      }
-      glrc_pipeline_accumulate_range(stripe.data(), local.data(), tail_coef, stripe_len, eq_codec);
-    }
-    else
-    {
-      std::vector<std::vector<unsigned char>> locals(static_cast<size_t>(hops_n),
-                                                     std::vector<unsigned char>(static_cast<size_t>(stripe_len), 0));
-      std::vector<std::thread> readers;
-      readers.reserve(static_cast<size_t>(hops_n));
-      for (int hi = 0; hi < hops_n; hi++)
-      {
-        readers.emplace_back([&, hi]() {
-          if (!read_datanode_stream_shard(this, hop_streams[static_cast<size_t>(hi)],
-                                          locals[static_cast<size_t>(hi)].data(), static_cast<size_t>(stripe_len)))
-            read_failed.store(true);
-        });
-      }
-      for (auto &th : readers)
-        if (th.joinable())
-          th.join();
-      if (read_failed.load())
-      {
-        read_err = "pipeline local_direct read failed shard=" + std::to_string(shard);
-        break;
-      }
+  std::vector<bool> shard_scheduled(static_cast<size_t>(shard_count), false);
+  int shards_finished = 0;
+  const int worker_window = resolve_pipeline_window(m_sys_config, shard_count);
+  const int decode_worker_count = std::max(1, std::min(worker_window, shard_count));
 
-      for (int hi = 0; hi < hops_n; hi++)
-      {
-        const unsigned char coef =
-            recovery_request->pipeline_hop_coefs_size() > hi
-                ? static_cast<unsigned char>(recovery_request->pipeline_hop_coefs(hi) & 0xff)
-                : 1;
-        if (hi == 0)
-          glrc_pipeline_init_partial_range(stripe.data(), locals[static_cast<size_t>(hi)].data(), coef, stripe_len,
-                                           eq_codec);
-        else
-          glrc_pipeline_accumulate_range(stripe.data(), locals[static_cast<size_t>(hi)].data(), coef, stripe_len,
-                                         eq_codec);
-      }
-    }
+  auto shard_ready_locked = [&](int shard) -> bool {
+    for (int hi = 0; hi < hops_n; ++hi)
+      if (!rhs_ready[static_cast<size_t>(hi)][static_cast<size_t>(shard)])
+        return false;
+    return true;
+  };
+  auto find_ready_shard_locked = [&]() -> int {
+    for (int shard = 0; shard < shard_count; ++shard)
+      if (!shard_scheduled[static_cast<size_t>(shard)] && shard_ready_locked(shard))
+        return shard;
+    return -1;
+  };
 
-    {
-      std::lock_guard<std::mutex> lock(write_mu);
-      write_q.push(LocalDirectWriteTask{off, std::move(stripe)});
-    }
-    write_cv.notify_one();
+  std::vector<std::thread> decode_workers;
+  decode_workers.reserve(static_cast<size_t>(decode_worker_count));
+  for (int wi = 0; wi < decode_worker_count; ++wi)
+  {
+    decode_workers.emplace_back([&, wi]() {
+      (void)wi;
+      while (!ld_failed.load())
+      {
+        int shard = -1;
+        std::vector<std::vector<unsigned char>> shard_inputs;
+        {
+          std::unique_lock<std::mutex> lock(rhs_mutex);
+          rhs_cv.wait(lock, [&]() {
+            return ld_failed.load() || shards_finished >= shard_count || find_ready_shard_locked() >= 0;
+          });
+          if (ld_failed.load() || shards_finished >= shard_count)
+            return;
+          shard = find_ready_shard_locked();
+          if (shard < 0)
+            continue;
+          shard_scheduled[static_cast<size_t>(shard)] = true;
+          shard_inputs.resize(static_cast<size_t>(hops_n));
+          for (int hi = 0; hi < hops_n; ++hi)
+            shard_inputs[static_cast<size_t>(hi)] =
+                std::move(rhs_bufs[static_cast<size_t>(hi)][static_cast<size_t>(shard)]);
+        }
+
+        std::vector<unsigned char> stripe(static_cast<size_t>(stripe_len), 0);
+        for (int hi = 0; hi < hops_n; ++hi)
+        {
+          const unsigned char coef =
+              recovery_request->pipeline_hop_coefs_size() > hi
+                  ? static_cast<unsigned char>(recovery_request->pipeline_hop_coefs(hi) & 0xff)
+                  : 1;
+          if (hi == 0)
+            glrc_pipeline_init_partial_range(stripe.data(), shard_inputs[static_cast<size_t>(hi)].data(), coef,
+                                             stripe_len, eq_codec);
+          else
+            glrc_pipeline_accumulate_range(stripe.data(), shard_inputs[static_cast<size_t>(hi)].data(), coef,
+                                            stripe_len, eq_codec);
+        }
+
+        {
+          std::lock_guard<std::mutex> lock(decoded_mu);
+          decoded_q.push(LocalDirectDecodedShard{shard, std::move(stripe)});
+        }
+        decoded_cv.notify_one();
+
+        {
+          std::lock_guard<std::mutex> lock(rhs_mutex);
+          shards_finished++;
+        }
+        rhs_cv.notify_all();
+      }
+    });
   }
+
+  std::atomic<bool> write_failed{false};
+  std::thread write_worker([&]() {
+    const auto write_begin = std::chrono::high_resolution_clock::now();
+    std::unordered_map<int, std::vector<unsigned char>> pending;
+    int next_shard = 0;
+    asio::error_code write_ec;
+    while (next_shard < shard_count && !ld_failed.load() && !write_failed.load())
+    {
+      LocalDirectDecodedShard item;
+      {
+        std::unique_lock<std::mutex> lock(decoded_mu);
+        decoded_cv.wait(lock, [&]() {
+          return ld_failed.load() || write_failed.load() || decode_done || !decoded_q.empty();
+        });
+        if (!decoded_q.empty())
+        {
+          item = std::move(decoded_q.front());
+          decoded_q.pop();
+        }
+        else if (decode_done || ld_failed.load())
+        {
+          break;
+        }
+        else
+        {
+          continue;
+        }
+      }
+      pending[item.shard] = std::move(item.data);
+      while (pending.count(next_shard) > 0 && !write_failed.load())
+      {
+        auto it = pending.find(next_shard);
+        SharedBandwidthLimiter *write_bw = egressBandwidthForDatanodeWrite(rep_ip, rep_port);
+        tcp_write_with_shared_bandwidth(write_socket, reinterpret_cast<const char *>(it->second.data()),
+                                        static_cast<size_t>(stripe_len), write_bw, write_ec);
+        if (write_ec)
+        {
+          write_failed.store(true);
+          ld_fail_msg = "pipeline local_direct write failed shard=" + std::to_string(next_shard) +
+                        " " + write_ec.message();
+          ld_failed.store(true);
+          decoded_cv.notify_all();
+          rhs_cv.notify_all();
+          return;
+        }
+        pending.erase(it);
+        next_shard++;
+      }
+    }
+    if (!write_failed.load() && next_shard != shard_count)
+    {
+      write_failed.store(true);
+      ld_fail_msg = "pipeline local_direct write shard count mismatch";
+      ld_failed.store(true);
+      decoded_cv.notify_all();
+      rhs_cv.notify_all();
+      return;
+    }
+    asio::error_code ignore_ec;
+    write_socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+    write_socket.close(ignore_ec);
+    const auto write_end = std::chrono::high_resolution_clock::now();
+    total_wnet = std::chrono::duration<double>(write_end - write_begin).count();
+    total_wdisk = recovery_result.disk_io_end_time() - recovery_result.disk_io_start_time();
+  });
+
+  for (std::thread &worker : decode_workers)
+    if (worker.joinable())
+      worker.join();
+
+  {
+    std::lock_guard<std::mutex> lock(decoded_mu);
+    decode_done = true;
+  }
+  decoded_cv.notify_all();
+
+  for (std::thread &worker : read_workers)
+    if (worker.joinable())
+      worker.join();
 
   const auto read_end = std::chrono::high_resolution_clock::now();
   for (auto &hs : hop_streams)
     close_pipeline_socket(hs.socket);
 
-  {
-    std::lock_guard<std::mutex> lock(write_mu);
-    local_decode_done = true;
-  }
-  write_cv.notify_all();
-  for (auto &th : write_workers)
-  {
-    if (th.joinable())
-      th.join();
-  }
+  if (write_worker.joinable())
+    write_worker.join();
+  if (recovery_grpc_thread.joinable())
+    recovery_grpc_thread.join();
 
-  if (read_failed.load())
+  if (ld_failed.load())
   {
-    if (write_failed.load())
-      set_pipeline_error("pipeline local_direct stripe write-back failed");
-    else
-      set_pipeline_error(read_err.empty() ? "pipeline local_direct read failed" : read_err);
+    set_pipeline_error(ld_fail_msg.empty() ? "pipeline local_direct failed" : ld_fail_msg);
     return false;
   }
 

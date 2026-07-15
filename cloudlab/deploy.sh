@@ -19,6 +19,7 @@ for host in "${ALL_HOSTS[@]}"; do
   fi
   echo "Deploying to $host..."
   rsync -az --delete \
+    -e "ssh -i ${SSH_KEY} -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes" \
     --exclude='.git/' --exclude='storage/' --exclude='logs/' \
     "$ROOT/" "${SSH_USER}@${host}:${REMOTE_ROOT}/"
 done

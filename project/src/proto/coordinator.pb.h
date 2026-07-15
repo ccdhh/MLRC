@@ -3907,6 +3907,9 @@ class RecoveryReply final :
     kIlpTimeFieldNumber = 7,
     kHelperBlockCountFieldNumber = 8,
     kSuccessFieldNumber = 11,
+    kSetupTimeFieldNumber = 17,
+    kDataPlaneTimeFieldNumber = 18,
+    kTeardownTimeFieldNumber = 19,
     kMaxPartitionShardCountFieldNumber = 16,
   };
   // repeated string selected_equations = 9;
@@ -4100,6 +4103,33 @@ class RecoveryReply final :
   void _internal_set_success(bool value);
   public:
 
+  // double setup_time = 17;
+  void clear_setup_time();
+  double setup_time() const;
+  void set_setup_time(double value);
+  private:
+  double _internal_setup_time() const;
+  void _internal_set_setup_time(double value);
+  public:
+
+  // double data_plane_time = 18;
+  void clear_data_plane_time();
+  double data_plane_time() const;
+  void set_data_plane_time(double value);
+  private:
+  double _internal_data_plane_time() const;
+  void _internal_set_data_plane_time(double value);
+  public:
+
+  // double teardown_time = 19;
+  void clear_teardown_time();
+  double teardown_time() const;
+  void set_teardown_time(double value);
+  private:
+  double _internal_teardown_time() const;
+  void _internal_set_teardown_time(double value);
+  public:
+
   // int32 max_partition_shard_count = 16;
   void clear_max_partition_shard_count();
   int32_t max_partition_shard_count() const;
@@ -4134,6 +4164,9 @@ class RecoveryReply final :
     double ilp_time_;
     int32_t helper_block_count_;
     bool success_;
+    double setup_time_;
+    double data_plane_time_;
+    double teardown_time_;
     int32_t max_partition_shard_count_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
@@ -7092,6 +7125,66 @@ inline void RecoveryReply::_internal_set_max_partition_shard_count(int32_t value
 inline void RecoveryReply::set_max_partition_shard_count(int32_t value) {
   _internal_set_max_partition_shard_count(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.max_partition_shard_count)
+}
+
+// double setup_time = 17;
+inline void RecoveryReply::clear_setup_time() {
+  _impl_.setup_time_ = 0;
+}
+inline double RecoveryReply::_internal_setup_time() const {
+  return _impl_.setup_time_;
+}
+inline double RecoveryReply::setup_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.setup_time)
+  return _internal_setup_time();
+}
+inline void RecoveryReply::_internal_set_setup_time(double value) {
+  
+  _impl_.setup_time_ = value;
+}
+inline void RecoveryReply::set_setup_time(double value) {
+  _internal_set_setup_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.setup_time)
+}
+
+// double data_plane_time = 18;
+inline void RecoveryReply::clear_data_plane_time() {
+  _impl_.data_plane_time_ = 0;
+}
+inline double RecoveryReply::_internal_data_plane_time() const {
+  return _impl_.data_plane_time_;
+}
+inline double RecoveryReply::data_plane_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.data_plane_time)
+  return _internal_data_plane_time();
+}
+inline void RecoveryReply::_internal_set_data_plane_time(double value) {
+  
+  _impl_.data_plane_time_ = value;
+}
+inline void RecoveryReply::set_data_plane_time(double value) {
+  _internal_set_data_plane_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.data_plane_time)
+}
+
+// double teardown_time = 19;
+inline void RecoveryReply::clear_teardown_time() {
+  _impl_.teardown_time_ = 0;
+}
+inline double RecoveryReply::_internal_teardown_time() const {
+  return _impl_.teardown_time_;
+}
+inline double RecoveryReply::teardown_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.teardown_time)
+  return _internal_teardown_time();
+}
+inline void RecoveryReply::_internal_set_teardown_time(double value) {
+  
+  _impl_.teardown_time_ = value;
+}
+inline void RecoveryReply::set_teardown_time(double value) {
+  _internal_set_teardown_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.teardown_time)
 }
 
 // -------------------------------------------------------------------

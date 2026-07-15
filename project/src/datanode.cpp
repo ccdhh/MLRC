@@ -440,15 +440,9 @@ namespace ECProject
                                                      int recovery_size, bool stripe_mode) mutable {
             try
             {
-                std::vector<char> buf(recovery_size);
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                tcp_read_with_shared_bandwidth(socket, buf.data(), recovery_size, ingress_bw, ec);
-
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
 
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
@@ -457,7 +451,47 @@ namespace ECProject
                     mkdir(targetdir.c_str(), S_IRWXU);
                 }
 
-                std::chrono::high_resolution_clock::time_point begin = std::chrono::high_resolution_clock::now();
+                std::chrono::high_resolution_clock::time_point disk_begin{};
+                std::chrono::high_resolution_clock::time_point disk_end{};
+                size_t wrote = 0;
+
+                // Stream TCP payload directly into the block file.  The old path
+                // materialized the entire recovery payload in memory before writing,
+                // so proxy-side writeback could not overlap network receive with disk I/O.
+                auto stream_to_file = [&](auto &ofs) -> bool {
+                    constexpr size_t kStreamChunkBytes = 1024 * 1024;
+                    std::vector<char> buffer(std::min(kStreamChunkBytes, static_cast<size_t>(recovery_size)));
+                    size_t remaining = static_cast<size_t>(recovery_size);
+                    bool started = false;
+                    while (remaining > 0 && !ec)
+                    {
+                        const size_t requested = std::min(buffer.size(), remaining);
+                        if (ingress_bw != nullptr)
+                            ingress_bw->wait_for_transfer(requested);
+                        const size_t read_bytes =
+                            static_cast<size_t>(asio::read(socket, asio::buffer(buffer.data(), requested), ec));
+                        if (ec || read_bytes != requested)
+                            break;
+                        if (!started)
+                        {
+                            disk_begin = std::chrono::high_resolution_clock::now();
+                            started = true;
+                        }
+                        ofs.write(buffer.data(), static_cast<std::streamsize>(read_bytes));
+                        if (!ofs.good())
+                        {
+                            ec = asio::error::fault;
+                            break;
+                        }
+                        wrote += read_bytes;
+                        remaining -= read_bytes;
+                    }
+                    ofs.flush();
+                    disk_end = std::chrono::high_resolution_clock::now();
+                    return !ec && wrote == static_cast<size_t>(recovery_size);
+                };
+
+                bool ok = false;
                 if (stripe_mode)
                 {
                     if (recovery_offset == 0)
@@ -468,8 +502,7 @@ namespace ECProject
                             std::cerr << "[Recovery] Failed to open file: " << writepath << std::endl;
                             exit(-1);
                         }
-                        ofs.write(buf.data(), recovery_size);
-                        ofs.flush();
+                        ok = stream_to_file(ofs);
                         ofs.close();
                     }
                     else
@@ -481,8 +514,7 @@ namespace ECProject
                             exit(-1);
                         }
                         ofs.seekp(recovery_offset, std::ios::beg);
-                        ofs.write(buf.data(), recovery_size);
-                        ofs.flush();
+                        ok = stream_to_file(ofs);
                         ofs.close();
                     }
                 }
@@ -494,21 +526,34 @@ namespace ECProject
                         std::cerr << "[Recovery] Failed to open file: " << writepath << std::endl;
                         exit(-1);
                     }
-                    ofs.write(buf.data(), recovery_size);
-                    ofs.flush();
+                    ok = stream_to_file(ofs);
                     ofs.close();
                 }
-                std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
-                response->set_disk_io_start_time(
-                    std::chrono::duration_cast<std::chrono::duration<double>>(begin.time_since_epoch()).count());
-                response->set_disk_io_end_time(
-                    std::chrono::duration_cast<std::chrono::duration<double>>(end.time_since_epoch()).count());
+
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
+
+                if (!ok)
+                {
+                    std::cerr << "[Datanode" << m_port << "][Recovery] stream write failed block=" << block_key
+                              << " wrote=" << wrote << "/" << recovery_size
+                              << (ec ? (" err=" + ec.message()) : std::string()) << std::endl;
+                }
+                else if (disk_begin.time_since_epoch().count() != 0)
+                {
+                    response->set_disk_io_start_time(
+                        std::chrono::duration_cast<std::chrono::duration<double>>(disk_begin.time_since_epoch()).count());
+                    response->set_disk_io_end_time(
+                        std::chrono::duration_cast<std::chrono::duration<double>>(disk_end.time_since_epoch()).count());
+                }
 
                 if (IF_DEBUG)
                 {
-                    std::cout << "[Datanode" << m_port << "][Recovery] block " << block_key << " wrote "
-                              << recovery_size << " bytes @ offset " << recovery_offset << std::endl;
+                    std::cout << "[Datanode" << m_port << "][Recovery] block " << block_key << " wrote " << wrote
+                              << " bytes @ offset " << recovery_offset << std::endl;
                 }
+                (void)block_id;
             }
             catch (const std::exception &e)
             {
@@ -780,29 +825,6 @@ namespace ECProject
             egressBandwidthForRepairProxy(get_info->proxy_ip(), get_info->proxy_port());
         std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
         std::string readpath = targetdir + block_key;
-        char *buf = new char[read_length];
-        std::chrono::high_resolution_clock::time_point begin = std::chrono::high_resolution_clock::now();
-        if (access(readpath.c_str(), 0) == -1)
-        {
-            std::cout << "[Datanode" << m_port << "][Read] file does not exist!" << readpath << std::endl;
-        }
-        else
-        {
-            if (IF_DEBUG)
-            {
-                std::cout << "[Datanode" << m_port << "][GET] partial read off=" << read_offset << " len=" << read_length
-                          << std::endl;
-            }
-            std::ifstream ifs(readpath, std::ios::binary);
-            ifs.seekg(read_offset, std::ios::beg);
-            ifs.read(buf, read_length);
-            ifs.close();
-        }
-        std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
-        double disk_io_start_time = std::chrono::duration_cast<std::chrono::duration<double>>(begin.time_since_epoch()).count();
-        double disk_io_end_time = std::chrono::duration_cast<std::chrono::duration<double>>(end.time_since_epoch()).count();
-        response->set_disk_io_start_time(disk_io_start_time);
-        response->set_disk_io_end_time(disk_io_end_time);
 
         auto data_acceptor = std::make_shared<asio::ip::tcp::acceptor>(io_context);
         try
@@ -816,14 +838,17 @@ namespace ECProject
         catch (const std::exception &e)
         {
             std::cout << "[Datanode" << m_port << "][GET] data acceptor bind failed: " << e.what() << std::endl;
-            delete[] buf;
             response->set_message(false);
             return grpc::Status(grpc::StatusCode::INTERNAL, "data acceptor bind failed");
         }
         response->set_data_port(data_acceptor->local_endpoint().port());
 
         const bool stripe_pipeline_read = read_length > 0 && read_length < block_size;
-        auto handler = [this, read_length, stripe_pipeline_read, egress_bw, data_acceptor](char *payload) mutable
+        // Return the data port before disk I/O.  Pipeline clients can now
+        // connect to every helper concurrently; each handler streams file
+        // chunks directly into its socket instead of first materializing the
+        // entire block in memory on the synchronous gRPC path.
+        auto handler = [this, readpath, read_offset, read_length, stripe_pipeline_read, egress_bw, data_acceptor]() mutable
         {
             int data_port = data_acceptor->local_endpoint().port();
             asio::error_code error;
@@ -838,12 +863,38 @@ namespace ECProject
             else
             {
                 size_t wrote = 0;
-                if (stripe_pipeline_read || egress_bw == nullptr)
-                    wrote = asio::write(socket, asio::buffer(payload, read_length), error);
+                std::ifstream ifs(readpath, std::ios::binary);
+                if (!ifs)
+                {
+                    std::cerr << "[Datanode" << m_port << "][GET] file does not exist " << readpath << std::endl;
+                    error = asio::error::not_found;
+                }
                 else
                 {
-                    tcp_write_with_shared_bandwidth(socket, payload, read_length, egress_bw, error);
-                    wrote = error ? 0 : read_length;
+                    ifs.seekg(read_offset, std::ios::beg);
+                    constexpr size_t kStreamChunkBytes = 1024 * 1024;
+                    std::vector<char> buffer(std::min(kStreamChunkBytes, static_cast<size_t>(read_length)));
+                    size_t remaining = static_cast<size_t>(read_length);
+                    while (remaining > 0 && !error)
+                    {
+                        const size_t requested = std::min(buffer.size(), remaining);
+                        ifs.read(buffer.data(), static_cast<std::streamsize>(requested));
+                        const size_t read_bytes = static_cast<size_t>(ifs.gcount());
+                        if (read_bytes != requested)
+                        {
+                            error = asio::error::eof;
+                            break;
+                        }
+                        if (stripe_pipeline_read || egress_bw == nullptr)
+                            asio::write(socket, asio::buffer(buffer.data(), read_bytes), error);
+                        else
+                            tcp_write_with_shared_bandwidth(socket, buffer.data(), read_bytes, egress_bw, error);
+                        if (!error)
+                        {
+                            wrote += read_bytes;
+                            remaining -= read_bytes;
+                        }
+                    }
                 }
                 if (IF_DEBUG)
                 {
@@ -855,7 +906,6 @@ namespace ECProject
             socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
             socket.close(ignore_ec);
             data_acceptor->close(ignore_ec);
-            delete[] payload;
         };
         try
         {
@@ -863,7 +913,7 @@ namespace ECProject
             {
                 std::cout << "[Datanode" << m_port << "][GET] ready to handle get!" << std::endl;
             }
-            std::thread my_thread(handler, buf);
+            std::thread my_thread(handler);
             my_thread.detach();
             response->set_message(true);
         }
