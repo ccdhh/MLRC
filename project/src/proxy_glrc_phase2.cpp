@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -95,6 +96,13 @@ bool lookup_peer_shards(const proxy_proto::RecoveryRequest *req, int peer_part, 
 
 int phase2_proxy_index(int proxy_grpc_port)
 {
+  // Real deployments place exactly one proxy on each host, so every host can
+  // safely reuse the same phase-2 listener band.  This avoids exhausting the
+  // fixed single-machine port range when n grows past the local simulator.
+  const char *one_proxy_per_host = std::getenv("DDRT_ONE_PROXY_PER_HOST");
+  if (one_proxy_per_host != nullptr && one_proxy_per_host[0] != '\0' &&
+      one_proxy_per_host[0] != '0')
+    return 0;
   const int idx = (proxy_grpc_port - PROXY_GRPC_BASE) / PROXY_GRPC_STRIDE;
   if (idx < 0)
     return 0;

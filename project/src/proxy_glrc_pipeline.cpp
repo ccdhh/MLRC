@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -231,6 +232,13 @@ private:
 
 int pipeline_proxy_index(int proxy_grpc_port)
 {
+  // In one-proxy-per-host deployments listener ports only need to be unique
+  // within that host. Reusing band zero keeps the port range below ephemeral
+  // ports even for large n (for example n≈105).
+  const char *one_proxy_per_host = std::getenv("DDRT_ONE_PROXY_PER_HOST");
+  if (one_proxy_per_host != nullptr && one_proxy_per_host[0] != '\0' &&
+      one_proxy_per_host[0] != '0')
+    return 0;
   const int idx = (proxy_grpc_port - PROXY_GRPC_BASE) / PROXY_GRPC_STRIDE;
   if (idx < 0)
     return 0;

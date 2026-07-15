@@ -236,8 +236,8 @@ int main(int argc, char **argv)
         }
     }
 
-    std::string client_ip = "10.10.1.1";
-    int client_port = 55555;
+    std::string client_ip = config->ClientIP;
+    int client_port = config->ClientPort;
     ECProject::Client client(client_ip, client_port, coordinator_addr, sys_config_path);
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 

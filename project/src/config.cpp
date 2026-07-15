@@ -52,7 +52,7 @@ namespace ECProject
       assert(global_payload >= r &&
              "Error: gLRC global group must hold all r global parities");
       int max_blocks_per_group = std::max(q_max + 1, global_payload + 1);
-      assert(DatanodeNumPerCluster > max_blocks_per_group &&
+      assert(DatanodeNumPerCluster >= max_blocks_per_group &&
              "Error: DatanodeNumPerCluster must fit the largest gLRC placement group");
       assert(ClusterNum >= z && "Error: ClusterNum must be at least z for gLRC");
     }
@@ -148,6 +148,10 @@ namespace ECProject
       CoordinatorIP = std::string(elem->GetText());
     if (auto elem = root->FirstChildElement("CoordinatorPort"))
       CoordinatorPort = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("ClientIP"))
+      ClientIP = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("ClientPort"))
+      ClientPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
       AppendMode = std::string(elem->GetText());
     N = get_N(); // N
@@ -183,6 +187,8 @@ namespace ECProject
     std::cout << "  ClusterNum: " << (int)ClusterNum << " clusters" << std::endl;
     std::cout << "  CoordinatorIP: " << CoordinatorIP << std::endl;
     std::cout << "  CoordinatorPort: " << CoordinatorPort << std::endl;
+    std::cout << "  ClientIP: " << ClientIP << std::endl;
+    std::cout << "  ClientPort: " << ClientPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
     if (CodeType == "gLRC")

@@ -10,6 +10,7 @@
 #include "lrc.h"
 #include <sys/time.h>
 #include <chrono>
+#include <cstdlib>
 #include <thread>
 #include <functional>
 #include <atomic>
@@ -71,6 +72,10 @@ private:
 
   int pipeline_proxy_index(int proxy_grpc_port) const
   {
+    const char *one_proxy_per_host = std::getenv("DDRT_ONE_PROXY_PER_HOST");
+    if (one_proxy_per_host != nullptr && one_proxy_per_host[0] != '\0' &&
+        one_proxy_per_host[0] != '0')
+      return 0;
     const int idx = (proxy_grpc_port - ECProject::PROXY_GRPC_BASE) / ECProject::PROXY_GRPC_STRIDE;
     if (idx < 0 || idx > ECProject::PROXY_GRPC_MAX_INDEX)
       return -1;
