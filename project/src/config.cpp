@@ -171,8 +171,8 @@ namespace ECProject
     if (NodeBlockBandwidthMBps > 0.0)
     {
       std::cout << "  NodeBlockBandwidthMBps: " << NodeBlockBandwidthMBps << " MB/s" << std::endl;
-      std::cout << "    per-node ingress + egress (symmetric fixed link rate)" << std::endl;
-      std::cout << "    proxy/datanode: SharedBandwidthLimiter on TCP read/write paths" << std::endl;
+      std::cout << "    node NIC model: hop egress + hub/sink aggregate ingress wall-clock floor"
+                << " (fan-in TCP drains unpaced; same-host DN↔proxy unlimited)" << std::endl;
       std::cout << "  SingleBlockTransferTime: "
                 << node_block_transfer_seconds(BlockSize, NodeBlockBandwidthMBps) << " s/block at full link"
                 << std::endl;

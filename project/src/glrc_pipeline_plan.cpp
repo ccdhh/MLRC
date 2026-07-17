@@ -118,6 +118,8 @@ bool glrc_build_pipeline_plan(int k, int r, int z, const std::vector<int> &faile
 
     if (local_direct)
     {
+      // Figure-style single-chain pipeline: survivors N1→N2→…→Nk, sink R = failed
+      // block's repair proxy.  Final XOR of survivors is the recovered block.
       for (int b : eq.involved_blocks)
       {
         if (failed_set.count(b))
@@ -128,10 +130,20 @@ bool glrc_build_pipeline_plan(int k, int r, int z, const std::vector<int> &faile
             chain.local_direct_failed_block_key = node_lookup[b].block_key;
             chain.local_direct_replaced_ip = node_lookup[b].datanode_ip;
             chain.local_direct_replaced_port = node_lookup[b].datanode_port;
+            chain.local_direct_sink_proxy_ip = node_lookup[b].proxy_ip;
+            chain.local_direct_sink_proxy_port = node_lookup[b].proxy_port;
           }
           break;
         }
       }
+      if (chain.local_direct_sink_proxy_ip.empty() || survivors.empty())
+      {
+        error_message = "local pipeline missing sink proxy or survivors";
+        return false;
+      }
+      // Stable chain order (high→low block id). Do not force global hub to the
+      // end — the sink R is outside the survivor hop list.
+      std::sort(survivors.begin(), survivors.end(), std::greater<int>());
       for (int b : survivors)
       {
         GlrcPipelineHopInfo hop;
@@ -139,6 +151,7 @@ bool glrc_build_pipeline_plan(int k, int r, int z, const std::vector<int> &faile
           return false;
         chain.hops.push_back(hop);
       }
+      chain.hub_is_chain_tail = false;
       out_plan.local_direct_chains.push_back(chain);
       continue;
     }

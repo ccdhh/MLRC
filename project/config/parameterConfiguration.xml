@@ -25,8 +25,11 @@
     GlrcShardCount      分片数；BlockSize 必须能被其整除。
     GlrcPipelineWindow  pipeline 链上 in-flight 分片窗口 W；0=与 GlrcShardCount 相同（全流水）；1=串行 W=1。
     GlrcPhase2WriteBack phase2 是否在修复后写回 datanode（重复随机试验可设 false）。
-    NodeBlockBandwidthMBps  每个 repair proxy / datanode 的链路限速（MB/s）；0 表示不限速。
-                            拓扑须为「每 datanode 一个 repair proxy」（见 clusterInformation.xml）。
+    NodeBlockBandwidthMBps  节点 NIC 单向带宽（MB/s）；0=不限速。
+                            实现（稳定）：hop→hop 限发送端 node egress；hub/sink 汇聚限接收端
+                            node ingress（发往汇聚点不再限 egress，避免双边 sleep 堵死 TCP）。
+                            同机 DN↔proxy 不限速；跨机 DN→proxy 在 DN.egress 限速。
+                            注：软件里对同一条 TCP 连接两端都 wait 极易卡死，故不在中间 hop 再限 RX。
 
   前置条件：CodeType 必须为 gLRC；ClusterNum >= z。
 -->
@@ -35,13 +38,13 @@
     <UnitSize>8192</UnitSize>
     <BlockSize>67108864</BlockSize>
 
-    <!-- 1 Gbps 输入/输出对称：ingress 与 egress 各 125 MB/s -->
+    <!-- 节点对带宽：每对节点单向 125 MB/s（ingress/egress 分向独立） -->
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
     <!-- 修复方式：phase1 | phase2 | pipeline -->
-    <GlrcRepairMode>pipeline</GlrcRepairMode>
+    <GlrcRepairMode>phase2</GlrcRepairMode>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
-    <GlrcEquationPolicy>local-first</GlrcEquationPolicy>
+    <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 
     <GlrcShardCount>64</GlrcShardCount>
     <GlrcPipelineWindow>0</GlrcPipelineWindow>

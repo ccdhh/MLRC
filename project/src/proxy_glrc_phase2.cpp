@@ -36,7 +36,8 @@ struct Phase2ConnectHello
   uint32_t from_partition;
 };
 
-thread_local std::string g_glrc_phase2_last_error;
+std::mutex g_phase2_error_mutex;
+std::string g_glrc_phase2_last_error;
 
 std::mutex g_phase2_bind_mutex;
 std::unordered_set<int> g_phase2_active_listen_ports;
@@ -53,8 +54,20 @@ void phase2_trace(const char *msg)
 
 void set_phase2_error(const std::string &msg)
 {
-  g_glrc_phase2_last_error = msg;
+  {
+    std::lock_guard<std::mutex> lock(g_phase2_error_mutex);
+    // Preserve the first concrete worker failure; later peer EOF/timeouts are
+    // usually consequences and should not hide the root cause.
+    if (g_glrc_phase2_last_error.empty())
+      g_glrc_phase2_last_error = msg;
+  }
   phase2_trace(msg.c_str());
+}
+
+void clear_phase2_error()
+{
+  std::lock_guard<std::mutex> lock(g_phase2_error_mutex);
+  g_glrc_phase2_last_error.clear();
 }
 
 void set_exchange_socket_timeouts(asio::ip::tcp::socket &socket, int seconds)
@@ -172,7 +185,7 @@ bool read_all_bw(asio::ip::tcp::socket &socket, char *data, size_t len, SharedBa
   ec.clear();
   if (bw == nullptr || bw->bandwidth_mbps() <= 0.0)
     return read_all(socket, data, len, ec);
-  tcp_read_with_shared_bandwidth(socket, data, len, bw, ec);
+  tcp_read_with_shared_bandwidth(socket, data, len, bw, ec, SharedBandwidthPace::DrainThenAccount);
   return !ec;
 }
 
@@ -515,8 +528,7 @@ bool ProxyImpl::GetFromDatanodeStripeRangeBreakdown(const std::string &key, char
     SharedBandwidthLimiter *read_bw = block_bandwidth;
     if (isLocalDatanode(ip, port))
       read_bw = nullptr;
-    else if (read_bw == nullptr)
-      read_bw = m_ingress_bandwidth.get();
+    // Remote DN→proxy: limited on datanode egress only (node-pair, one end).
     tcp_read_with_shared_bandwidth(socket, value + read_offset, static_cast<size_t>(read_length), read_bw, ec);
     if (ec)
     {
@@ -620,8 +632,7 @@ bool ProxyImpl::GetFromDatanodeStripeRangeCompactBreakdown(const std::string &ke
     SharedBandwidthLimiter *read_bw = block_bandwidth;
     if (isLocalDatanode(ip, port))
       read_bw = nullptr;
-    else if (read_bw == nullptr)
-      read_bw = m_ingress_bandwidth.get();
+    // Remote DN→proxy: limited on datanode egress only (node-pair, one end).
     tcp_read_with_shared_bandwidth(socket, value, static_cast<size_t>(read_length), read_bw, ec);
     if (ec)
     {
@@ -689,7 +700,10 @@ ProxyImpl::Phase2BlockDuplexBw ProxyImpl::phase2BlockDuplexBandwidth(int repair_
 
 std::string glrc_phase2_take_last_error()
 {
-  return g_glrc_phase2_last_error;
+  std::lock_guard<std::mutex> lock(g_phase2_error_mutex);
+  std::string out = g_glrc_phase2_last_error;
+  g_glrc_phase2_last_error.clear();
+  return out;
 }
 
 void glrc_phase2_clear_ready_session()
@@ -700,7 +714,7 @@ void glrc_phase2_clear_ready_session()
 bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recovery_request,
                                       proxy_proto::RecoveryReply *response)
 {
-  g_glrc_phase2_last_error.clear();
+  clear_phase2_error();
   const int exchange_epoch = recovery_request->phase2_exchange_epoch();
   const int partition_id = recovery_request->phase2_partition_id();
   {
@@ -714,7 +728,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     return false;
   }
   const int repair_block_id = recovery_request->failed_block_ids(partition_id);
-  const Phase2BlockDuplexBw block_bw = phase2BlockDuplexBandwidth(repair_block_id, exchange_epoch);
   const int f = recovery_request->failed_block_ids_size();
   const int byte_off = recovery_request->phase2_byte_off();
   const int byte_len = recovery_request->phase2_byte_len();
@@ -807,6 +820,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
   const int shard_begin = recovery_request->phase2_shard_begin();
   const int local_shard_count = recovery_request->phase2_shard_count_local();
+  const int total_shard_count = recovery_request->phase2_shard_count();
 
   int max_exchange_rounds = local_shard_count;
   for (int peer = 0; peer < recovery_request->phase2_peer_partition_ids_size(); peer++)
@@ -879,6 +893,170 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     std::memset(recovered_ptrs[i], 0, block_size);
   }
 
+  std::atomic<bool> exchange_failed{false};
+  std::mutex decoded_mu;
+  std::condition_variable decoded_cv;
+  int decoded_shards = 0;
+  bool decode_done = false;
+  std::mutex helper_round_mu;
+  std::condition_variable helper_round_cv;
+  std::vector<int> helper_round_done(std::max(local_shard_count, 0), 0);
+  int helper_round_to_start = -1;
+  bool helper_round_stop = false;
+
+  // This partition owns failed block `partition_id`.  Open one full-block DN
+  // stream up front, then publish each globally ordered shard as soon as local
+  // decode or peer exchange makes it available.  This replaces the old
+  // partial [byte_off, byte_len] write which truncated blocks after trial 1.
+  struct Phase2WriteStream
+  {
+    asio::io_context io;
+    asio::ip::tcp::socket socket{io};
+    grpc::ClientContext grpc_context;
+    datanode_proto::MergeParityInfo recovery_info;
+    datanode_proto::RequestResult recovery_result;
+    grpc::Status grpc_status;
+    std::thread grpc_thread;
+    std::thread writer_thread;
+    std::mutex mu;
+    std::condition_variable cv;
+    std::vector<char> ready;
+    int next_shard = 0;
+    bool producer_done = false;
+    bool failed = false;
+    double network_time = 0.0;
+  };
+
+  const bool phase2_write_enabled =
+      local_shard_count > 0 && recovery_request->phase2_do_write_back();
+  std::unique_ptr<Phase2WriteStream> write_stream;
+  auto mark_write_shard_ready = [&](int global_shard) {
+    if (!write_stream || global_shard < 0 || global_shard >= total_shard_count)
+      return;
+    {
+      std::lock_guard<std::mutex> lock(write_stream->mu);
+      write_stream->ready[static_cast<size_t>(global_shard)] = 1;
+    }
+    write_stream->cv.notify_one();
+  };
+
+  if (phase2_write_enabled)
+  {
+    write_stream = std::make_unique<Phase2WriteStream>();
+    write_stream->ready.assign(static_cast<size_t>(total_shard_count), 0);
+    const int write_idx = partition_id;
+    const std::string rep_ip = recovery_request->replaced_node_ips(write_idx);
+    const int rep_port = recovery_request->replaced_node_ports(write_idx);
+    const std::string node_ip_port = rep_ip + ":" + std::to_string(rep_port);
+    auto dn_it = m_datanode_ptrs.find(node_ip_port);
+    if (dn_it == m_datanode_ptrs.end() || !dn_it->second)
+    {
+      set_phase2_error("phase2 write stream datanode stub missing: " + node_ip_port);
+      exchange_failed.store(true);
+    }
+    else
+    {
+      write_stream->recovery_info.set_block_key(recovery_request->failed_block_keys(write_idx));
+      write_stream->recovery_info.set_block_id(failed_ids[write_idx]);
+      write_stream->recovery_info.set_recovery_offset(0);
+      // recovery_size==0 selects a single atomic full-block stream.
+      write_stream->recovery_info.set_recovery_size(0);
+      write_stream->recovery_info.set_proxy_ip(m_ip);
+      write_stream->recovery_info.set_proxy_port(m_port);
+      write_stream->grpc_context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(180));
+
+      datanode_proto::datanodeService::Stub *dn_stub = dn_it->second.get();
+      Phase2WriteStream *ws = write_stream.get();
+      write_stream->grpc_thread = std::thread([dn_stub, ws]() {
+        ws->grpc_status =
+            dn_stub->handleRecoveryBreakdown(&ws->grpc_context, ws->recovery_info,
+                                             &ws->recovery_result);
+      });
+
+      asio::ip::tcp::resolver resolver(write_stream->io);
+      asio::error_code connect_ec;
+      asio::connect(write_stream->socket,
+                    resolver.resolve({rep_ip, std::to_string(rep_port + ECProject::DATANODE_PORT_SHIFT)}),
+                    connect_ec);
+      if (connect_ec)
+      {
+        set_phase2_error("phase2 write stream connect failed: " + node_ip_port + " " +
+                         connect_ec.message());
+        exchange_failed.store(true);
+        asio::error_code ignore_ec;
+        write_stream->socket.close(ignore_ec);
+        write_stream->grpc_context.TryCancel();
+      }
+      else
+      {
+        set_exchange_socket_timeouts(write_stream->socket, 45);
+        SharedBandwidthLimiter *write_bw =
+            egressBandwidthForDatanodeWrite(rep_ip.c_str(), rep_port);
+        write_stream->writer_thread = std::thread([&, ws, write_bw]() {
+          while (!exchange_failed.load())
+          {
+            int shard = -1;
+            {
+              std::unique_lock<std::mutex> lock(ws->mu);
+              ws->cv.wait_for(lock, std::chrono::milliseconds(50), [&]() {
+                return exchange_failed.load() || ws->failed ||
+                       (ws->next_shard < total_shard_count &&
+                        ws->ready[static_cast<size_t>(ws->next_shard)] != 0) ||
+                       ws->producer_done;
+              });
+              if (exchange_failed.load() || ws->failed)
+                break;
+              if (ws->next_shard < total_shard_count &&
+                  ws->ready[static_cast<size_t>(ws->next_shard)] != 0)
+              {
+                shard = ws->next_shard++;
+              }
+              else if (ws->producer_done)
+              {
+                if (ws->next_shard != total_shard_count)
+                {
+                  ws->failed = true;
+                  set_phase2_error("phase2 write stream missing shard " +
+                                   std::to_string(ws->next_shard));
+                  exchange_failed.store(true);
+                  decoded_cv.notify_all();
+                  helper_round_cv.notify_all();
+                }
+                break;
+              }
+            }
+            if (shard < 0)
+              continue;
+
+            asio::error_code write_ec;
+            const auto write_begin = std::chrono::steady_clock::now();
+            tcp_write_with_shared_bandwidth(
+                ws->socket,
+                reinterpret_cast<const char *>(recovered_ptrs[partition_id] +
+                                               static_cast<size_t>(shard) * stripe_byte_len),
+                static_cast<size_t>(stripe_byte_len), write_bw, write_ec);
+            ws->network_time +=
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - write_begin).count();
+            if (write_ec)
+            {
+              ws->failed = true;
+              set_phase2_error("phase2 write stream shard " + std::to_string(shard) +
+                               " failed: " + write_ec.message());
+              exchange_failed.store(true);
+              decoded_cv.notify_all();
+              helper_round_cv.notify_all();
+              break;
+            }
+          }
+
+          asio::error_code ignore_ec;
+          ws->socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+          ws->socket.close(ignore_ec);
+        });
+      }
+    }
+  }
+
   double min_disk_start = 0.0, max_disk_end = 0.0;
   double min_net_start = 0.0, max_net_end = 0.0;
   double min_decode_start = 0.0, max_decode_end = 0.0;
@@ -888,7 +1066,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   bool have_grpc = false;
 
   constexpr int kExchangeSocketTimeoutSec = 45;
-  std::atomic<bool> exchange_failed{false};
   double total_exchange_time = 0.0;
 
   struct ClientPeerConn
@@ -999,6 +1176,24 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   setup_peer_connections();
   if (exchange_failed.load() || active_acceptor().accept_failed.load())
   {
+    if (write_stream)
+    {
+      {
+        std::lock_guard<std::mutex> lock(write_stream->mu);
+        write_stream->producer_done = true;
+      }
+      write_stream->cv.notify_all();
+      if (write_stream->writer_thread.joinable())
+        write_stream->writer_thread.join();
+      else
+      {
+        asio::error_code ignore_ec;
+        write_stream->socket.close(ignore_ec);
+        write_stream->grpc_context.TryCancel();
+      }
+      if (write_stream->grpc_thread.joinable())
+        write_stream->grpc_thread.join();
+    }
     for (char *p : get_bufs)
       free(p);
     for (unsigned char *p : recovered_ptrs)
@@ -1006,11 +1201,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     join_accept_thread();
     return false;
   }
-
-  std::mutex decoded_mu;
-  std::condition_variable decoded_cv;
-  int decoded_shards = 0;
-  bool decode_done = false;
 
   auto wait_until_decoded = [&](int shard_k) -> bool {
     if (shard_k >= local_shard_count)
@@ -1036,6 +1226,8 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
       const int peer_port = recovery_request->phase2_peer_proxy_ports(peer);
       const std::string peer_ip = recovery_request->phase2_peer_proxy_ips(peer);
+      SharedBandwidthLimiter *peer_egress = egressBandwidthForPeer(peer_ip);
+      SharedBandwidthLimiter *peer_ingress = ingressBandwidthForPeer(peer_ip);
       asio::error_code ec;
 
       asio::ip::tcp::socket *sock = nullptr;
@@ -1059,7 +1251,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
         const int stripe_off = global_shard * stripe_byte_len;
         Phase2PeerHeader out_hdr = make_shard_header(partition_id, global_shard, stripe_byte_len);
         if (!send_shard_frame(*sock, out_hdr, reinterpret_cast<char *>(recovered_ptrs[peer_part] + stripe_off),
-                              block_bw.egress, ec))
+                              peer_egress, ec))
         {
           set_phase2_error(std::string(side) + " shard send to peer " + std::to_string(peer_part) +
                            " failed: " + ec.message());
@@ -1075,7 +1267,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
           return true;
         Phase2PeerHeader rhdr{};
         std::vector<char> recv_stripe(stripe_byte_len);
-        if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), block_bw.ingress, ec))
+        if (!recv_shard_frame(*sock, rhdr, recv_stripe.data(), recv_stripe.size(), peer_ingress, ec))
         {
           set_phase2_error(std::string(side) + " shard recv from peer " + std::to_string(peer_part) +
                            " failed: " + ec.message());
@@ -1094,6 +1286,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
         }
         std::memcpy(recovered_ptrs[partition_id] + static_cast<size_t>(recv_global) * stripe_byte_len,
                     recv_stripe.data(), stripe_byte_len);
+        mark_write_shard_ready(recv_global);
         return true;
       };
 
@@ -1182,12 +1375,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       max_grpc_start = std::max(max_grpc_start, grpc_start);
     }
   };
-
-  std::mutex helper_round_mu;
-  std::condition_variable helper_round_cv;
-  std::vector<int> helper_round_done(std::max(local_shard_count, 0), 0);
-  int helper_round_to_start = -1;
-  bool helper_round_stop = false;
 
   auto start_helper_round = [&](int shard_k) {
     if (shard_k < 0 || shard_k >= local_shard_count)
@@ -1292,7 +1479,15 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
           (void)stripe_off;
           asio::error_code read_ec;
           const auto net_begin = std::chrono::high_resolution_clock::now();
-          SharedBandwidthLimiter *helper_read_bw = block_bw.ingress;
+          // All remote helper streams and peer streams terminate on this
+          // repair node's one physical RX NIC.  Share the same 125 MB/s
+          // node-ingress timeline across them; same-host DN traffic bypasses
+          // the NIC model.
+          SharedBandwidthLimiter *helper_read_bw =
+              isLocalDatanode(recovery_request->datanodeip(i).c_str(),
+                              recovery_request->datanodeport(i))
+                  ? nullptr
+                  : nodeIngressBandwidth();
           tcp_read_with_shared_bandwidth(socket, dst, static_cast<size_t>(stripe_byte_len), helper_read_bw, read_ec);
           const auto net_end = std::chrono::high_resolution_clock::now();
           if (read_ec)
@@ -1428,6 +1623,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
 
         for (int t = 0; t < f; t++)
           std::memcpy(recovered_ptrs[t] + stripe_off, shard_recovered[t].data(), stripe_byte_len);
+        mark_write_shard_ready(shard_begin + shard_k);
         {
           std::lock_guard<std::mutex> lk(decoded_mu);
           decoded_shards = shard_k + 1;
@@ -1486,38 +1682,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       exchange_failed.store(true);
   }
 
-  std::thread write_thread;
-  std::atomic<bool> write_failed{false};
-  double write_net_result = 0.0;
-  double write_disk_result = 0.0;
-  const bool do_write_back =
-      !exchange_failed.load() && local_shard_count > 0 && recovery_request->phase2_do_write_back();
-  if (do_write_back)
-  {
-    const int write_idx = partition_id;
-    if (write_idx >= 0 && write_idx < f)
-    {
-      write_thread = std::thread([&, write_idx]() {
-        double wnet = 0.0, wdisk = 0.0;
-        if (!RecoveryToDatanodeStripeBreakdown(recovery_request->failed_block_keys(write_idx).c_str(),
-                                               failed_ids[write_idx],
-                                               reinterpret_cast<char *>(recovered_ptrs[write_idx] + byte_off),
-                                               recovery_request->replaced_node_ips(write_idx).c_str(),
-                                               recovery_request->replaced_node_ports(write_idx), byte_off, byte_len,
-                                               &wnet, &wdisk))
-        {
-          write_failed.store(true);
-          exchange_failed.store(true);
-        }
-        else
-        {
-          write_net_result = wnet;
-          write_disk_result = wdisk;
-        }
-      });
-    }
-  }
-
   stop_helper_workers();
   {
     std::lock_guard<std::mutex> lk(decoded_mu);
@@ -1525,12 +1689,36 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   }
   decoded_cv.notify_all();
   join_exchange_workers();
-  if (write_thread.joinable())
-    write_thread.join();
-  if (write_failed.load())
-    exchange_failed.store(true);
-  total_write_net += write_net_result;
-  total_write_disk += write_disk_result;
+
+  if (write_stream)
+  {
+    {
+      std::lock_guard<std::mutex> lock(write_stream->mu);
+      write_stream->producer_done = true;
+    }
+    write_stream->cv.notify_all();
+    if (write_stream->writer_thread.joinable())
+      write_stream->writer_thread.join();
+    else
+    {
+      asio::error_code ignore_ec;
+      write_stream->socket.close(ignore_ec);
+      write_stream->grpc_context.TryCancel();
+    }
+    if (write_stream->grpc_thread.joinable())
+      write_stream->grpc_thread.join();
+
+    if (!exchange_failed.load() &&
+        (write_stream->failed || write_stream->next_shard != total_shard_count ||
+         !write_stream->grpc_status.ok() || !write_stream->recovery_result.message()))
+    {
+      set_phase2_error("phase2 full-block write stream did not complete");
+      exchange_failed.store(true);
+    }
+    total_write_net += write_stream->network_time;
+    total_write_disk += write_stream->recovery_result.disk_io_end_time() -
+                        write_stream->recovery_result.disk_io_start_time();
+  }
 
   const auto ex_end = std::chrono::high_resolution_clock::now();
   total_exchange_time += std::chrono::duration<double>(ex_end - ex_begin).count();

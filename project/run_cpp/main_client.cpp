@@ -55,6 +55,7 @@ static void print_glrc_client_usage(const char *argv0)
         << " [options] [coordinator_ip:port]\n"
         << "  -f, --fail-count N   number of failed blocks per trial (1..n-1)\n"
         << "  -n, --trials N       number of random trials (>=1)\n"
+        << "  --no-warmup          skip pre-trial pipeline warmup recovery\n"
         << "  -h, --help           show this help\n"
         << "\n"
         << "If -f/-n are omitted: prompt interactively when stdin is a TTY;\n"
@@ -65,11 +66,12 @@ static void print_glrc_client_usage(const char *argv0)
 /** Returns false on parse error / --help. Sets *show_help if help was requested. */
 static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &trial_count,
                                 bool &have_f, bool &have_n, std::string &coordinator_override,
-                                bool &show_help)
+                                bool &show_help, bool &skip_warmup)
 {
     have_f = false;
     have_n = false;
     show_help = false;
+    skip_warmup = false;
     fail_count = 0;
     trial_count = 0;
     coordinator_override.clear();
@@ -107,6 +109,11 @@ static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &tri
                 return false;
             trial_count = std::atoi(v);
             have_n = true;
+            continue;
+        }
+        if (arg == "--no-warmup")
+        {
+            skip_warmup = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-')
@@ -214,7 +221,8 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
 }
 
 static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config,
-                                int fail_count, int trial_count, bool have_f, bool have_n)
+                                int fail_count, int trial_count, bool have_f, bool have_n,
+                                bool skip_warmup)
 {
     const int k = config->k;
     const int r = config->r;
@@ -245,6 +253,29 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     {
         std::cerr << "[gLRC] GLRC_FAILED_BLOCKS count must match GLRC_FAIL_COUNT=" << fail_count << std::endl;
         return 1;
+    }
+
+    const bool warmup_enabled = [&]() {
+        if (skip_warmup || config->GlrcRepairMode != "pipeline")
+            return false;
+        if (const char *w = std::getenv("GLRC_WARMUP"))
+            return w[0] != '0';
+        return true;
+    }();
+    if (warmup_enabled)
+    {
+        std::vector<int> warmup_failed{0};
+        if (use_fixed && !fixed_failed.empty())
+            warmup_failed = {fixed_failed.front()};
+        std::cout << "\n[gLRC] Warmup recovery (excluded from trial stats) failed_blocks: "
+                  << ECProject::glrc_format_block_list(warmup_failed, k, r, z) << std::endl;
+        ECProject::GlrcMultiRecoveryMetrics warmup_metrics;
+        if (!client.multi_block_recovery_breakdown(0, warmup_failed, warmup_metrics))
+        {
+            std::cerr << "  Warmup FAILED: " << warmup_metrics.message << std::endl;
+            return 1;
+        }
+        std::cout << "  warmup data_plane_time: " << warmup_metrics.network_time << " s" << std::endl;
     }
 
     std::cout << "\n[gLRC] Running " << trial_count << " random trial(s) with f=" << fail_count
@@ -324,10 +355,10 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
 int main(int argc, char **argv)
 {
     int cli_fail = 0, cli_trials = 0;
-    bool have_f = false, have_n = false, show_help = false;
+    bool have_f = false, have_n = false, show_help = false, skip_warmup = false;
     std::string coordinator_override;
     if (!parse_glrc_cli_args(argc, argv, cli_fail, cli_trials, have_f, have_n,
-                             coordinator_override, show_help))
+                             coordinator_override, show_help, skip_warmup))
     {
         print_glrc_client_usage(argc > 0 ? argv[0] : nullptr);
         return show_help ? 0 : 2;
@@ -358,7 +389,7 @@ int main(int argc, char **argv)
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
     if (config->CodeType == "gLRC")
-        return run_glrc_repair_test(client, config, cli_fail, cli_trials, have_f, have_n);
+        return run_glrc_repair_test(client, config, cli_fail, cli_trials, have_f, have_n, skip_warmup);
 
     std::vector<int> parameters = client.get_parameters();
     int k = parameters[0];

@@ -37,29 +37,72 @@ namespace ECProject
 {
   void ProxyImpl::initNodeBandwidth()
   {
-    m_ingress_bandwidth.reset();
-    m_egress_bandwidth.reset();
-    if (m_sys_config != nullptr && m_sys_config->NodeBlockBandwidthMBps > 0.0)
-    {
-      m_ingress_bandwidth =
-          std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
-      m_egress_bandwidth =
-          std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
-    }
+    resetPeerLinkBandwidth();
+  }
+
+  void ProxyImpl::resetPeerLinkBandwidth()
+  {
+    std::lock_guard<std::mutex> lock(m_peer_link_bw_mu);
+    m_node_ingress_bw.reset();
+    m_node_egress_bw.reset();
   }
 
   bool ProxyImpl::isLocalDatanode(const char *ip, int port) const
   {
-    if (m_local_datanode_uri.empty() || ip == nullptr || port <= 0)
+    if (ip == nullptr || port <= 0)
+      return false;
+    // Co-located DN and repair proxy share a host: never pace that link as NIC traffic.
+    if (!m_ip.empty() && std::string(ip) == m_ip)
+      return true;
+    if (m_local_datanode_uri.empty())
       return false;
     return m_local_datanode_uri == (std::string(ip) + ":" + std::to_string(port));
   }
 
+  SharedBandwidthLimiter *ProxyImpl::nodeIngressBandwidth() const
+  {
+    if (m_sys_config == nullptr || m_sys_config->NodeBlockBandwidthMBps <= 0.0)
+      return nullptr;
+    std::lock_guard<std::mutex> lock(m_peer_link_bw_mu);
+    if (!m_node_ingress_bw)
+      m_node_ingress_bw = std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+    return m_node_ingress_bw.get();
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::nodeEgressBandwidth() const
+  {
+    if (m_sys_config == nullptr || m_sys_config->NodeBlockBandwidthMBps <= 0.0)
+      return nullptr;
+    std::lock_guard<std::mutex> lock(m_peer_link_bw_mu);
+    if (!m_node_egress_bw)
+      m_node_egress_bw = std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+    return m_node_egress_bw.get();
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::ingressBandwidthForPeer(const std::string &peer_ip) const
+  {
+    if (peer_ip.empty() || peer_ip == m_ip)
+      return nullptr;
+    return nodeIngressBandwidth();
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::egressBandwidthForPeer(const std::string &peer_ip) const
+  {
+    if (peer_ip.empty() || peer_ip == m_ip)
+      return nullptr;
+    return nodeEgressBandwidth();
+  }
+
+  SharedBandwidthLimiter *ProxyImpl::pipelineFanInIngressBandwidth() const
+  {
+    return nodeIngressBandwidth();
+  }
+
   SharedBandwidthLimiter *ProxyImpl::ingressBandwidthForDatanodeRead(const char *ip, int port) const
   {
-    // DN→proxy link rate is enforced on datanode egress (see handleGetBreakdown). Do not
-    // also throttle on proxy ingress: a shared m_ingress bucket would serialize parallel
-    // survivor reads in local_direct and double-count the same link.
+    // Pace remote DN→proxy on the datanode's node egress only. Applying proxy ingress
+    // here dual-Primary-schedules the same socket and can stall pipeline hop local reads
+    // (shared with upstream nodeIngress). Same-host DN is always unlimited.
     (void)ip;
     (void)port;
     return nullptr;
@@ -67,7 +110,9 @@ namespace ECProject
 
   SharedBandwidthLimiter *ProxyImpl::egressBandwidthForDatanodeWrite(const char *ip, int port) const
   {
-    return isLocalDatanode(ip, port) ? nullptr : m_egress_bandwidth.get();
+    if (ip == nullptr || isLocalDatanode(ip, port))
+      return nullptr;
+    return nodeEgressBandwidth();
   }
 
   bool ProxyImpl::init_coordinator()
@@ -449,8 +494,14 @@ namespace ECProject
 
       asio::write(socket, asio::buffer(value, value_length), error);
 
+      // Wait until DN finishes durable publish and closes.  Closing immediately
+      // after the write raced with DN's trunc+write and let recovery GET a
+      // partial block (EOF mid-stream on chain_head).
       asio::error_code ignore_ec;
-      socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+      socket.shutdown(asio::ip::tcp::socket::shutdown_send, ignore_ec);
+      char durable_probe = 0;
+      asio::error_code ack_ec;
+      asio::read(socket, asio::buffer(&durable_probe, 1), ack_ec);
       socket.close(ignore_ec);
       if (IF_DEBUG)
       {
@@ -1294,10 +1345,7 @@ namespace ECProject
 
     auto degraded_read = [this, request_copy, &response]() mutable
     {
-      if (m_ingress_bandwidth)
-        m_ingress_bandwidth->reset();
-      if (m_egress_bandwidth)
-        m_egress_bandwidth->reset();
+      resetPeerLinkBandwidth();
       std::string code_type = m_sys_config->CodeType;
       // auto status = std::make_shared<std::vector<bool>>(request_copy->datanodeip_size(), false);
       std::unique_ptr<bool[]> status(new bool[request_copy->datanodeip_size()]);
@@ -1449,10 +1497,7 @@ namespace ECProject
 
     auto degraded_read = [this, request_copy, &response]() mutable
     {
-      if (m_ingress_bandwidth)
-        m_ingress_bandwidth->reset();
-      if (m_egress_bandwidth)
-        m_egress_bandwidth->reset();
+      resetPeerLinkBandwidth();
       std::string code_type = m_sys_config->CodeType;
       // auto status = std::make_shared<std::vector<bool>>(request_copy->datanodeip_size(), false);
       std::unique_ptr<bool[]> status(new bool[request_copy->datanodeip_size()]);
@@ -2343,11 +2388,9 @@ namespace ECProject
         recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_pipeline() &&
         m_sys_config != nullptr && m_sys_config->CodeType == "gLRC";
     // Pipeline may run several recoveryBreakdown RPCs concurrently on one proxy (hub/hop/chain);
-    // resetting shared ingress here races with in-flight datanode reads.
-    if (m_ingress_bandwidth && !pipeline_recovery)
-      m_ingress_bandwidth->reset();
-    if (m_egress_bandwidth && !pipeline_recovery)
-      m_egress_bandwidth->reset();
+    // clearing peer link tables here races with in-flight transfers.
+    if (!pipeline_recovery)
+      resetPeerLinkBandwidth();
     std::chrono::high_resolution_clock::time_point START = std::chrono::high_resolution_clock::now();
     response->set_grpc_start_time(std::chrono::duration_cast<std::chrono::duration<double>>(START.time_since_epoch()).count());
     try

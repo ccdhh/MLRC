@@ -4,6 +4,7 @@
 #include "unilrc_encoder.h"
 #include "tinyxml2.h"
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <memory>
@@ -12,17 +13,63 @@
 #include <sys/stat.h>
 namespace ECProject
 {
+    // Publish a full block only after the bytes are on disk.  Truncate-in-place
+    // while a concurrent GET streams the same key causes short reads / EOF mid
+    // block (seen as chain_head "shard send count mismatch" right after SET).
+    static bool write_block_file_atomic(const std::string &writepath, const char *data, size_t len)
+    {
+        const std::string tmp = writepath + ".tmp." + std::to_string(static_cast<long long>(getpid())) + "." +
+                                std::to_string(static_cast<long long>(std::chrono::steady_clock::now().time_since_epoch().count()));
+        {
+            std::ofstream ofs(tmp, std::ios::binary | std::ios::out | std::ios::trunc);
+            if (!ofs)
+                return false;
+            ofs.write(data, static_cast<std::streamsize>(len));
+            if (!ofs)
+            {
+                std::remove(tmp.c_str());
+                return false;
+            }
+            ofs.flush();
+            if (!ofs)
+            {
+                std::remove(tmp.c_str());
+                return false;
+            }
+        }
+        if (std::rename(tmp.c_str(), writepath.c_str()) != 0)
+        {
+            std::remove(tmp.c_str());
+            return false;
+        }
+        return true;
+    }
+
     void DatanodeImpl::initNodeBandwidth()
     {
-        m_ingress_bandwidth.reset();
-        m_egress_bandwidth.reset();
-        if (m_sys_config != nullptr && m_sys_config->NodeBlockBandwidthMBps > 0.0)
-        {
-            m_ingress_bandwidth =
-                std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
-            m_egress_bandwidth =
-                std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
-        }
+        std::lock_guard<std::mutex> lock(m_repair_link_bw_mu);
+        m_node_ingress_bw.reset();
+        m_node_egress_bw.reset();
+    }
+
+    SharedBandwidthLimiter *DatanodeImpl::nodeIngressBandwidth() const
+    {
+        if (m_sys_config == nullptr || m_sys_config->NodeBlockBandwidthMBps <= 0.0)
+            return nullptr;
+        std::lock_guard<std::mutex> lock(m_repair_link_bw_mu);
+        if (!m_node_ingress_bw)
+            m_node_ingress_bw = std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+        return m_node_ingress_bw.get();
+    }
+
+    SharedBandwidthLimiter *DatanodeImpl::nodeEgressBandwidth() const
+    {
+        if (m_sys_config == nullptr || m_sys_config->NodeBlockBandwidthMBps <= 0.0)
+            return nullptr;
+        std::lock_guard<std::mutex> lock(m_repair_link_bw_mu);
+        if (!m_node_egress_bw)
+            m_node_egress_bw = std::make_shared<SharedBandwidthLimiter>(m_sys_config->NodeBlockBandwidthMBps);
+        return m_node_egress_bw.get();
     }
 
     void DatanodeImpl::initRepairProxyPairing(const std::string &cluster_info_path)
@@ -72,7 +119,12 @@ namespace ECProject
 
     bool DatanodeImpl::isLocalRepairProxy(const std::string &proxy_ip, int proxy_port) const
     {
-        if (m_local_repair_proxy_port <= 0 || proxy_ip.empty() || proxy_port <= 0)
+        if (proxy_ip.empty() || proxy_port <= 0)
+            return false;
+        // Co-located proxy on this datanode host: not NIC traffic.
+        if (!m_ip.empty() && proxy_ip == m_ip)
+            return true;
+        if (m_local_repair_proxy_port <= 0)
             return false;
         return m_local_repair_proxy_ip == proxy_ip && m_local_repair_proxy_port == proxy_port;
     }
@@ -80,13 +132,21 @@ namespace ECProject
     SharedBandwidthLimiter *DatanodeImpl::egressBandwidthForRepairProxy(const std::string &proxy_ip,
                                                                         int proxy_port) const
     {
-        return isLocalRepairProxy(proxy_ip, proxy_port) ? nullptr : m_egress_bandwidth.get();
+        if (isLocalRepairProxy(proxy_ip, proxy_port))
+            return nullptr;
+        (void)proxy_ip;
+        (void)proxy_port;
+        return nodeEgressBandwidth();
     }
 
     SharedBandwidthLimiter *DatanodeImpl::ingressBandwidthForRepairProxy(const std::string &proxy_ip,
                                                                          int proxy_port) const
     {
-        return isLocalRepairProxy(proxy_ip, proxy_port) ? nullptr : m_ingress_bandwidth.get();
+        if (isLocalRepairProxy(proxy_ip, proxy_port))
+            return nullptr;
+        (void)proxy_ip;
+        (void)proxy_port;
+        return nodeIngressBandwidth();
     }
 
     grpc::Status DatanodeImpl::checkalive(
@@ -433,8 +493,15 @@ namespace ECProject
         const int recovery_size =
             recovery_info->recovery_size() > 0 ? recovery_info->recovery_size() : m_sys_config->BlockSize;
         const bool stripe_mode = recovery_info->recovery_size() > 0;
+        // A full-block (recovery_size==0) stream is paced by the pipeline hub's
+        // shared egress NIC.  Charging the target ingress again makes one
+        // physical transfer take ~2B/w because the receiver cannot observe the
+        // sender's pre-write sleep.  Stripe-mode legacy callers retain target
+        // ingress accounting because they may fan in from independent senders.
         SharedBandwidthLimiter *ingress_bw =
-            ingressBandwidthForRepairProxy(recovery_info->proxy_ip(), recovery_info->proxy_port());
+            recovery_info->recovery_size() == 0
+                ? nullptr
+                : ingressBandwidthForRepairProxy(recovery_info->proxy_ip(), recovery_info->proxy_port());
 
         auto handler = [this, ingress_bw, &response](std::string block_key, int block_id, int recovery_offset,
                                                      int recovery_size, bool stripe_mode) mutable {
@@ -453,6 +520,7 @@ namespace ECProject
 
                 std::chrono::high_resolution_clock::time_point disk_begin{};
                 std::chrono::high_resolution_clock::time_point disk_end{};
+                double disk_active_sec = 0.0;
                 size_t wrote = 0;
 
                 // Stream TCP payload directly into the block file.  The old path
@@ -466,28 +534,44 @@ namespace ECProject
                     while (remaining > 0 && !ec)
                     {
                         const size_t requested = std::min(buffer.size(), remaining);
-                        if (ingress_bw != nullptr)
-                            ingress_bw->wait_for_transfer(requested);
-                        const size_t read_bytes =
-                            static_cast<size_t>(asio::read(socket, asio::buffer(buffer.data(), requested), ec));
-                        if (ec || read_bytes != requested)
+                        // Credit real NIC/disk wait time against the link budget (claim + I/O +
+                        // remainder) so a 1 Gbps host is not paced at ~B/2.
+                        tcp_read_with_shared_bandwidth(socket, buffer.data(), requested, ingress_bw, ec,
+                                                       SharedBandwidthPace::DrainThenAccount);
+                        if (ec)
                             break;
                         if (!started)
                         {
                             disk_begin = std::chrono::high_resolution_clock::now();
                             started = true;
                         }
-                        ofs.write(buffer.data(), static_cast<std::streamsize>(read_bytes));
+                        const auto write_begin = std::chrono::high_resolution_clock::now();
+                        ofs.write(buffer.data(), static_cast<std::streamsize>(requested));
+                        disk_active_sec +=
+                            std::chrono::duration<double>(
+                                std::chrono::high_resolution_clock::now() - write_begin)
+                                .count();
                         if (!ofs.good())
                         {
                             ec = asio::error::fault;
                             break;
                         }
-                        wrote += read_bytes;
-                        remaining -= read_bytes;
+                        wrote += requested;
+                        remaining -= requested;
                     }
+                    const auto flush_begin = std::chrono::high_resolution_clock::now();
                     ofs.flush();
-                    disk_end = std::chrono::high_resolution_clock::now();
+                    disk_active_sec +=
+                        std::chrono::duration<double>(
+                            std::chrono::high_resolution_clock::now() - flush_begin)
+                            .count();
+                    if (disk_begin.time_since_epoch().count() != 0)
+                    {
+                        disk_end =
+                            disk_begin +
+                            std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(
+                                std::chrono::duration<double>(disk_active_sec));
+                    }
                     return !ec && wrote == static_cast<size_t>(recovery_size);
                 };
 
@@ -520,14 +604,32 @@ namespace ECProject
                 }
                 else
                 {
-                    std::ofstream ofs(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
+                    const std::string tmp =
+                        writepath + ".recovery.tmp." +
+                        std::to_string(static_cast<long long>(getpid())) + "." +
+                        std::to_string(static_cast<long long>(
+                            std::chrono::steady_clock::now().time_since_epoch().count()));
+                    std::ofstream ofs(tmp, std::ios::binary | std::ios::out | std::ios::trunc);
                     if (!ofs.is_open())
                     {
-                        std::cerr << "[Recovery] Failed to open file: " << writepath << std::endl;
-                        exit(-1);
+                        std::cerr << "[Recovery] Failed to open temp file: " << tmp << std::endl;
                     }
-                    ok = stream_to_file(ofs);
-                    ofs.close();
+                    else
+                    {
+                        ok = stream_to_file(ofs);
+                        ofs.close();
+                        if (ok)
+                        {
+                            if (std::rename(tmp.c_str(), writepath.c_str()) != 0)
+                            {
+                                std::cerr << "[Recovery] Failed to publish temp file: " << tmp
+                                          << " -> " << writepath << std::endl;
+                                ok = false;
+                            }
+                        }
+                        if (!ok)
+                            std::remove(tmp.c_str());
+                    }
                 }
 
                 asio::error_code ignore_ec;
@@ -547,6 +649,7 @@ namespace ECProject
                     response->set_disk_io_end_time(
                         std::chrono::duration_cast<std::chrono::duration<double>>(disk_end.time_since_epoch()).count());
                 }
+                response->set_message(ok);
 
                 if (IF_DEBUG)
                 {
@@ -565,7 +668,6 @@ namespace ECProject
         {
             std::thread my_thread(handler, block_key, block_id, recovery_offset, recovery_size, stripe_mode);
             my_thread.join();
-            response->set_message(true);
         }
         catch (const std::exception &e)
         {
@@ -709,10 +811,6 @@ namespace ECProject
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), block_size), ec);
 
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
-
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
                 if (access(targetdir.c_str(), 0) == -1)
@@ -720,15 +818,21 @@ namespace ECProject
                     mkdir(targetdir.c_str(), S_IRWXU);
                 }
 
-                // write the data to the disk using pagecache
-                std::ofstream ofs(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
-                ofs.write(buf.data(), block_size);
-                if (IF_DEBUG)
+                // Durable publish before closing TCP so SET completion (peer EOF)
+                // implies the block is visible to a following GET/recovery.
+                if (!write_block_file_atomic(writepath, buf.data(), static_cast<size_t>(block_size)))
                 {
-                    std::cout << "[Datanode" << m_port << "][Write] successfully write " << block_key << " with " << ofs.tellp() << "bytes" << std::endl;
+                    std::cerr << "[Datanode" << m_port << "][Write] atomic write failed for " << block_key << std::endl;
                 }
-                ofs.flush();
-                ofs.close();
+                else if (IF_DEBUG)
+                {
+                    std::cout << "[Datanode" << m_port << "][Write] successfully write " << block_key << " with "
+                              << block_size << "bytes" << std::endl;
+                }
+
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
             }
             catch (const std::exception &e)
             {
@@ -753,10 +857,6 @@ namespace ECProject
 
                 asio::read(socket, asio::buffer(buf.data(), block_size), ec);
 
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
-
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
                 if (access(targetdir.c_str(), 0) == -1)
@@ -764,14 +864,19 @@ namespace ECProject
                     mkdir(targetdir.c_str(), S_IRWXU);
                 }
 
-                std::ofstream ofs(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
-                ofs.write(buf.data(), block_size);
-                if (IF_DEBUG)
+                if (!write_block_file_atomic(writepath, buf.data(), static_cast<size_t>(block_size)))
                 {
-                    std::cout << "[Datanode" << m_port << "][Write] successfully write " << block_key << " with " << ofs.tellp() << "bytes" << std::endl;
+                    std::cerr << "[Datanode" << m_port << "][Write] atomic write failed for " << block_key << std::endl;
                 }
-                ofs.flush();
-                ofs.close();
+                else if (IF_DEBUG)
+                {
+                    std::cout << "[Datanode" << m_port << "][Write] successfully write " << block_key << " with "
+                              << block_size << "bytes" << std::endl;
+                }
+
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
             }
             catch (const std::exception &e)
             {
