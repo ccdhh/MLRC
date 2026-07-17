@@ -12,6 +12,8 @@
 #include "config.h"
 #include "link_bandwidth.h"
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 // #define IF_DEBUG true
 #define IF_DEBUG false
 namespace ECProject
@@ -92,16 +94,22 @@ namespace ECProject
         void initNodeBandwidth();
         void initRepairProxyPairing(const std::string &cluster_info_path);
         bool isLocalRepairProxy(const std::string &proxy_ip, int proxy_port) const;
-        /** nullptr = unlimited to paired local repair proxy; else shared node egress limiter. */
+        /**
+         * Node NIC model: all remote repair-proxy traffic shares one TX / one RX limiter.
+         * nullptr when talking to the paired local repair proxy (same host).
+         */
         SharedBandwidthLimiter *egressBandwidthForRepairProxy(const std::string &proxy_ip, int proxy_port) const;
-        /** nullptr = unlimited from paired local repair proxy; else shared node ingress limiter. */
         SharedBandwidthLimiter *ingressBandwidthForRepairProxy(const std::string &proxy_ip, int proxy_port) const;
 
     private:
+        SharedBandwidthLimiter *nodeIngressBandwidth() const;
+        SharedBandwidthLimiter *nodeEgressBandwidth() const;
+
         std::string m_local_repair_proxy_ip;
         int m_local_repair_proxy_port = 0;
-        std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
-        std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
+        mutable std::mutex m_repair_link_bw_mu;
+        mutable std::shared_ptr<SharedBandwidthLimiter> m_node_ingress_bw;
+        mutable std::shared_ptr<SharedBandwidthLimiter> m_node_egress_bw;
         std::string datanode_ip_port;
         std::string m_ip;
         int m_port;

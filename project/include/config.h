@@ -63,6 +63,9 @@ namespace ECProject
     int ClusterNum = 0;
     std::string CoordinatorIP = "0.0.0.0";
     int CoordinatorPort = 55555;
+    /** Address on which the dedicated client host accepts data-plane replies. */
+    std::string ClientIP = "127.0.0.1";
+    int ClientPort = 55555;
     std::string AppendMode = "UNILRC_MODE";
     std::string CodeType = "UniLRC";
     /** gLRC repair: "phase1", "phase2", "pipeline", or "hybrid". */

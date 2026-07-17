@@ -52,7 +52,7 @@ namespace ECProject
       assert(global_payload >= r &&
              "Error: gLRC global group must hold all r global parities");
       int max_blocks_per_group = std::max(q_max + 1, global_payload + 1);
-      assert(DatanodeNumPerCluster > max_blocks_per_group &&
+      assert(DatanodeNumPerCluster >= max_blocks_per_group &&
              "Error: DatanodeNumPerCluster must fit the largest gLRC placement group");
       assert(ClusterNum >= z && "Error: ClusterNum must be at least z for gLRC");
     }
@@ -150,6 +150,10 @@ namespace ECProject
       CoordinatorIP = std::string(elem->GetText());
     if (auto elem = root->FirstChildElement("CoordinatorPort"))
       CoordinatorPort = std::stoi(elem->GetText());
+    if (auto elem = root->FirstChildElement("ClientIP"))
+      ClientIP = std::string(elem->GetText());
+    if (auto elem = root->FirstChildElement("ClientPort"))
+      ClientPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
       AppendMode = std::string(elem->GetText());
     N = get_N(); // N
@@ -169,8 +173,8 @@ namespace ECProject
     if (NodeBlockBandwidthMBps > 0.0)
     {
       std::cout << "  NodeBlockBandwidthMBps: " << NodeBlockBandwidthMBps << " MB/s" << std::endl;
-      std::cout << "    per-node ingress + egress (symmetric fixed link rate)" << std::endl;
-      std::cout << "    proxy/datanode: SharedBandwidthLimiter on TCP read/write paths" << std::endl;
+      std::cout << "    node NIC model: hop egress + hub/sink aggregate ingress wall-clock floor"
+                << " (fan-in TCP drains unpaced; same-host DN↔proxy unlimited)" << std::endl;
       std::cout << "  SingleBlockTransferTime: "
                 << node_block_transfer_seconds(BlockSize, NodeBlockBandwidthMBps) << " s/block at full link"
                 << std::endl;
@@ -185,6 +189,8 @@ namespace ECProject
     std::cout << "  ClusterNum: " << (int)ClusterNum << " clusters" << std::endl;
     std::cout << "  CoordinatorIP: " << CoordinatorIP << std::endl;
     std::cout << "  CoordinatorPort: " << CoordinatorPort << std::endl;
+    std::cout << "  ClientIP: " << ClientIP << std::endl;
+    std::cout << "  ClientPort: " << ClientPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
     if (CodeType == "gLRC")

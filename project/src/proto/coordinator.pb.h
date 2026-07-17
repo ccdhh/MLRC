@@ -3910,6 +3910,9 @@ class RecoveryReply final :
     kMaxPartitionShardCountFieldNumber = 16,
     kHybridPFieldNumber = 17,
     kHybridPContinuousFieldNumber = 18,
+    kSetupTimeFieldNumber = 19,
+    kDataPlaneTimeFieldNumber = 20,
+    kTeardownTimeFieldNumber = 21,
   };
   // repeated string selected_equations = 9;
   int selected_equations_size() const;
@@ -4129,6 +4132,33 @@ class RecoveryReply final :
   void _internal_set_hybrid_p_continuous(double value);
   public:
 
+  // double setup_time = 19;
+  void clear_setup_time();
+  double setup_time() const;
+  void set_setup_time(double value);
+  private:
+  double _internal_setup_time() const;
+  void _internal_set_setup_time(double value);
+  public:
+
+  // double data_plane_time = 20;
+  void clear_data_plane_time();
+  double data_plane_time() const;
+  void set_data_plane_time(double value);
+  private:
+  double _internal_data_plane_time() const;
+  void _internal_set_data_plane_time(double value);
+  public:
+
+  // double teardown_time = 21;
+  void clear_teardown_time();
+  double teardown_time() const;
+  void set_teardown_time(double value);
+  private:
+  double _internal_teardown_time() const;
+  void _internal_set_teardown_time(double value);
+  public:
+
   // @@protoc_insertion_point(class_scope:coordinator_proto.RecoveryReply)
  private:
   class _Internal;
@@ -4157,6 +4187,9 @@ class RecoveryReply final :
     int32_t max_partition_shard_count_;
     int32_t hybrid_p_;
     double hybrid_p_continuous_;
+    double setup_time_;
+    double data_plane_time_;
+    double teardown_time_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -7154,6 +7187,66 @@ inline void RecoveryReply::_internal_set_hybrid_p_continuous(double value) {
 inline void RecoveryReply::set_hybrid_p_continuous(double value) {
   _internal_set_hybrid_p_continuous(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_p_continuous)
+}
+
+// double setup_time = 19;
+inline void RecoveryReply::clear_setup_time() {
+  _impl_.setup_time_ = 0;
+}
+inline double RecoveryReply::_internal_setup_time() const {
+  return _impl_.setup_time_;
+}
+inline double RecoveryReply::setup_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.setup_time)
+  return _internal_setup_time();
+}
+inline void RecoveryReply::_internal_set_setup_time(double value) {
+
+  _impl_.setup_time_ = value;
+}
+inline void RecoveryReply::set_setup_time(double value) {
+  _internal_set_setup_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.setup_time)
+}
+
+// double data_plane_time = 20;
+inline void RecoveryReply::clear_data_plane_time() {
+  _impl_.data_plane_time_ = 0;
+}
+inline double RecoveryReply::_internal_data_plane_time() const {
+  return _impl_.data_plane_time_;
+}
+inline double RecoveryReply::data_plane_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.data_plane_time)
+  return _internal_data_plane_time();
+}
+inline void RecoveryReply::_internal_set_data_plane_time(double value) {
+
+  _impl_.data_plane_time_ = value;
+}
+inline void RecoveryReply::set_data_plane_time(double value) {
+  _internal_set_data_plane_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.data_plane_time)
+}
+
+// double teardown_time = 21;
+inline void RecoveryReply::clear_teardown_time() {
+  _impl_.teardown_time_ = 0;
+}
+inline double RecoveryReply::_internal_teardown_time() const {
+  return _impl_.teardown_time_;
+}
+inline double RecoveryReply::teardown_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.teardown_time)
+  return _internal_teardown_time();
+}
+inline void RecoveryReply::_internal_set_teardown_time(double value) {
+
+  _impl_.teardown_time_ = value;
+}
+inline void RecoveryReply::set_teardown_time(double value) {
+  _internal_set_teardown_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.teardown_time)
 }
 
 // -------------------------------------------------------------------

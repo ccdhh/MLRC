@@ -4061,10 +4061,11 @@ class RecoveryRequest final :
     kPipelineEqSlotFieldNumber = 44,
     kPipelineMyHopIndexFieldNumber = 52,
     kPipelineHubProxyPortFieldNumber = 54,
-    kGlrcIlpPipelineFieldNumber = 36,
-    kPhase2ShareProxyNodeBandwidthFieldNumber = 73,
     kPipelineLocalFailedBlockIdFieldNumber = 55,
     kPipelineLocalReplacedNodePortFieldNumber = 58,
+    kGlrcIlpPipelineFieldNumber = 36,
+    kPhase2ShareProxyNodeBandwidthFieldNumber = 73,
+    kPhase2ReadyOnlyFieldNumber = 74,
     kPipelineChainHubIsTailFlagFieldNumber = 63,
     kPipelineEquationIsLocalFieldNumber = 64,
     kPipelineMyListenPortFieldNumber = 68,
@@ -5105,6 +5106,24 @@ class RecoveryRequest final :
   void _internal_set_pipeline_hub_proxy_port(int32_t value);
   public:
 
+  // int32 pipeline_local_failed_block_id = 55;
+  void clear_pipeline_local_failed_block_id();
+  int32_t pipeline_local_failed_block_id() const;
+  void set_pipeline_local_failed_block_id(int32_t value);
+  private:
+  int32_t _internal_pipeline_local_failed_block_id() const;
+  void _internal_set_pipeline_local_failed_block_id(int32_t value);
+  public:
+
+  // int32 pipeline_local_replaced_node_port = 58;
+  void clear_pipeline_local_replaced_node_port();
+  int32_t pipeline_local_replaced_node_port() const;
+  void set_pipeline_local_replaced_node_port(int32_t value);
+  private:
+  int32_t _internal_pipeline_local_replaced_node_port() const;
+  void _internal_set_pipeline_local_replaced_node_port(int32_t value);
+  public:
+
   // bool glrc_ilp_pipeline = 36;
   void clear_glrc_ilp_pipeline();
   bool glrc_ilp_pipeline() const;
@@ -5123,22 +5142,13 @@ class RecoveryRequest final :
   void _internal_set_phase2_share_proxy_node_bandwidth(bool value);
   public:
 
-  // int32 pipeline_local_failed_block_id = 55;
-  void clear_pipeline_local_failed_block_id();
-  int32_t pipeline_local_failed_block_id() const;
-  void set_pipeline_local_failed_block_id(int32_t value);
+  // bool phase2_ready_only = 74;
+  void clear_phase2_ready_only();
+  bool phase2_ready_only() const;
+  void set_phase2_ready_only(bool value);
   private:
-  int32_t _internal_pipeline_local_failed_block_id() const;
-  void _internal_set_pipeline_local_failed_block_id(int32_t value);
-  public:
-
-  // int32 pipeline_local_replaced_node_port = 58;
-  void clear_pipeline_local_replaced_node_port();
-  int32_t pipeline_local_replaced_node_port() const;
-  void set_pipeline_local_replaced_node_port(int32_t value);
-  private:
-  int32_t _internal_pipeline_local_replaced_node_port() const;
-  void _internal_set_pipeline_local_replaced_node_port(int32_t value);
+  bool _internal_phase2_ready_only() const;
+  void _internal_set_phase2_ready_only(bool value);
   public:
 
   // int32 pipeline_chain_hub_is_tail_flag = 63;
@@ -5288,10 +5298,11 @@ class RecoveryRequest final :
     int32_t pipeline_eq_slot_;
     int32_t pipeline_my_hop_index_;
     int32_t pipeline_hub_proxy_port_;
-    bool glrc_ilp_pipeline_;
-    bool phase2_share_proxy_node_bandwidth_;
     int32_t pipeline_local_failed_block_id_;
     int32_t pipeline_local_replaced_node_port_;
+    bool glrc_ilp_pipeline_;
+    bool phase2_share_proxy_node_bandwidth_;
+    bool phase2_ready_only_;
     int32_t pipeline_chain_hub_is_tail_flag_;
     int32_t pipeline_equation_is_local_;
     int32_t pipeline_my_listen_port_;
@@ -13156,6 +13167,26 @@ inline void RecoveryRequest::_internal_set_phase2_share_proxy_node_bandwidth(boo
 inline void RecoveryRequest::set_phase2_share_proxy_node_bandwidth(bool value) {
   _internal_set_phase2_share_proxy_node_bandwidth(value);
   // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.phase2_share_proxy_node_bandwidth)
+}
+
+// bool phase2_ready_only = 74;
+inline void RecoveryRequest::clear_phase2_ready_only() {
+  _impl_.phase2_ready_only_ = false;
+}
+inline bool RecoveryRequest::_internal_phase2_ready_only() const {
+  return _impl_.phase2_ready_only_;
+}
+inline bool RecoveryRequest::phase2_ready_only() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryRequest.phase2_ready_only)
+  return _internal_phase2_ready_only();
+}
+inline void RecoveryRequest::_internal_set_phase2_ready_only(bool value) {
+
+  _impl_.phase2_ready_only_ = value;
+}
+inline void RecoveryRequest::set_phase2_ready_only(bool value) {
+  _internal_set_phase2_ready_only(value);
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.phase2_ready_only)
 }
 
 // -------------------------------------------------------------------

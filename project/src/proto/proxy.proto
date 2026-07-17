@@ -271,6 +271,8 @@ message RecoveryRequest{
   int32 pipeline_global_shard_count = 72;
   /** Hybrid: phase2 half shares this proxy's node ingress/egress with concurrent pipeline RPCs. */
   bool phase2_share_proxy_node_bandwidth = 73;
+  /** Phase2 only: bind exchange acceptor and return (coordinator READY handshake). */
+  bool phase2_ready_only = 74;
 }
 
 message MultipleRecoveryRequest{

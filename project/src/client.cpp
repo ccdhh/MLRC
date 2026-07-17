@@ -1500,7 +1500,9 @@ namespace ECProject
       request.add_block_ids(block_ids[i]);
 
     coordinator_proto::RecoveryReply reply;
+    const auto rpc_start = std::chrono::steady_clock::now();
     grpc::Status status = m_coordinator_ptr->multiBlockRecovery(&context, request, &reply);
+    metrics.client_wall_time = std::chrono::duration<double>(std::chrono::steady_clock::now() - rpc_start).count();
     if (!status.ok())
     {
       metrics.success = false;
@@ -1517,6 +1519,9 @@ namespace ECProject
     metrics.network_time = reply.network_time();
     metrics.decode_time = reply.decode_time();
     metrics.disk_write_time = reply.disk_write_time();
+    metrics.setup_time = reply.setup_time();
+    metrics.data_plane_time = reply.data_plane_time();
+    metrics.teardown_time = reply.teardown_time();
     metrics.helper_block_count = reply.helper_block_count();
     metrics.repair_mode = reply.repair_mode();
     metrics.equation_policy = reply.equation_policy();

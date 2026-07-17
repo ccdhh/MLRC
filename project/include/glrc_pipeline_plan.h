@@ -37,11 +37,19 @@ namespace ECProject
     int equation_index = -1;
     int eq_slot = -1;
     std::string equation_name;
+    /**
+     * Single-failure local equation repaired as a survivor chain pipeline
+     * (N1→N2→…→R), where R is the failed block's repair proxy (sink).
+     * hops[] are survivors only; sink identity is in local_direct_* fields.
+     */
     bool local_direct = false;
     int local_direct_failed_block_id = -1;
     std::string local_direct_failed_block_key;
     std::string local_direct_replaced_ip;
     int local_direct_replaced_port = 0;
+    /** Sink (R) repair proxy for local_direct chains. */
+    std::string local_direct_sink_proxy_ip;
+    int local_direct_sink_proxy_port = 0;
     /** Ordered hops (head -> tail). Tail may be hub when hub participates in the equation. */
     std::vector<GlrcPipelineHopInfo> hops;
     bool hub_is_chain_tail = false;
@@ -59,6 +67,7 @@ namespace ECProject
     unsigned char hub_coef = 0;
     int exchange_epoch = 0;
     std::vector<GlrcPipelineChainPlan> hub_chains;
+    /** Local single-fail equations as single-chain pipelines into a sink R. */
     std::vector<GlrcPipelineChainPlan> local_direct_chains;
   };
 

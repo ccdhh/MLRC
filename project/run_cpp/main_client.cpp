@@ -48,29 +48,134 @@ static bool parse_failed_blocks_env(const char *raw, int n, std::vector<int> &ou
 
 #include "runtime_paths.h"
 
-static bool read_glrc_test_params(int n, int &fail_count, int &trial_count)
+static void print_glrc_client_usage(const char *argv0)
+{
+    std::cerr
+        << "Usage: " << (argv0 ? argv0 : "main_client")
+        << " [options] [coordinator_ip:port]\n"
+        << "  -f, --fail-count N   number of failed blocks per trial (1..n-1)\n"
+        << "  -n, --trials N       number of random trials (>=1)\n"
+        << "  --no-warmup          skip pre-trial pipeline warmup recovery\n"
+        << "  -h, --help           show this help\n"
+        << "\n"
+        << "If -f/-n are omitted: prompt interactively when stdin is a TTY;\n"
+        << "otherwise use env GLRC_FAIL_COUNT / GLRC_TRIALS (default 1/1).\n"
+        << "Coordinator may also be set via COORDINATOR_ADDR.\n";
+}
+
+/** Returns false on parse error / --help. Sets *show_help if help was requested. */
+static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &trial_count,
+                                bool &have_f, bool &have_n, std::string &coordinator_override,
+                                bool &show_help, bool &skip_warmup)
+{
+    have_f = false;
+    have_n = false;
+    show_help = false;
+    skip_warmup = false;
+    fail_count = 0;
+    trial_count = 0;
+    coordinator_override.clear();
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        auto need_value = [&](const char *opt) -> const char * {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "missing value for " << opt << std::endl;
+                return nullptr;
+            }
+            return argv[++i];
+        };
+
+        if (arg == "-h" || arg == "--help")
+        {
+            show_help = true;
+            return false;
+        }
+        if (arg == "-f" || arg == "--fail-count")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            fail_count = std::atoi(v);
+            have_f = true;
+            continue;
+        }
+        if (arg == "-n" || arg == "--trials")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            trial_count = std::atoi(v);
+            have_n = true;
+            continue;
+        }
+        if (arg == "--no-warmup")
+        {
+            skip_warmup = true;
+            continue;
+        }
+        if (!arg.empty() && arg[0] == '-')
+        {
+            std::cerr << "unknown option: " << arg << std::endl;
+            return false;
+        }
+        if (!coordinator_override.empty())
+        {
+            std::cerr << "unexpected argument: " << arg << std::endl;
+            return false;
+        }
+        coordinator_override = arg;
+    }
+    return true;
+}
+
+static bool read_glrc_test_params(int n, int &fail_count, int &trial_count,
+                                  bool have_f, bool have_n)
 {
     const char *env_f = std::getenv("GLRC_FAIL_COUNT");
     const char *env_t = std::getenv("GLRC_TRIALS");
     const bool non_interactive = !isatty(STDIN_FILENO);
 
-    if (non_interactive)
+    if (!have_f)
     {
-        fail_count = (env_f && env_f[0]) ? std::max(1, std::atoi(env_f)) : 1;
-        trial_count = (env_t && env_t[0]) ? std::max(1, std::atoi(env_t)) : 1;
-        return true;
+        if (non_interactive)
+            fail_count = (env_f && env_f[0]) ? std::max(1, std::atoi(env_f)) : 1;
+        else
+        {
+            std::cout << "请输入失败块数量 f (1.." << (n - 1) << "): " << std::flush;
+            if (!(std::cin >> fail_count))
+            {
+                std::cerr << "无效的 f，请输入 [1, " << (n - 1) << "] 之间的整数。" << std::endl;
+                return false;
+            }
+        }
     }
-
-    std::cout << "请输入失败块数量 f (1.." << (n - 1) << "): " << std::flush;
-    if (!(std::cin >> fail_count) || fail_count < 1 || fail_count >= n)
+    if (fail_count < 1 || fail_count >= n)
     {
-        std::cerr << "无效的 f，请输入 [1, " << (n - 1) << "] 之间的整数。" << std::endl;
+        std::cerr << "无效的 f=" << fail_count << "，请输入 [1, " << (n - 1) << "] 之间的整数。"
+                  << std::endl;
         return false;
     }
-    std::cout << "请输入随机实验次数: " << std::flush;
-    if (!(std::cin >> trial_count) || trial_count < 1)
+
+    if (!have_n)
     {
-        std::cerr << "无效的实验次数，请输入 >= 1 的整数。" << std::endl;
+        if (non_interactive)
+            trial_count = (env_t && env_t[0]) ? std::max(1, std::atoi(env_t)) : 1;
+        else
+        {
+            std::cout << "请输入随机实验次数: " << std::flush;
+            if (!(std::cin >> trial_count))
+            {
+                std::cerr << "无效的实验次数，请输入 >= 1 的整数。" << std::endl;
+                return false;
+            }
+        }
+    }
+    if (trial_count < 1)
+    {
+        std::cerr << "无效的实验次数=" << trial_count << "，请输入 >= 1 的整数。" << std::endl;
         return false;
     }
     return true;
@@ -96,15 +201,23 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
     std::cout << "  --- timing (seconds) ---" << std::endl;
     std::cout << "  equation_select_time:  " << m.ilp_time
               << "  (ILP / local-then-global planner)" << std::endl;
-    std::cout << "  disk_read_time:          " << m.disk_read_time << std::endl;
-    std::cout << "  network_transfer_time:   " << m.network_time << std::endl;
-    std::cout << "  decode_time:             " << m.decode_time << std::endl;
-    std::cout << "  disk_write_time:         " << m.disk_write_time << std::endl;
-    std::cout << "  repair_time:             " << m.total_time
-              << "  (ILP plan → recovery complete";
     if (m.repair_mode == "pipeline")
-      std::cout << "; excl. orchestration wait & teardown";
-    std::cout << ")" << std::endl;
+    {
+      std::cout << "  setup_time:              " << m.setup_time << "  (plan + listener readiness)" << std::endl;
+      std::cout << "  data_plane_time:         " << m.data_plane_time
+                << "  (stream + shard decode + writeback wall-clock)" << std::endl;
+      std::cout << "  teardown_time:           " << m.teardown_time << std::endl;
+      std::cout << "  client_wall_time:        " << m.client_wall_time << "  (entire coordinator RPC)" << std::endl;
+    }
+    else
+      std::cout << "  network_transfer_time:   " << m.network_time << std::endl;
+    std::cout << "  disk_read_time:          " << m.disk_read_time << "  (legacy per-proxy metric)" << std::endl;
+    std::cout << "  decode_time:             " << m.decode_time << std::endl;
+    std::cout << "  disk_write_time:         " << m.disk_write_time << "  (overlapping work total)" << std::endl;
+    std::cout << "  repair_time:             " << m.total_time;
+    if (m.repair_mode == "pipeline")
+      std::cout << "  (data-plane wall-clock)";
+    std::cout << std::endl;
     if (m.repair_mode == "hybrid")
     {
         std::cout << "  hybrid_p:                " << m.hybrid_p;
@@ -114,21 +227,21 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
     }
 }
 
-static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config)
+static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config,
+                                int fail_count, int trial_count, bool have_f, bool have_n,
+                                bool skip_warmup)
 {
     const int k = config->k;
     const int r = config->r;
     const int z = config->z;
     const int n = k + r + z;
     const int stripe_num = env_int_or("GLRC_STRIPE_NUM", 1);
-    int fail_count = 0;
-    int trial_count = 0;
 
     std::cout << "[gLRC] config (n,k,r,z)=(" << n << "," << k << "," << r << "," << z << ")"
               << " mode=" << config->GlrcRepairMode
               << " policy=" << config->GlrcEquationPolicy << std::endl;
 
-    if (!read_glrc_test_params(n, fail_count, trial_count))
+    if (!read_glrc_test_params(n, fail_count, trial_count, have_f, have_n))
         return 1;
 
     std::cout << "[gLRC] Writing " << stripe_num << " stripe(s)..." << std::endl;
@@ -147,6 +260,29 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     {
         std::cerr << "[gLRC] GLRC_FAILED_BLOCKS count must match GLRC_FAIL_COUNT=" << fail_count << std::endl;
         return 1;
+    }
+
+    const bool warmup_enabled = [&]() {
+        if (skip_warmup || config->GlrcRepairMode != "pipeline")
+            return false;
+        if (const char *w = std::getenv("GLRC_WARMUP"))
+            return w[0] != '0';
+        return true;
+    }();
+    if (warmup_enabled)
+    {
+        std::vector<int> warmup_failed{0};
+        if (use_fixed && !fixed_failed.empty())
+            warmup_failed = {fixed_failed.front()};
+        std::cout << "\n[gLRC] Warmup recovery (excluded from trial stats) failed_blocks: "
+                  << ECProject::glrc_format_block_list(warmup_failed, k, r, z) << std::endl;
+        ECProject::GlrcMultiRecoveryMetrics warmup_metrics;
+        if (!client.multi_block_recovery_breakdown(0, warmup_failed, warmup_metrics))
+        {
+            std::cerr << "  Warmup FAILED: " << warmup_metrics.message << std::endl;
+            return 1;
+        }
+        std::cout << "  warmup data_plane_time: " << warmup_metrics.network_time << " s" << std::endl;
     }
 
     std::cout << "\n[gLRC] Running " << trial_count << " random trial(s) with f=" << fail_count
@@ -223,12 +359,13 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         std::cout << std::fixed << std::setprecision(6);
         std::cout << "  avg_equation_select_time:  " << (sum_ilp / cnt) << " s" << std::endl;
         std::cout << "  avg_disk_read_time:        " << (sum_read / cnt) << " s" << std::endl;
-        std::cout << "  avg_network_transfer_time: " << (sum_net / cnt) << " s" << std::endl;
+        std::cout << "  avg_network_transfer_time: " << (sum_net / cnt)
+                  << " s  (data-plane wall-clock for pipeline)" << std::endl;
         std::cout << "  avg_decode_time:           " << (sum_decode / cnt) << " s" << std::endl;
         std::cout << "  avg_disk_write_time:       " << (sum_write / cnt) << " s" << std::endl;
         std::cout << "  avg_repair_time:           " << (sum_total / cnt) << " s";
         if (config->GlrcRepairMode == "pipeline")
-          std::cout << "  (excl. orchestration wait & teardown)";
+          std::cout << "  (data-plane wall-clock)";
         std::cout << std::endl;
         std::cout << "  avg_helper_blocks:         " << (sum_helpers / cnt) << std::endl;
         if (config->GlrcRepairMode == "hybrid" && hybrid_success_count > 0)
@@ -252,6 +389,16 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
 
 int main(int argc, char **argv)
 {
+    int cli_fail = 0, cli_trials = 0;
+    bool have_f = false, have_n = false, show_help = false, skip_warmup = false;
+    std::string coordinator_override;
+    if (!parse_glrc_cli_args(argc, argv, cli_fail, cli_trials, have_f, have_n,
+                             coordinator_override, show_help, skip_warmup))
+    {
+        print_glrc_client_usage(argc > 0 ? argv[0] : nullptr);
+        return show_help ? 0 : 2;
+    }
+
     const std::string sys_config_path =
         resolve_path_relative_to_executable(argc > 0 ? argv[0] : nullptr,
                                             "../../config/parameterConfiguration.xml");
@@ -260,8 +407,8 @@ int main(int argc, char **argv)
     const ECProject::Config *config = ECProject::Config::getInstance(sys_config_path);
 
     std::string coordinator_addr = config->CoordinatorIP + ":" + std::to_string(config->CoordinatorPort);
-    if (argc >= 2) {
-        coordinator_addr = argv[1];
+    if (!coordinator_override.empty()) {
+        coordinator_addr = coordinator_override;
         std::cout << "Using coordinator address (from argv): " << coordinator_addr << std::endl;
     } else {
         const char *env_addr = std::getenv("COORDINATOR_ADDR");
@@ -271,13 +418,13 @@ int main(int argc, char **argv)
         }
     }
 
-    std::string client_ip = "10.10.1.1";
-    int client_port = 55555;
+    std::string client_ip = config->ClientIP;
+    int client_port = config->ClientPort;
     ECProject::Client client(client_ip, client_port, coordinator_addr, sys_config_path);
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
     if (config->CodeType == "gLRC")
-        return run_glrc_repair_test(client, config);
+        return run_glrc_repair_test(client, config, cli_fail, cli_trials, have_f, have_n, skip_warmup);
 
     std::vector<int> parameters = client.get_parameters();
     int k = parameters[0];

@@ -206,6 +206,11 @@ message RecoveryReply {
   int32 hybrid_p = 17;
   /** Continuous optimum p* before discretization (hybrid auto/fixed only). */
   double hybrid_p_continuous = 18;
+  // Pipeline wall-clock phases.  setup and teardown are reported separately
+  // so data_plane_time is directly comparable with the shard pipeline model.
+  double setup_time = 19;
+  double data_plane_time = 20;
+  double teardown_time = 21;
 }
 
 message StripePos {

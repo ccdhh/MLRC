@@ -24,6 +24,8 @@ namespace ECProject
 {
   /** Last error from glrcIlpPhase2Recovery on this thread (for gRPC status). */
   std::string glrc_phase2_take_last_error();
+  /** Drop any phase2 READY acceptors left from a failed or completed recovery. */
+  void glrc_phase2_clear_ready_session();
   /** Last error from glrcIlpPipelineRecovery on this thread (for gRPC status). */
   std::string glrc_pipeline_take_last_error();
 
@@ -134,11 +136,32 @@ namespace ECProject
     void get_from_node_breakdown(const std::string &block_key, char *block_value, const size_t block_size, const char *datanode_ip, const int datanode_port, bool *status, int index, 
       double *disk_io_start_time, double *disk_io_end_time, double *network_start_time, double *network_end_time, double *grpc_notify_time, double *grpc_start_time);
     void initNodeBandwidth();
+    /** Reset this proxy's node NIC ingress/egress limiters. */
+    void resetPeerLinkBandwidth();
     /** True when ip:port is this repair proxy's paired datanode (see clusterInformation.xml). */
     bool isLocalDatanode(const char *ip, int port) const;
-    /** nullptr = unlimited for paired local datanode; else shared proxy ingress limiter. */
+    /**
+     * Node NIC bandwidth model (NodeBlockBandwidthMBps):
+     * - One shared ingress limiter: all inbound remote traffic contends for RX.
+     * - One shared egress limiter: all outbound remote traffic contends for TX.
+     * - Same-host / empty peer / co-located DN↔proxy: unlimited (nullptr).
+     * - Hop→hop: sender node egress (Primary).
+     * - Into hub/sink: omit sender egress; drain TCP without pacing and enforce
+     *   aggregate N*B/BW ingress as a wall-clock floor (never sleep on a live reader).
+     * - Remote DN→proxy: datanode node egress only.
+     * Do not pace intermediate hop RX in software.
+     */
+    SharedBandwidthLimiter *nodeIngressBandwidth() const;
+    SharedBandwidthLimiter *nodeEgressBandwidth() const;
+    /** Alias of nodeIngressBandwidth() when peer is remote; nullptr if same-host/empty. */
+    SharedBandwidthLimiter *ingressBandwidthForPeer(const std::string &peer_ip) const;
+    /** Alias of nodeEgressBandwidth() when peer is remote; nullptr if same-host/empty. */
+    SharedBandwidthLimiter *egressBandwidthForPeer(const std::string &peer_ip) const;
+    /** Hub/local-sink fan-in uses the same node RX budget. */
+    SharedBandwidthLimiter *pipelineFanInIngressBandwidth() const;
+    /** Always nullptr; DN→proxy paced on datanode egress when remote. */
     SharedBandwidthLimiter *ingressBandwidthForDatanodeRead(const char *ip, int port) const;
-    /** nullptr = unlimited to paired local datanode; else shared proxy egress limiter. */
+    /** nullptr = local DN; else this proxy's node egress (proxy→remote DN). */
     SharedBandwidthLimiter *egressBandwidthForDatanodeWrite(const char *ip, int port) const;
     bool GetFromDatanodeStripeRangeBreakdown(const std::string &key, char *value, size_t full_block_size,
                                              int read_offset, int read_length, const char *ip, const int port,
@@ -190,8 +213,9 @@ namespace ECProject
     int m_phase2_block_bw_epoch = -1;
     std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_ingress_bw;
     std::unordered_map<int, std::shared_ptr<SharedBandwidthLimiter>> m_phase2_block_egress_bw;
-    std::shared_ptr<SharedBandwidthLimiter> m_ingress_bandwidth;
-    std::shared_ptr<SharedBandwidthLimiter> m_egress_bandwidth;
+    mutable std::mutex m_peer_link_bw_mu;
+    mutable std::shared_ptr<SharedBandwidthLimiter> m_node_ingress_bw;
+    mutable std::shared_ptr<SharedBandwidthLimiter> m_node_egress_bw;
     std::mutex m_mutex;
     std::condition_variable cv;
     bool init_coordinator();

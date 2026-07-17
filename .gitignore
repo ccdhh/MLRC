@@ -13,3 +13,5 @@ project/config/*
 small_tools/*
 !small_tools/generate_local_cluster.py
 logs/*
+**/__pycache__/
+*.pyc
