@@ -3264,8 +3264,6 @@ namespace ECProject
       std::vector<std::string> ready_errors;
       for (int pi = f - 1; pi >= 1; pi--)
       {
-        if (shard_plan.partitions[pi].shard_count <= 0)
-          continue;
         ready_threads.emplace_back([&, pi]() {
           if (!run_partition_ready(pi))
           {

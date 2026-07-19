@@ -2546,8 +2546,10 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   // Expose the actual shared-hub egress critical path separately from the
   // sum-of-work diagnostic below. The coordinator uses this wall time when
   // balancing Hybrid's failed-node hotspot against the Pipeline hub.
-  response->set_network_start_time(0.0);
-  response->set_network_end_time(max_write_net);
+  const double hub_metric_end =
+      std::chrono::duration<double>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+  response->set_network_start_time(hub_metric_end - max_write_net);
+  response->set_network_end_time(hub_metric_end);
   response->set_dest_data_node_network_time(total_write_net);
   response->set_dest_data_node_disk_io_time(total_write_disk);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hub decode success chains=" << hub_chain_n
