@@ -143,7 +143,9 @@ void estimate_hybrid_times(int p, int f, int global_shard_count, int stripe_byte
         hot_block_id >= 0 && local_direct_failed.count(hot_block_id) == 0 && lower > 0;
     if (hot_receives_pipeline)
     {
-      // Hot Phase2 block also ingests pipeline stripe [p,S): (S-p) shards at link rate B.
+      // The hub writes the Pipeline tail directly to this failed datanode,
+      // which still consumes the same physical node ingress as the Phase2
+      // helper and exchange traffic for the hot failure partition.
       const size_t write_bytes = static_cast<size_t>(lower) * static_cast<size_t>(stripe_byte_len);
       t_phase2_out += node_block_transfer_seconds(write_bytes, link_mbps);
     }
@@ -185,8 +187,10 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
   const double hub_helper_slope = hub_in_helper_set(hub_block_id, plan_ilp) ? inv_b : 0.0;
   const double hub_chain_slope = f_hub > 0 ? static_cast<double>(f_hub) * inv_b : 0.0;
 
-  // T_hot(p) ≈ a2*p + hot_pipe_slope*(S-p)   [pipeline tail on hottest Phase2 block]
-  // T_hub(p) = hub_helper_slope*p + hub_chain_slope*(S-p)
+  // T_hot(p) ≈ a2*p + hot_pipe_slope*(S-p): the Pipeline tail writes into
+  // the hot failed datanode and shares that physical node's ingress with
+  // Phase2 helper and exchange traffic.
+  // T_hub(p) = hub_helper_slope*p + hub_chain_slope*(S-p).
   // Expand to slope*p + intercept for p* = (hub_intercept - hot_intercept) / (hot_slope - hub_slope).
   const double hot_slope = a2 - hot_pipe_slope;
   const double hub_slope = hub_helper_slope - hub_chain_slope;

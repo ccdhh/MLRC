@@ -13181,7 +13181,7 @@ inline bool RecoveryRequest::phase2_ready_only() const {
   return _internal_phase2_ready_only();
 }
 inline void RecoveryRequest::_internal_set_phase2_ready_only(bool value) {
-
+  
   _impl_.phase2_ready_only_ = value;
 }
 inline void RecoveryRequest::set_phase2_ready_only(bool value) {

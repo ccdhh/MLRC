@@ -7201,7 +7201,7 @@ inline double RecoveryReply::setup_time() const {
   return _internal_setup_time();
 }
 inline void RecoveryReply::_internal_set_setup_time(double value) {
-
+  
   _impl_.setup_time_ = value;
 }
 inline void RecoveryReply::set_setup_time(double value) {
@@ -7221,7 +7221,7 @@ inline double RecoveryReply::data_plane_time() const {
   return _internal_data_plane_time();
 }
 inline void RecoveryReply::_internal_set_data_plane_time(double value) {
-
+  
   _impl_.data_plane_time_ = value;
 }
 inline void RecoveryReply::set_data_plane_time(double value) {
@@ -7241,7 +7241,7 @@ inline double RecoveryReply::teardown_time() const {
   return _internal_teardown_time();
 }
 inline void RecoveryReply::_internal_set_teardown_time(double value) {
-
+  
   _impl_.teardown_time_ = value;
 }
 inline void RecoveryReply::set_teardown_time(double value) {
