@@ -256,8 +256,15 @@ namespace ECProject
         exit(-1);
       }
       asio::write(socket, asio::buffer(slice_buf, slice_size), error);
+
+      // Wait until DN finishes durable publish and closes.  Closing immediately
+      // after the write raced with DN's trunc+write and let recovery GET a
+      // partial helper block (hybrid pipeline hop local read EOF).
       asio::error_code ignore_ec;
-      socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+      socket.shutdown(asio::ip::tcp::socket::shutdown_send, ignore_ec);
+      char durable_probe = 0;
+      asio::error_code ack_ec;
+      asio::read(socket, asio::buffer(&durable_probe, 1), ack_ec);
       socket.close(ignore_ec);
       if (IF_DEBUG)
       {

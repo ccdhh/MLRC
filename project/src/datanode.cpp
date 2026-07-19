@@ -290,38 +290,59 @@ namespace ECProject
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), append_size), ec);
 
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
-
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
-
-                // std::cout << "[Datanode" << m_port << "][Append101] writepath: " << writepath << " append_offset: " << append_offset << " append_size: " << append_size << std::endl;
 
                 if (access(targetdir.c_str(), 0) == -1)
                 {
                     createDirectories(targetdir);
                 }
 
+                // Durable publish before closing TCP so APPEND completion (peer EOF)
+                // implies the block is visible to a following GET/recovery.  Closing
+                // early raced hybrid pipeline reads of helper offsets while the file
+                // was still growing after SET/uploadFullValue commit.
+                bool ok = true;
                 if (append_offset == 0)
                 {
-                    // Create or truncate when starting a block from offset 0 (repair may rewrite).
-                    std::ofstream create_file(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
-                    create_file.close();
+                    ok = write_block_file_atomic(writepath, buf.data(), static_cast<size_t>(append_size));
+                }
+                else
+                {
+                    std::fstream append_file(writepath, std::ios::binary | std::ios::in | std::ios::out);
+                    if (!append_file)
+                    {
+                        append_file.open(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
+                        append_file.close();
+                        append_file.open(writepath, std::ios::binary | std::ios::in | std::ios::out);
+                    }
+                    if (!append_file)
+                    {
+                        ok = false;
+                    }
+                    else
+                    {
+                        append_file.seekp(append_offset, std::ios::beg);
+                        append_file.write(buf.data(), append_size);
+                        append_file.flush();
+                        ok = static_cast<bool>(append_file);
+                        append_file.close();
+                    }
+                }
+                if (!ok)
+                {
+                    std::cerr << "[Datanode" << m_port << "][Append] durable write failed for "
+                              << block_key << " offset=" << append_offset << " size=" << append_size << std::endl;
+                }
+                else if (IF_DEBUG)
+                {
+                    std::cout << "[Datanode" << m_port << "][Append120] successfully append data block "
+                              << block_key << " with " << append_size << " bytes" << std::endl;
                 }
 
-                // Open file in append mode
-                // write the data to the disk using pagecache
-                std::ofstream append_file(writepath, std::ios::binary | std::ios::out | std::ios::app);
-                // Append data from buffer to end of file
-                append_file.write(buf.data(), append_size);
-                if (IF_DEBUG)
-                {
-                    std::cout << "[Datanode" << m_port << "][Append120] successfully append data block " << block_key << " with " << append_size << " bytes" << std::endl;
-                }
-                append_file.flush();
-                append_file.close();
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
             }
             catch (const std::exception &e)
             {
@@ -334,52 +355,68 @@ namespace ECProject
         {
             try
             {
-                char *buf = new char[append_size];
+                std::vector<char> buf(append_size);
                 // only send data
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
-                asio::read(socket, asio::buffer(buf, append_size), ec);
-
-                asio::error_code ignore_ec;
-                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
-                socket.close(ignore_ec);
+                asio::read(socket, asio::buffer(buf.data(), append_size), ec);
 
                 std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
                 std::string writepath = targetdir + block_key;
-
-                // std::cout << "[Datanode" << m_port << "][Append101] writepath: " << writepath << " append_offset: " << append_offset << " append_size: " << append_size << std::endl;
 
                 if (access(targetdir.c_str(), 0) == -1)
                 {
                     createDirectories(targetdir);
                 }
 
-                if (append_offset == 0 && access(writepath.c_str(), 0) == -1)
-                {
-                    // std::cout << "create parity block file with path: " << writepath << std::endl;
-                    // Create new file if append_offset is 0 and file does not exist
-                    std::ofstream create_file(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
-                    create_file.close();
-                }
-
-                // serialize and append to file
+                bool ok = true;
                 if (is_serialized)
                 {
-                    serialize(writepath, ParitySlice(append_offset, append_size, buf));
+                    serialize(writepath, ParitySlice(append_offset, append_size, buf.data()));
+                }
+                else if (append_offset == 0)
+                {
+                    ok = write_block_file_atomic(writepath, buf.data(), static_cast<size_t>(append_size));
                 }
                 else
                 {
-                    std::ofstream append_file(writepath, std::ios::binary | std::ios::out | std::ios::app);
-                    append_file.write(buf, append_size);
-                    append_file.flush();
-                    append_file.close();
+                    std::fstream append_file(writepath, std::ios::binary | std::ios::in | std::ios::out);
+                    if (!append_file)
+                    {
+                        append_file.open(writepath, std::ios::binary | std::ios::out | std::ios::trunc);
+                        append_file.close();
+                        append_file.open(writepath, std::ios::binary | std::ios::in | std::ios::out);
+                    }
+                    if (!append_file)
+                    {
+                        ok = false;
+                    }
+                    else
+                    {
+                        append_file.seekp(append_offset, std::ios::beg);
+                        append_file.write(buf.data(), append_size);
+                        append_file.flush();
+                        ok = static_cast<bool>(append_file);
+                        append_file.close();
+                    }
                 }
 
-                if (IF_DEBUG)
+                if (!ok)
                 {
-                    std::cout << "[Datanode" << m_port << "][Append167] successfully append parity block " << block_key << " with " << append_size << " bytes" << std::endl;
+                    std::cerr << "[Datanode" << m_port << "][Append] durable write failed for "
+                              << block_key << " offset=" << append_offset << " size=" << append_size << std::endl;
                 }
+                else if (IF_DEBUG)
+                {
+                    std::cout << "[Datanode" << m_port << "][Append167] successfully append parity block "
+                              << block_key << " with " << append_size << " bytes" << std::endl;
+                }
+
+                // Close only after durable publish so AppendToDatanode's peer-EOF wait is meaningful.
+                asio::error_code ignore_ec;
+                socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
+                socket.close(ignore_ec);
             }
             catch (const std::exception &e)
             {
