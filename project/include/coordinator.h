@@ -177,7 +177,9 @@ namespace ECProject
                                                    const GlrcIlpRepairPlan *preset_plan,
                                                    const GlrcPipelinePlan *preset_pipeline, int hub_block_id_preset,
                                                    int global_shard_begin, int local_shard_count_override,
-                                                   bool acquire_mutex, double *out_orchestration_wait_sec);
+                                                   bool acquire_mutex, double *out_orchestration_wait_sec,
+                                                   double *out_hub_egress_wall_sec = nullptr,
+                                                   double *out_local_direct_hot_wall_sec = nullptr);
     bool recovery_glrc_ilp_hybrid_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                             coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_one_block_breakdown(int stripe_id, int failed_block_id, 

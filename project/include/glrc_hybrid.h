@@ -26,7 +26,8 @@ struct GlrcHybridChooseResult
  * GlrcHybridP config: "auto" or integer in [0, S-1].
  *
  * Auto mode: solve continuous p* from T_hot(p) ≈ T_hub(p), where
- *   T_hot(p) ≈ a2*p + (σ/B)*(S-p) on the hottest Phase2 block (if it also receives pipeline tail),
+ *   T_hot(p) ≈ a2*p + (σ/B)*(S-p) on the hottest failed node; every Pipeline
+ *              tail enters it through either local-direct receive or hub writeback,
  *   T_hub(p)  = (σ/B)*p [hub helper read] + f_hub*(σ/B)*(S-p) [hub chains],
  * then discretize by comparing floor(p*) and ceil(p*) and picking the one with smaller
  * max(T_phase2_est, T_pipeline_est).

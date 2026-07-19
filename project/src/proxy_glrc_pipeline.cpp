@@ -1596,11 +1596,11 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
     close_pipeline_acceptor(acceptor);
     set_pipeline_socket_timeouts(in_socket, kPipelineSocketTimeoutSec);
 
-    // Drain the TCP stream without sleeping between shards.  Receiver-side
-    // wait-before-read/accounting previously filled the TCP window and caused
-    // short streams under fan-in.  Enforce this node's aggregate RX budget as
-    // a wall-clock floor after the stream has been drained.
-    SharedBandwidthLimiter *ingress_bw = nullptr;
+    // The local-direct tail enters the failed node through this proxy and must
+    // share the same node RX timeline as Phase2 helper and peer-exchange
+    // traffic. DrainThenAccount in recv_pipeline_frame avoids wait-before-read
+    // backpressure while preserving the aggregate ingress budget.
+    SharedBandwidthLimiter *ingress_bw = nodeIngressBandwidth();
     SharedBandwidthLimiter *write_bw = egressBandwidthForDatanodeWrite(rep_ip, rep_port);
 
     std::unordered_map<int, std::vector<unsigned char>> pending;
@@ -1699,13 +1699,6 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
     if (recovery_grpc_thread.joinable())
       recovery_grpc_thread.join();
 
-    const double ingress_floor =
-        node_block_transfer_seconds(static_cast<size_t>(shard_count) *
-                                        static_cast<size_t>(stripe_len),
-                                    m_sys_config->NodeBlockBandwidthMBps);
-    const double elapsed_before_floor =
-        std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count();
-    sleep_for_bandwidth_remainder(ingress_floor, elapsed_before_floor);
     const auto t1 = std::chrono::high_resolution_clock::now();
     const double write_sec = std::chrono::duration<double>(t1 - write_begin).count();
     const double total_sec = std::chrono::duration<double>(t1 - t0).count();
@@ -2473,6 +2466,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
       th.join();
   }
 
+  double max_write_net = 0.0;
   for (auto &ws : write_streams)
   {
     {
@@ -2496,6 +2490,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
                        std::to_string(ws->failed_index);
     }
     total_write_net += ws->network_time;
+    max_write_net = std::max(max_write_net, ws->network_time);
     total_write_disk += ws->recovery_result.disk_io_end_time() -
                         ws->recovery_result.disk_io_start_time();
   }
@@ -2548,6 +2543,11 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
 
   response->set_decode_start_time(min_decode_start);
   response->set_decode_end_time(max_decode_end);
+  // Expose the actual shared-hub egress critical path separately from the
+  // sum-of-work diagnostic below. The coordinator uses this wall time when
+  // balancing Hybrid's failed-node hotspot against the Pipeline hub.
+  response->set_network_start_time(0.0);
+  response->set_network_end_time(max_write_net);
   response->set_dest_data_node_network_time(total_write_net);
   response->set_dest_data_node_disk_io_time(total_write_disk);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hub decode success chains=" << hub_chain_n

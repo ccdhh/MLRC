@@ -117,6 +117,7 @@ void estimate_hybrid_times(int p, int f, int global_shard_count, int stripe_byte
                            const std::unordered_set<int> &local_direct_failed, int hot_block_id,
                            double &t_phase2_out, double &t_pipeline_out)
 {
+  (void)local_direct_failed;
   t_phase2_out = 0.0;
   t_pipeline_out = 0.0;
   if (f < 1 || stripe_byte_len < 1 || global_shard_count < 1)
@@ -139,13 +140,12 @@ void estimate_hybrid_times(int p, int f, int global_shard_count, int stripe_byte
   if (link_mbps > 0.0)
   {
     t_phase2_out = glrc_phase2_est_block_network_sec(h1, f, p_max, stripe_byte_len, link_mbps);
-    const bool hot_receives_pipeline =
-        hot_block_id >= 0 && local_direct_failed.count(hot_block_id) == 0 && lower > 0;
+    const bool hot_receives_pipeline = hot_block_id >= 0 && lower > 0;
     if (hot_receives_pipeline)
     {
-      // The hub writes the Pipeline tail directly to this failed datanode,
-      // which still consumes the same physical node ingress as the Phase2
-      // helper and exchange traffic for the hot failure partition.
+      // Every Pipeline tail enters its failed physical node: either through a
+      // local-direct sink proxy or through hub writeback. It shares that
+      // node's ingress with Phase2 helper and exchange traffic.
       const size_t write_bytes = static_cast<size_t>(lower) * static_cast<size_t>(stripe_byte_len);
       t_phase2_out += node_block_transfer_seconds(write_bytes, link_mbps);
     }
@@ -171,6 +171,7 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
                           const std::unordered_set<int> &local_direct_failed, int hot_block_id,
                           int pipeline_local_direct_count)
 {
+  (void)local_direct_failed;
   if (link_mbps <= 0.0 || f < 1 || global_shard_count < 2 || stripe_byte_len < 1)
     return static_cast<double>(global_shard_count) / 2.0;
 
@@ -180,16 +181,14 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
 
   const int h1 = std::max(1, plan_ilp.helper_block_count);
   const double a2 = static_cast<double>(h1 + f - 1) * inv_b / static_cast<double>(f);
-  const bool hot_receives_pipeline =
-      hot_block_id >= 0 && local_direct_failed.count(hot_block_id) == 0;
+  const bool hot_receives_pipeline = hot_block_id >= 0;
   const double hot_pipe_slope = hot_receives_pipeline ? inv_b : 0.0;
 
   const double hub_helper_slope = hub_in_helper_set(hub_block_id, plan_ilp) ? inv_b : 0.0;
   const double hub_chain_slope = f_hub > 0 ? static_cast<double>(f_hub) * inv_b : 0.0;
 
-  // T_hot(p) ≈ a2*p + hot_pipe_slope*(S-p): the Pipeline tail writes into
-  // the hot failed datanode and shares that physical node's ingress with
-  // Phase2 helper and exchange traffic.
+  // T_hot(p) ≈ a2*p + hot_pipe_slope*(S-p): local-direct receive or hub
+  // writeback shares the hot failed node's ingress with Phase2 traffic.
   // T_hub(p) = hub_helper_slope*p + hub_chain_slope*(S-p).
   // Expand to slope*p + intercept for p* = (hub_intercept - hot_intercept) / (hot_slope - hub_slope).
   const double hot_slope = a2 - hot_pipe_slope;

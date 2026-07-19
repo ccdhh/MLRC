@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/run_datanode.dir/run_cpp/run_datanode.cpp.o"
+  "CMakeFiles/run_datanode.dir/run_cpp/run_datanode.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/client.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/client.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/config.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/config.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/coordinator.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/coordinator.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/datanode.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/datanode.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/glrc_hybrid.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/glrc_hybrid.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/glrc_pipeline_codec.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/glrc_pipeline_codec.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/glrc_pipeline_plan.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/glrc_pipeline_plan.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/glrc_repair_ilp.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/glrc_repair_ilp.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/glrc_shard_plan.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/glrc_shard_plan.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/lrc.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/lrc.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/proxy.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/proxy.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/proxy_glrc_phase2.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/proxy_glrc_phase2.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/proxy_glrc_pipeline.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/proxy_glrc_pipeline.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/tinyxml2.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/tinyxml2.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/toolbox.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/toolbox.cpp.o.d"
+  "CMakeFiles/run_datanode.dir/src/unilrc_encoder.cpp.o"
+  "CMakeFiles/run_datanode.dir/src/unilrc_encoder.cpp.o.d"
+  "run_datanode"
+  "run_datanode.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/run_datanode.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

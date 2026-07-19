@@ -1,0 +1,8 @@
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/proto_gen.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/proto_objs.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/run_coordinator.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/run_proxy.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/run_datanode.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/main_client.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/edit_cache.dir
+/users/chendh/DdlRT/project/build_cursor/CMakeFiles/rebuild_cache.dir

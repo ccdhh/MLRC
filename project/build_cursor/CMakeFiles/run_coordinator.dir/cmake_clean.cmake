@@ -1,0 +1,43 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/run_coordinator.dir/run_cpp/run_coordinator.cpp.o"
+  "CMakeFiles/run_coordinator.dir/run_cpp/run_coordinator.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/client.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/client.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/config.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/config.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/coordinator.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/coordinator.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/datanode.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/datanode.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/glrc_hybrid.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/glrc_hybrid.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/glrc_pipeline_codec.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/glrc_pipeline_codec.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/glrc_pipeline_plan.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/glrc_pipeline_plan.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/glrc_repair_ilp.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/glrc_repair_ilp.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/glrc_shard_plan.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/glrc_shard_plan.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/lrc.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/lrc.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/proxy.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/proxy.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/proxy_glrc_phase2.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/proxy_glrc_phase2.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/proxy_glrc_pipeline.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/proxy_glrc_pipeline.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/tinyxml2.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/tinyxml2.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/toolbox.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/toolbox.cpp.o.d"
+  "CMakeFiles/run_coordinator.dir/src/unilrc_encoder.cpp.o"
+  "CMakeFiles/run_coordinator.dir/src/unilrc_encoder.cpp.o.d"
+  "run_coordinator"
+  "run_coordinator.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/run_coordinator.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()
