@@ -36,6 +36,14 @@ namespace ECProject
     /** Hybrid split p; -1 when repair_mode != hybrid. */
     int hybrid_p = -1;
     double hybrid_p_continuous = 0.0;
+    double hybrid_p_select_time = 0.0;
+    double hybrid_phase2_wall_time = 0.0;
+    double hybrid_pipeline_wall_time = 0.0;
+    double hybrid_phase2_network_hot_time = 0.0;
+    double hybrid_pipeline_tail_ingress_time = 0.0;
+    double hybrid_failed_node_hot_time = 0.0;
+    double hybrid_hub_egress_hot_time = 0.0;
+    double hybrid_commit_time = 0.0;
     std::vector<std::string> selected_equations;
     std::vector<int> helper_block_ids;
   };

@@ -2993,7 +2993,7 @@ namespace ECProject
                                                          coordinator_proto::RecoveryReply *recovery_reply)
   {
     return recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, recovery_reply, nullptr, 0, true,
-                                                 nullptr, false);
+                                                 nullptr, false, "");
   }
 
   bool CoordinatorImpl::recovery_glrc_ilp_phase2_breakdown_ex(int stripe_id,
@@ -3002,7 +3002,8 @@ namespace ECProject
                                                             const GlrcIlpRepairPlan *preset_plan,
                                                             int shard_count_override, bool acquire_mutex,
                                                             double *out_orchestration_wait_sec,
-                                                            bool share_proxy_node_bandwidth)
+                                                            bool share_proxy_node_bandwidth,
+                                                            const std::string &hybrid_commit_token)
   {
     if (m_sys_config->CodeType != "gLRC")
     {
@@ -3133,6 +3134,14 @@ namespace ECProject
       std::string error;
     };
     std::vector<PartitionOutcome> outcomes(f);
+    std::vector<std::unique_ptr<grpc::ClientContext>> partition_contexts;
+    partition_contexts.reserve(f);
+    for (int pi = 0; pi < f; ++pi)
+    {
+      auto ctx = std::make_unique<grpc::ClientContext>();
+      ctx->set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(300));
+      partition_contexts.push_back(std::move(ctx));
+    }
     const uint32_t exchange_epoch = g_glrc_phase2_exchange_epoch.fetch_add(1);
 
     auto fill_phase2_request = [&](proxy_proto::RecoveryRequest &req, int pi, bool ready_only) {
@@ -3151,6 +3160,7 @@ namespace ECProject
       req.set_phase2_exchange_epoch(static_cast<int32_t>(exchange_epoch));
       req.set_phase2_share_proxy_node_bandwidth(share_proxy_node_bandwidth);
       req.set_phase2_ready_only(ready_only);
+      req.set_hybrid_commit_token(hybrid_commit_token);
 
       for (int fid : failed_block_ids)
       {
@@ -3208,17 +3218,23 @@ namespace ECProject
         return;
       }
 
-      grpc::ClientContext ctx;
-      ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(300));
       proxy_proto::RecoveryRequest req;
       proxy_proto::RecoveryReply &rep = outcomes[pi].reply;
       fill_phase2_request(req, pi, false);
 
-      grpc::Status st = proxy_it->second->recoveryBreakdown(&ctx, req, &rep);
+      grpc::Status st = proxy_it->second->recoveryBreakdown(partition_contexts[pi].get(), req, &rep);
       outcomes[pi].ok = st.ok();
       if (!st.ok())
       {
         outcomes[pi].error = st.error_message();
+        // A broken peer connection makes the other partitions unable to
+        // complete their exchange. Cancel them immediately instead of
+        // waiting for every 300-second RPC deadline.
+        for (int pj = 0; pj < f; ++pj)
+        {
+          if (pj != pi)
+            partition_contexts[pj]->TryCancel();
+        }
         std::cout << "[Coordinator] Phase2 partition " << pi << " grpc error: " << st.error_message()
                   << std::endl;
       }
@@ -3287,6 +3303,10 @@ namespace ECProject
       }
     }
 
+    // Match Pipeline's timing boundary: planning, request construction and
+    // listener READY are setup, not data-plane repair. Helper streaming,
+    // decode, peer exchange and durable writeback start after this point.
+    const auto data_plane_start = std::chrono::high_resolution_clock::now();
     for (int pi = 0; pi < f; pi++)
     {
       // A zero-local-shard partition still owns one failed block. It must
@@ -3301,7 +3321,8 @@ namespace ECProject
     glrc_phase2_clear_ready_session();
 
     bool all_ok = true;
-    double max_disk = 0.0, max_net = 0.0, max_decode = 0.0, sum_write_net = 0.0, sum_write_disk = 0.0;
+    double max_disk = 0.0, max_helper_net = 0.0, max_decode = 0.0;
+    double sum_write_net = 0.0, sum_write_disk = 0.0, max_commit_time = 0.0;
     for (int pi = 0; pi < f; pi++)
     {
       if (!outcomes[pi].ok)
@@ -3311,19 +3332,16 @@ namespace ECProject
       }
       const auto &rep = outcomes[pi].reply;
       max_disk = std::max(max_disk, breakdown_metric_span(rep.disk_io_start_time(), rep.disk_io_end_time()));
-      // cross_rack_time currently spans the whole overlapped partition data
-      // plane (helper/decode/exchange/streaming write).  Do not add writeback
-      // or decode again; report the maximum overlapping wall/active span.
-      max_net = std::max(
-          max_net,
-          std::max({breakdown_metric_span(rep.network_start_time(), rep.network_end_time()),
-                    rep.cross_rack_time(), rep.dest_data_node_network_time()}));
+      const double helper_net =
+          breakdown_metric_span(rep.network_start_time(), rep.network_end_time());
+      max_helper_net = std::max(max_helper_net, helper_net);
       max_decode = std::max(
           max_decode,
           std::max(breakdown_metric_span(rep.decode_start_time(), rep.decode_end_time()),
                    rep.cross_rack_xor_time()));
       sum_write_net += rep.dest_data_node_network_time();
       sum_write_disk += rep.dest_data_node_disk_io_time();
+      max_commit_time = std::max(max_commit_time, rep.recovery_commit_time());
     }
 
     if (!all_ok)
@@ -3340,16 +3358,23 @@ namespace ECProject
     }
 
     recovery_reply->set_disk_read_time(max_disk);
-    recovery_reply->set_network_time(max_net);
+    // Expose helper ingress separately from cross_rack_time. The latter spans
+    // almost the complete overlapped partition pipeline and is therefore a
+    // data-plane wall diagnostic, not a pure network-hotspot measurement.
+    recovery_reply->set_network_time(max_helper_net);
     recovery_reply->set_decode_time(max_decode);
     recovery_reply->set_disk_write_time(sum_write_disk);
+    recovery_reply->set_hybrid_commit_time(max_commit_time);
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok");
     const auto repair_end = std::chrono::high_resolution_clock::now();
     double repair_time_sec =
-        std::chrono::duration<double>(repair_end - repair_start).count() - orchestration_wait_sec;
+        std::chrono::duration<double>(repair_end - data_plane_start).count();
     if (repair_time_sec < 0.0)
       repair_time_sec = 0.0;
+    recovery_reply->set_setup_time(
+        std::chrono::duration<double>(data_plane_start - repair_start).count());
+    recovery_reply->set_data_plane_time(repair_time_sec);
     recovery_reply->set_total_time(repair_time_sec);
     if (out_orchestration_wait_sec)
       *out_orchestration_wait_sec = orchestration_wait_sec;
@@ -3363,7 +3388,7 @@ namespace ECProject
                                                             coordinator_proto::RecoveryReply *recovery_reply)
   {
     return recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, recovery_reply, nullptr, nullptr, -1,
-                                                   0, 0, true, nullptr, nullptr, nullptr);
+                                                   0, 0, true, nullptr, nullptr, nullptr, nullptr, "");
   }
 
   bool CoordinatorImpl::recovery_glrc_ilp_pipeline_breakdown_ex(int stripe_id,
@@ -3375,7 +3400,9 @@ namespace ECProject
                                                             int local_shard_count_override, bool acquire_mutex,
                                                             double *out_orchestration_wait_sec,
                                                             double *out_hub_egress_wall_sec,
-                                                            double *out_local_direct_hot_wall_sec)
+                                                            double *out_local_direct_hot_wall_sec,
+                                                            const std::shared_future<void> *teardown_gate,
+                                                            const std::string &hybrid_commit_token)
   {
     if (out_hub_egress_wall_sec)
       *out_hub_egress_wall_sec = 0.0;
@@ -3613,6 +3640,7 @@ namespace ECProject
       }
       req.set_pipeline_hub_block_id(hub_block_id);
       req.set_pipeline_exchange_epoch(exchange_epoch);
+      req.set_hybrid_commit_token(hybrid_commit_token);
       for (int fid : failed_block_ids)
       {
         req.add_failed_block_ids(fid);
@@ -3704,7 +3732,11 @@ namespace ECProject
           fn();
       }
     } session_guard;
-    session_guard.fn = finalize_pipeline_session;
+    session_guard.fn = [&]() {
+      if (teardown_gate)
+        teardown_gate->wait();
+      finalize_pipeline_session();
+    };
     session_guard.armed = !pipeline_plan.hub_chains.empty() || !pipeline_plan.local_direct_chains.empty();
 
     auto allocate_chain_ports = [&](const GlrcPipelineChainPlan &chain, const std::string &sink_ip, int sink_port,
@@ -3988,6 +4020,7 @@ namespace ECProject
     double total_write_disk = 0.0;
     double hub_egress_wall = 0.0;
     double local_direct_hot_wall = 0.0;
+    double max_commit_time = 0.0;
     std::string rpc_errors;
     for (size_t result_index = 0; result_index < results.size(); ++result_index)
     {
@@ -4005,6 +4038,7 @@ namespace ECProject
       max_decode = std::max(max_decode, breakdown_metric_span(res.reply.decode_start_time(), res.reply.decode_end_time()));
       total_write_net += res.reply.dest_data_node_network_time();
       total_write_disk += res.reply.dest_data_node_disk_io_time();
+      max_commit_time = std::max(max_commit_time, res.reply.recovery_commit_time());
       const double role_network_wall =
           breakdown_metric_span(res.reply.network_start_time(), res.reply.network_end_time());
       if (res.role == static_cast<int>(GlrcPipelineRole::HUB))
@@ -4028,6 +4062,7 @@ namespace ECProject
     recovery_reply->set_network_time(data_plane_time_sec);
     recovery_reply->set_decode_time(max_decode);
     recovery_reply->set_disk_write_time(total_write_disk);
+    recovery_reply->set_hybrid_commit_time(max_commit_time);
     recovery_reply->set_setup_time(
         std::chrono::duration<double>(data_plane_start - repair_start).count());
     recovery_reply->set_data_plane_time(data_plane_time_sec);
@@ -4040,7 +4075,7 @@ namespace ECProject
     // guard to prevent a second teardown during scope exit.
     const auto teardown_start = std::chrono::high_resolution_clock::now();
     session_guard.armed = false;
-    finalize_pipeline_session();
+    session_guard.fn();
     recovery_reply->set_teardown_time(
         std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - teardown_start).count());
     recovery_reply->set_total_time(data_plane_time_sec);
@@ -4183,10 +4218,13 @@ namespace ECProject
       plan_ilp_ptr = &plan_ilp;
     }
 
+    const auto p_select_start = std::chrono::high_resolution_clock::now();
     GlrcHybridChooseResult choose = glrc_hybrid_choose_p(
         m_sys_config->k, m_sys_config->r, m_sys_config->z, f, global_S, m_sys_config->BlockSize,
         m_sys_config->NodeBlockBandwidthMBps, plan_ilp_ptr, hub_block_id, pipeline_local_direct_count,
         local_direct_failed, failed_block_ids, hybrid_p_cfg);
+    const double p_select_sec =
+        std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - p_select_start).count();
     if (!choose.success)
     {
       recovery_reply->set_message(choose.error_message);
@@ -4226,16 +4264,29 @@ namespace ECProject
 
     const double planner_sec =
         std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - repair_start).count();
-    const bool adaptive_search = (hybrid_p_cfg == "auto" || hybrid_p_cfg == "AUTO") && p > 0;
+    // A repair RPC must execute exactly one repair. The former online adaptive
+    // search ran and wrote back several complete candidates in one trial,
+    // hid that cost by reporting only the fastest candidate, and churned
+    // enough sockets to destabilize proxies. Auto mode now uses the analytical
+    // floor/ceil selection above; measured sweeps belong in the benchmark
+    // driver, not in the recovery data path.
+    const bool adaptive_search = false;
     coordinator_proto::RecoveryReply reply_phase2;
     coordinator_proto::RecoveryReply reply_pipeline;
     coordinator_proto::RecoveryReply best_reply_phase2;
     coordinator_proto::RecoveryReply best_reply_pipeline;
     int best_p = p;
     double best_data_plane_sec = 1e300;
+    double best_phase2_wall = 0.0;
+    double best_pipeline_wall = 0.0;
+    double best_phase2_network_hot = 0.0;
+    double best_pipeline_tail_ingress = 0.0;
+    double best_failed_node_hot = 0.0;
+    double best_hub_egress_hot = 0.0;
     int attempt = 0;
     int search_direction = 0;
     constexpr double kAdaptiveHotspotGapRatio = 0.10;
+    double best_commit_wall = 0.0;
 
     while (true)
     {
@@ -4265,6 +4316,10 @@ namespace ECProject
       double local_direct_hot_wall = 0.0;
       const int candidate_p = p;
       const int pipeline_shards = global_S - candidate_p;
+      const std::string hybrid_commit_token =
+          candidate_p > 0 ? ("stripe-" + std::to_string(stripe_id) + "-epoch-" +
+                             std::to_string(pipeline_plan.exchange_epoch))
+                          : std::string();
 
       if (candidate_p == 0)
       {
@@ -4276,21 +4331,23 @@ namespace ECProject
       }
       else
       {
+        std::promise<void> phase2_done_promise;
+        const std::shared_future<void> phase2_done = phase2_done_promise.get_future().share();
         std::thread phase2_thread([&]() {
           recovery_glrc_ilp_phase2_breakdown_ex(stripe_id, failed_block_ids, &reply_phase2, &plan_ilp, candidate_p,
-                                                false, &orch_phase2, true);
+                                                false, &orch_phase2, true, hybrid_commit_token);
+          phase2_done_promise.set_value();
         });
         std::thread pipeline_thread([&]() {
           recovery_glrc_ilp_pipeline_breakdown_ex(stripe_id, failed_block_ids, &reply_pipeline, &plan_lf,
                                                   &pipeline_plan, hub_block_id, candidate_p, pipeline_shards, false,
                                                   &orch_pipeline, &pipeline_hub_egress_wall,
-                                                  &local_direct_hot_wall);
+                                                  &local_direct_hot_wall, &phase2_done, hybrid_commit_token);
         });
         phase2_thread.join();
         pipeline_thread.join();
       }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(300));
       if (!reply_phase2.success() || !reply_pipeline.success())
       {
         recovery_reply->set_success(false);
@@ -4302,6 +4359,8 @@ namespace ECProject
 
       const double phase2_wall = candidate_p == 0 ? 0.0 : reply_phase2.total_time();
       const double pipeline_wall = reply_pipeline.total_time();
+      const double commit_wall =
+          std::max(reply_phase2.hybrid_commit_time(), reply_pipeline.hybrid_commit_time());
       const double candidate_data_plane = std::max(phase2_wall, pipeline_wall);
       // The local-direct tail and Phase2 helper/exchange traffic terminate at
       // the same failed-node proxy and now share one ingress limiter. Their
@@ -4322,19 +4381,16 @@ namespace ECProject
       const double model_failed_node_hot = candidate_model.t_phase2_est_sec;
       const double model_hub_egress_hot = candidate_model.t_pipeline_est_sec;
       const double phase2_network_hot = candidate_p == 0 ? 0.0 : reply_phase2.network_time();
-      const bool hot_is_local_direct =
-          candidate_model.max_partition_failed_block_id >= 0 &&
-          local_direct_failed.count(candidate_model.max_partition_failed_block_id) != 0;
       const double pipeline_tail_ingress =
           node_block_transfer_seconds(static_cast<size_t>(pipeline_shards) *
                                           static_cast<size_t>(m_sys_config->BlockSize / global_S),
                                       m_sys_config->NodeBlockBandwidthMBps);
-      // A local-direct tail is already measured on the same proxy ingress
-      // timeline as Phase2. A hub-routed tail terminates at the failed
-      // datanode, so add its one-tail ingress time to the Phase2 node hotspot.
-      const double failed_node_hot_wall =
-          hot_is_local_direct ? std::max(phase2_network_hot, local_direct_hot_wall)
-                              : phase2_network_hot + pipeline_tail_ingress;
+      // The failed physical node receives both Phase2 helper/exchange traffic
+      // and its Pipeline tail, regardless of whether the tail arrives through
+      // a local-direct sink or hub writeback. Keep this as a pure node-NIC
+      // byte-time hotspot; local-direct wall also contains chain latency and
+      // atomic publication, so it must not contaminate the theoretical term.
+      const double failed_node_hot_wall = phase2_network_hot + pipeline_tail_ingress;
       std::cout << "[Coordinator] gLRC Hybrid adaptive candidate p=" << candidate_p
                 << " failed_node_hot=" << failed_node_hot_wall
                 << "s hub_egress_hot=" << pipeline_hub_egress_wall
@@ -4349,6 +4405,13 @@ namespace ECProject
         best_p = candidate_p;
         best_reply_phase2 = reply_phase2;
         best_reply_pipeline = reply_pipeline;
+        best_phase2_wall = phase2_wall;
+        best_pipeline_wall = pipeline_wall;
+        best_phase2_network_hot = phase2_network_hot;
+        best_pipeline_tail_ingress = pipeline_tail_ingress;
+        best_failed_node_hot = failed_node_hot_wall;
+        best_hub_egress_hot = pipeline_hub_egress_wall;
+        best_commit_wall = commit_wall;
       }
 
       if (!adaptive_search || candidate_p == 0)
@@ -4415,12 +4478,22 @@ namespace ECProject
       recovery_reply->set_disk_write_time(reply_phase2.disk_write_time() + reply_pipeline.disk_write_time());
     }
 
-    double repair_time_sec = planner_sec + best_data_plane_sec;
+    double repair_time_sec = best_data_plane_sec;
     if (repair_time_sec < 0.0)
       repair_time_sec = 0.0;
+    recovery_reply->set_setup_time(planner_sec);
+    recovery_reply->set_data_plane_time(repair_time_sec);
     recovery_reply->set_total_time(repair_time_sec);
     recovery_reply->set_hybrid_p(p);
     recovery_reply->set_hybrid_p_continuous(choose.p_continuous);
+    recovery_reply->set_hybrid_p_select_time(p_select_sec);
+    recovery_reply->set_hybrid_phase2_wall_time(best_phase2_wall);
+    recovery_reply->set_hybrid_pipeline_wall_time(best_pipeline_wall);
+    recovery_reply->set_hybrid_phase2_network_hot_time(best_phase2_network_hot);
+    recovery_reply->set_hybrid_pipeline_tail_ingress_time(best_pipeline_tail_ingress);
+    recovery_reply->set_hybrid_failed_node_hot_time(best_failed_node_hot);
+    recovery_reply->set_hybrid_hub_egress_hot_time(best_hub_egress_hot);
+    recovery_reply->set_hybrid_commit_time(best_commit_wall);
     recovery_reply->set_success(true);
     recovery_reply->set_message("ok hybrid p=" + std::to_string(p));
     std::cout << "[Coordinator] gLRC Hybrid recovery stripe " << stripe_id << " success p=" << p

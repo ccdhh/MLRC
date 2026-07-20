@@ -9,6 +9,10 @@ source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 load_hosts
 
 BIN="$REMOTE_ROOT/project/cmake/build"
+if [[ -z "$STORAGE_ROOT" || "$STORAGE_ROOT" == "/" ]]; then
+  echo "unsafe DDRT_STORAGE_ROOT: '$STORAGE_ROOT'" >&2
+  exit 2
+fi
 
 echo "Stopping stale processes..."
 "$(cd "$(dirname "$0")" && pwd)/stop.sh" --keep-storage
@@ -24,7 +28,7 @@ sleep 2
 for host in "${STORAGE_HOSTS[@]}"; do
   echo "Starting datanode + proxy on $host..."
   remote "$host" \
-    "cd $REMOTE_ROOT && mkdir -p logs storage && ( DDRT_ONE_PROXY_PER_HOST=1 DDRT_QUIET_CONFIG=1 $BIN/run_datanode ${host}:${DATANODE_PORT} >logs/datanode.log 2>&1 </dev/null & DDRT_ONE_PROXY_PER_HOST=1 DDRT_QUIET_CONFIG=1 $BIN/run_proxy ${host}:${PROXY_PORT} >logs/proxy.log 2>&1 </dev/null & ) && echo started"
+    "cd $REMOTE_ROOT && rm -rf '$STORAGE_ROOT' && mkdir -p logs '$STORAGE_ROOT' && ( DDRT_STORAGE_ROOT='$STORAGE_ROOT' DDRT_ONE_PROXY_PER_HOST=1 DDRT_QUIET_CONFIG=1 $BIN/run_datanode ${host}:${DATANODE_PORT} >logs/datanode.log 2>&1 </dev/null & DDRT_ONE_PROXY_PER_HOST=1 DDRT_QUIET_CONFIG=1 $BIN/run_proxy ${host}:${PROXY_PORT} >logs/proxy.log 2>&1 </dev/null & ) && echo started"
 done
 
 echo "Started coordinator and ${#STORAGE_HOSTS[@]} storage pairs."

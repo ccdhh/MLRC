@@ -1548,6 +1548,12 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
     recovery_info.set_recovery_offset(full_block_write ? 0 : shards.byte_off(0));
     recovery_info.set_recovery_size(
         full_block_write ? 0 : shard_count * stripe_len);
+    recovery_info.set_recovery_defer_fsync(!full_block_write);
+    if (!full_block_write)
+    {
+      recovery_info.set_recovery_commit_token(recovery_request->hybrid_commit_token());
+      recovery_info.set_recovery_commit_parts(2);
+    }
     recovery_info.set_proxy_ip(m_ip);
     recovery_info.set_proxy_port(m_port);
     const std::string node_ip_port = std::string(rep_ip) + ":" + std::to_string(rep_port);
@@ -1707,6 +1713,7 @@ bool ProxyImpl::glrcIlpPipelineLocalDirectRecovery(const proxy_proto::RecoveryRe
     response->set_dest_data_node_network_time(write_sec);
     response->set_dest_data_node_disk_io_time(recovery_result.disk_io_end_time() -
                                               recovery_result.disk_io_start_time());
+    response->set_recovery_commit_time(recovery_result.recovery_commit_time());
     std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] local sink done chain=" << chain_id
               << " shards=" << shards_received << " wall=" << total_sec << "s write=" << write_sec << "s"
               << " local_write=" << (write_bw == nullptr ? "yes" : "no") << std::endl;
@@ -2183,6 +2190,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   double total_decode_time = 0.0;
   double total_write_net = 0.0;
   double total_write_disk = 0.0;
+  double max_commit_time = 0.0;
   std::atomic<bool> any_write_failed{false};
   std::mutex hub_metrics_mu;
   std::vector<bool> shard_scheduled(shard_count, false);
@@ -2236,6 +2244,12 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
         full_block_write ? 0 : shards.byte_off(0));
     ws->recovery_info.set_recovery_size(
         full_block_write ? 0 : shard_count * stripe_len);
+    ws->recovery_info.set_recovery_defer_fsync(!full_block_write);
+    if (!full_block_write)
+    {
+      ws->recovery_info.set_recovery_commit_token(recovery_request->hybrid_commit_token());
+      ws->recovery_info.set_recovery_commit_parts(2);
+    }
     ws->recovery_info.set_proxy_ip(m_ip);
     ws->recovery_info.set_proxy_port(m_port);
 
@@ -2493,6 +2507,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
     max_write_net = std::max(max_write_net, ws->network_time);
     total_write_disk += ws->recovery_result.disk_io_end_time() -
                         ws->recovery_result.disk_io_start_time();
+    max_commit_time = std::max(max_commit_time, ws->recovery_result.recovery_commit_time());
   }
 
   if (any_write_failed.load())
@@ -2552,6 +2567,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   response->set_network_end_time(hub_metric_end);
   response->set_dest_data_node_network_time(total_write_net);
   response->set_dest_data_node_disk_io_time(total_write_disk);
+  response->set_recovery_commit_time(max_commit_time);
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hub decode success chains=" << hub_chain_n
             << " shards=" << shard_count << std::endl;
   return true;

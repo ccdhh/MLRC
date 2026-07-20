@@ -201,7 +201,7 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
     std::cout << "  --- timing (seconds) ---" << std::endl;
     std::cout << "  equation_select_time:  " << m.ilp_time
               << "  (ILP / local-then-global planner)" << std::endl;
-    if (m.repair_mode == "pipeline")
+    if (m.data_plane_time > 0.0)
     {
       std::cout << "  setup_time:              " << m.setup_time << "  (plan + listener readiness)" << std::endl;
       std::cout << "  data_plane_time:         " << m.data_plane_time
@@ -224,6 +224,30 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
         if (m.hybrid_p_continuous > 0.0 || m.hybrid_p == 0)
             std::cout << "  (p*=" << m.hybrid_p_continuous << ")";
         std::cout << std::endl;
+        const double phase2_other =
+            std::max(0.0, m.hybrid_phase2_wall_time - m.hybrid_phase2_network_hot_time);
+        const double pipeline_other =
+            std::max(0.0, m.hybrid_pipeline_wall_time - m.hybrid_hub_egress_hot_time);
+        const double theoretical_network_critical =
+            std::max(m.hybrid_failed_node_hot_time, m.hybrid_hub_egress_hot_time);
+        const double hotspot_residual =
+            m.data_plane_time - theoretical_network_critical;
+        std::cout << "  --- hybrid critical-path breakdown ---" << std::endl;
+        std::cout << "  p_select_time:           " << m.hybrid_p_select_time << std::endl;
+        std::cout << "  phase2_wall:             " << m.hybrid_phase2_wall_time << std::endl;
+        std::cout << "    phase2_network_hot:    " << m.hybrid_phase2_network_hot_time << std::endl;
+        std::cout << "    phase2_other_tail:     " << phase2_other << std::endl;
+        std::cout << "  pipeline_wall:           " << m.hybrid_pipeline_wall_time << std::endl;
+        std::cout << "    max_chain_node_egress_hot: " << m.hybrid_hub_egress_hot_time << std::endl;
+        std::cout << "    pipeline_other_tail:   " << pipeline_other << std::endl;
+        std::cout << "  pipeline_tail_ingress:   " << m.hybrid_pipeline_tail_ingress_time << std::endl;
+        std::cout << "  failed_node_hot:         " << m.hybrid_failed_node_hot_time << std::endl;
+        std::cout << "  atomic_publish:          " << m.hybrid_commit_time
+                  << "  (per-block atomic rename after both ranges arrive)" << std::endl;
+        std::cout << "  theoretical_network_critical: " << theoretical_network_critical
+                  << "  (max(failed_node_hot, max_chain_node_egress_hot))" << std::endl;
+        std::cout << "  hotspot_residual:        " << hotspot_residual
+                  << "  (actual data_plane - theoretical network critical)" << std::endl;
     }
 }
 
@@ -263,7 +287,8 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     }
 
     const bool warmup_enabled = [&]() {
-        if (skip_warmup || config->GlrcRepairMode != "pipeline")
+        if (skip_warmup ||
+            (config->GlrcRepairMode != "pipeline" && config->GlrcRepairMode != "phase2"))
             return false;
         if (const char *w = std::getenv("GLRC_WARMUP"))
             return w[0] != '0';
@@ -271,9 +296,23 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     }();
     if (warmup_enabled)
     {
-        std::vector<int> warmup_failed{0};
-        if (use_fixed && !fixed_failed.empty())
-            warmup_failed = {fixed_failed.front()};
+        std::vector<int> warmup_failed;
+        if (config->GlrcRepairMode == "phase2")
+        {
+            // Exercise the same number of partition proxies, helper streams,
+            // peer exchanges, and decode workers as the measured trials.
+            if (use_fixed)
+                warmup_failed = fixed_failed;
+            else
+            {
+                warmup_failed.resize(static_cast<size_t>(fail_count));
+                std::iota(warmup_failed.begin(), warmup_failed.end(), 0);
+            }
+        }
+        else
+        {
+            warmup_failed = {use_fixed && !fixed_failed.empty() ? fixed_failed.front() : 0};
+        }
         std::cout << "\n[gLRC] Warmup recovery (excluded from trial stats) failed_blocks: "
                   << ECProject::glrc_format_block_list(warmup_failed, k, r, z) << std::endl;
         ECProject::GlrcMultiRecoveryMetrics warmup_metrics;

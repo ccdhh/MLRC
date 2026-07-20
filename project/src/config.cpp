@@ -3,11 +3,27 @@
 #include "tinyxml2.h"
 #include <algorithm>
 #include <cassert>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 
 namespace ECProject
 {
+  namespace
+  {
+    std::string trim_config_text(const char *text)
+    {
+      if (text == nullptr)
+        return {};
+      std::string value(text);
+      const auto first = std::find_if_not(value.begin(), value.end(),
+                                          [](unsigned char c) { return std::isspace(c) != 0; });
+      const auto last = std::find_if_not(value.rbegin(), value.rend(),
+                                         [](unsigned char c) { return std::isspace(c) != 0; }).base();
+      return first < last ? std::string(first, last) : std::string();
+    }
+  }
+
   Config *Config::instance = nullptr;
 
   Config::Config(const std::string &configPath)
@@ -22,6 +38,12 @@ namespace ECProject
     assert(BlockSize % UnitSize == 0 && "Error: BlockSize must be divisible by UnitSize");
     assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE" || AppendMode == "EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
     assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC" || CodeType == "gLRC" || CodeType == "RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, UniformLRC, gLRC, or RS");
+    if (CodeType == "gLRC")
+    {
+      assert((GlrcRepairMode == "phase1" || GlrcRepairMode == "phase2" ||
+              GlrcRepairMode == "pipeline" || GlrcRepairMode == "hybrid") &&
+             "Error: GlrcRepairMode must be phase1, phase2, pipeline, or hybrid");
+    }
     assert(DatanodeNumPerCluster > 0 && "Error: DatanodeNumPerCluster must be greater than 0");
     assert(ClusterNum > 0 && "Error: ClusterNum must be greater than 0");
     if (CodeType == "UniLRC")
@@ -102,20 +124,20 @@ namespace ECProject
     if (auto elem = root->FirstChildElement("z"))
       z = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("CodeType"))
-      CodeType = std::string(elem->GetText());
+      CodeType = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcRepairMode"))
-      GlrcRepairMode = std::string(elem->GetText());
+      GlrcRepairMode = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcEquationPolicy"))
-      GlrcEquationPolicy = std::string(elem->GetText());
+      GlrcEquationPolicy = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcShardCount"))
       GlrcShardCount = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcPipelineWindow"))
       GlrcPipelineWindow = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcHybridP"))
-      GlrcHybridP = std::string(elem->GetText());
+      GlrcHybridP = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("GlrcPhase2WriteBack"))
     {
-      std::string v = elem->GetText();
+      std::string v = trim_config_text(elem->GetText());
       GlrcPhase2WriteBack = !(v == "0" || v == "false" || v == "FALSE");
     }
     if (CodeType == "UniLRC")
@@ -147,15 +169,15 @@ namespace ECProject
     if (auto elem = root->FirstChildElement("ClusterNum"))
       ClusterNum = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("CoordinatorIP"))
-      CoordinatorIP = std::string(elem->GetText());
+      CoordinatorIP = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("CoordinatorPort"))
       CoordinatorPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("ClientIP"))
-      ClientIP = std::string(elem->GetText());
+      ClientIP = trim_config_text(elem->GetText());
     if (auto elem = root->FirstChildElement("ClientPort"))
       ClientPort = std::stoi(elem->GetText());
     if (auto elem = root->FirstChildElement("AppendMode"))
-      AppendMode = std::string(elem->GetText());
+      AppendMode = trim_config_text(elem->GetText());
     N = get_N(); // N
     get_num_arry();
   }

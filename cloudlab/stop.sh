@@ -24,7 +24,7 @@ for host in "${ALL_HOSTS[@]}"; do
   command+="; pkill -x run_datanode >/dev/null 2>&1 || true"
   command+="; pkill -x main_client >/dev/null 2>&1 || true"
   if ((CLEAR_STORAGE)) && [[ "$host" != "$COORDINATOR_HOST" && "$host" != "$CLIENT_HOST" ]]; then
-    command+="; rm -rf $REMOTE_ROOT/storage/*"
+    command+="; rm -rf $REMOTE_ROOT/storage/* '$STORAGE_ROOT'"
   fi
   remote "$host" "$command"
 done

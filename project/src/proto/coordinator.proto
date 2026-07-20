@@ -211,6 +211,15 @@ message RecoveryReply {
   double setup_time = 19;
   double data_plane_time = 20;
   double teardown_time = 21;
+  // Hybrid critical-path breakdown (zero for non-Hybrid modes).
+  double hybrid_p_select_time = 22;
+  double hybrid_phase2_wall_time = 23;
+  double hybrid_pipeline_wall_time = 24;
+  double hybrid_phase2_network_hot_time = 25;
+  double hybrid_pipeline_tail_ingress_time = 26;
+  double hybrid_failed_node_hot_time = 27;
+  double hybrid_hub_egress_hot_time = 28;
+  double hybrid_commit_time = 29;
 }
 
 message StripePos {

@@ -7,6 +7,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 #include <meta_definition.h>
+#include <future>
 #include <mutex>
 #include <thread>
 #include <condition_variable>
@@ -169,7 +170,8 @@ namespace ECProject
                                                  coordinator_proto::RecoveryReply *recovery_reply,
                                                  const GlrcIlpRepairPlan *preset_plan, int shard_count_override,
                                                  bool acquire_mutex, double *out_orchestration_wait_sec,
-                                                 bool share_proxy_node_bandwidth = false);
+                                                 bool share_proxy_node_bandwidth = false,
+                                                 const std::string &hybrid_commit_token = "");
     bool recovery_glrc_ilp_pipeline_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                               coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_glrc_ilp_pipeline_breakdown_ex(int stripe_id, const std::vector<int> &failed_block_ids,
@@ -179,7 +181,9 @@ namespace ECProject
                                                    int global_shard_begin, int local_shard_count_override,
                                                    bool acquire_mutex, double *out_orchestration_wait_sec,
                                                    double *out_hub_egress_wall_sec = nullptr,
-                                                   double *out_local_direct_hot_wall_sec = nullptr);
+                                                   double *out_local_direct_hot_wall_sec = nullptr,
+                                                   const std::shared_future<void> *teardown_gate = nullptr,
+                                                   const std::string &hybrid_commit_token = "");
     bool recovery_glrc_ilp_hybrid_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                             coordinator_proto::RecoveryReply *recovery_reply);
     bool recovery_one_block_breakdown(int stripe_id, int failed_block_id, 

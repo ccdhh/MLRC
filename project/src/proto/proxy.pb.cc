@@ -382,6 +382,7 @@ PROTOBUF_CONSTEXPR RecoveryRequest::RecoveryRequest(
   , /*decltype(_impl_.pipeline_local_failed_block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.pipeline_local_replaced_node_ip_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.pipeline_hub_block_key_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
+  , /*decltype(_impl_.hybrid_commit_token_)*/{&::_pbi::fixed_address_empty_string, ::_pbi::ConstantInitialized{}}
   , /*decltype(_impl_.replaced_node_port_)*/0
   , /*decltype(_impl_.failed_block_id_)*/0
   , /*decltype(_impl_.cross_rack_num_)*/0
@@ -461,6 +462,7 @@ PROTOBUF_CONSTEXPR RecoveryReply::RecoveryReply(
   , /*decltype(_impl_.data_node_grpc_start_time_)*/0
   , /*decltype(_impl_.dest_data_node_network_time_)*/0
   , /*decltype(_impl_.dest_data_node_disk_io_time_)*/0
+  , /*decltype(_impl_.recovery_commit_time_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct RecoveryReplyDefaultTypeInternal {
   PROTOBUF_CONSTEXPR RecoveryReplyDefaultTypeInternal()
@@ -822,6 +824,7 @@ const uint32_t TableStruct_proxy_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(pr
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.pipeline_global_shard_count_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_share_proxy_node_bandwidth_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.phase2_ready_only_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryRequest, _impl_.hybrid_commit_token_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::proxy_proto::MultipleRecoveryRequest, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -852,6 +855,7 @@ const uint32_t TableStruct_proxy_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(pr
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryReply, _impl_.data_node_grpc_start_time_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryReply, _impl_.dest_data_node_network_time_),
   PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryReply, _impl_.dest_data_node_disk_io_time_),
+  PROTOBUF_FIELD_OFFSET(::proxy_proto::RecoveryReply, _impl_.recovery_commit_time_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::proxy_proto::AppendStripeDataPlacement, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -918,12 +922,12 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 157, -1, -1, sizeof(::proxy_proto::PartialDecodingRequest)},
   { 171, -1, -1, sizeof(::proxy_proto::DegradedReadReply)},
   { 188, -1, -1, sizeof(::proxy_proto::RecoveryRequest)},
-  { 268, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
-  { 279, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
-  { 298, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
-  { 317, -1, -1, sizeof(::proxy_proto::SetReply)},
-  { 324, -1, -1, sizeof(::proxy_proto::GetReply)},
-  { 331, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
+  { 269, -1, -1, sizeof(::proxy_proto::MultipleRecoveryRequest)},
+  { 280, -1, -1, sizeof(::proxy_proto::RecoveryReply)},
+  { 300, -1, -1, sizeof(::proxy_proto::AppendStripeDataPlacement)},
+  { 319, -1, -1, sizeof(::proxy_proto::SetReply)},
+  { 326, -1, -1, sizeof(::proxy_proto::GetReply)},
+  { 333, -1, -1, sizeof(::proxy_proto::StripeAndBlockIDs)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -1009,7 +1013,7 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "k_time\030\007 \001(\001\022\033\n\023cross_rack_xor_time\030\010 \001("
   "\001\022\027\n\017grpc_start_time\030\t \001(\001\022\"\n\032data_node_"
   "grpc_notify_time\030\n \001(\001\022!\n\031data_node_grpc"
-  "_start_time\030\013 \001(\001\"\250\022\n\017RecoveryRequest\022\030\n"
+  "_start_time\030\013 \001(\001\"\313\022\n\017RecoveryRequest\022\030\n"
   "\020replaced_node_ip\030\001 \001(\t\022\032\n\022replaced_node"
   "_port\030\002 \001(\005\022\027\n\017failed_block_id\030\003 \001(\005\022\030\n\020"
   "failed_block_key\030\004 \001(\t\022\026\n\016cross_rack_num"
@@ -1068,69 +1072,70 @@ const char descriptor_table_protodef_proxy_2eproto[] PROTOBUF_SECTION_VARIABLE(p
   "lobal_begin\030G \001(\005\022#\n\033pipeline_global_sha"
   "rd_count\030H \001(\005\022)\n!phase2_share_proxy_nod"
   "e_bandwidth\030I \001(\010\022\031\n\021phase2_ready_only\030J"
-  " \001(\010\"\236\001\n\027MultipleRecoveryRequest\022\031\n\021repl"
-  "acing_node_ip\030\001 \001(\t\022\033\n\023replacing_node_po"
-  "rt\030\002 \001(\005\022\030\n\020failed_block_ids\030\003 \003(\005\022\031\n\021fa"
-  "iled_block_keys\030\004 \003(\t\022\026\n\016cross_rack_num\030"
-  "\005 \001(\005\"\217\003\n\rRecoveryReply\022\032\n\022disk_io_start"
-  "_time\030\001 \001(\001\022\030\n\020disk_io_end_time\030\002 \001(\001\022\032\n"
-  "\022network_start_time\030\003 \001(\001\022\030\n\020network_end"
-  "_time\030\004 \001(\001\022\031\n\021decode_start_time\030\005 \001(\001\022\027"
-  "\n\017decode_end_time\030\006 \001(\001\022\027\n\017cross_rack_ti"
-  "me\030\007 \001(\001\022\033\n\023cross_rack_xor_time\030\010 \001(\001\022\027\n"
-  "\017grpc_start_time\030\t \001(\001\022\"\n\032data_node_grpc"
-  "_notify_time\030\n \001(\001\022!\n\031data_node_grpc_sta"
-  "rt_time\030\013 \001(\001\022#\n\033dest_data_node_network_"
-  "time\030\014 \001(\001\022#\n\033dest_data_node_disk_io_tim"
-  "e\030\r \001(\001\"\230\002\n\031AppendStripeDataPlacement\022\013\n"
-  "\003key\030\001 \001(\t\022\022\n\ncluster_id\030\002 \001(\005\022\021\n\tstripe"
-  "_id\030\003 \001(\005\022\023\n\013append_size\030\004 \001(\004\022\022\n\ndatano"
-  "deip\030\005 \003(\t\022\024\n\014datanodeport\030\006 \003(\005\022\021\n\tbloc"
-  "kkeys\030\007 \003(\t\022\020\n\010blockids\030\010 \003(\005\022\017\n\007offsets"
-  "\030\t \003(\004\022\r\n\005sizes\030\n \003(\004\022\027\n\017is_merge_parity"
-  "\030\013 \001(\010\022\023\n\013append_mode\030\014 \001(\t\022\025\n\ris_serial"
-  "ized\030\r \001(\010\"\034\n\010SetReply\022\020\n\010ifcommit\030\001 \001(\010"
-  "\"\036\n\010GetReply\022\022\n\ngetsuccess\030\001 \001(\010\"\261\001\n\021Str"
-  "ipeAndBlockIDs\022\021\n\tstripe_id\030\001 \001(\005\022\020\n\010gro"
-  "up_id\030\002 \001(\005\022\020\n\010clientip\030\003 \001(\t\022\022\n\nclientp"
-  "ort\030\004 \001(\005\022\021\n\tblock_ids\030\005 \003(\005\022\022\n\nblock_ke"
-  "ys\030\006 \003(\t\022\023\n\013datanodeips\030\007 \003(\t\022\025\n\rdatanod"
-  "eports\030\010 \003(\0052\307\t\n\014proxyService\022D\n\ncheckal"
-  "ive\022\032.proxy_proto.CheckaliveCMD\032\032.proxy_"
-  "proto.RequestResult\022L\n\022encodeAndSetObjec"
-  "t\022\037.proxy_proto.ObjectAndPlacement\032\025.pro"
-  "xy_proto.SetReply\022L\n\022decodeAndGetObject\022"
-  "\037.proxy_proto.ObjectAndPlacement\032\025.proxy"
-  "_proto.GetReply\022P\n\014degradedRead\022 .proxy_"
-  "proto.DegradedReadRequest\032\036.proxy_proto."
-  "DegradedReadReply\022S\n\023degradedRead2Client"
-  "\022\034.proxy_proto.RecoveryRequest\032\036.proxy_p"
-  "roto.DegradedReadReply\022Y\n\025degradedReadBr"
-  "eakdown\022 .proxy_proto.DegradedReadReques"
-  "t\032\036.proxy_proto.DegradedReadReply\022\\\n\034deg"
-  "radedRead2ClientBreakdown\022\034.proxy_proto."
+  " \001(\010\022\033\n\023hybrid_commit_token\030L \001(\tJ\004\010K\020L\""
+  "\236\001\n\027MultipleRecoveryRequest\022\031\n\021replacing"
+  "_node_ip\030\001 \001(\t\022\033\n\023replacing_node_port\030\002 "
+  "\001(\005\022\030\n\020failed_block_ids\030\003 \003(\005\022\031\n\021failed_"
+  "block_keys\030\004 \003(\t\022\026\n\016cross_rack_num\030\005 \001(\005"
+  "\"\255\003\n\rRecoveryReply\022\032\n\022disk_io_start_time"
+  "\030\001 \001(\001\022\030\n\020disk_io_end_time\030\002 \001(\001\022\032\n\022netw"
+  "ork_start_time\030\003 \001(\001\022\030\n\020network_end_time"
+  "\030\004 \001(\001\022\031\n\021decode_start_time\030\005 \001(\001\022\027\n\017dec"
+  "ode_end_time\030\006 \001(\001\022\027\n\017cross_rack_time\030\007 "
+  "\001(\001\022\033\n\023cross_rack_xor_time\030\010 \001(\001\022\027\n\017grpc"
+  "_start_time\030\t \001(\001\022\"\n\032data_node_grpc_noti"
+  "fy_time\030\n \001(\001\022!\n\031data_node_grpc_start_ti"
+  "me\030\013 \001(\001\022#\n\033dest_data_node_network_time\030"
+  "\014 \001(\001\022#\n\033dest_data_node_disk_io_time\030\r \001"
+  "(\001\022\034\n\024recovery_commit_time\030\016 \001(\001\"\230\002\n\031App"
+  "endStripeDataPlacement\022\013\n\003key\030\001 \001(\t\022\022\n\nc"
+  "luster_id\030\002 \001(\005\022\021\n\tstripe_id\030\003 \001(\005\022\023\n\013ap"
+  "pend_size\030\004 \001(\004\022\022\n\ndatanodeip\030\005 \003(\t\022\024\n\014d"
+  "atanodeport\030\006 \003(\005\022\021\n\tblockkeys\030\007 \003(\t\022\020\n\010"
+  "blockids\030\010 \003(\005\022\017\n\007offsets\030\t \003(\004\022\r\n\005sizes"
+  "\030\n \003(\004\022\027\n\017is_merge_parity\030\013 \001(\010\022\023\n\013appen"
+  "d_mode\030\014 \001(\t\022\025\n\ris_serialized\030\r \001(\010\"\034\n\010S"
+  "etReply\022\020\n\010ifcommit\030\001 \001(\010\"\036\n\010GetReply\022\022\n"
+  "\ngetsuccess\030\001 \001(\010\"\261\001\n\021StripeAndBlockIDs\022"
+  "\021\n\tstripe_id\030\001 \001(\005\022\020\n\010group_id\030\002 \001(\005\022\020\n\010"
+  "clientip\030\003 \001(\t\022\022\n\nclientport\030\004 \001(\005\022\021\n\tbl"
+  "ock_ids\030\005 \003(\005\022\022\n\nblock_keys\030\006 \003(\t\022\023\n\013dat"
+  "anodeips\030\007 \003(\t\022\025\n\rdatanodeports\030\010 \003(\0052\307\t"
+  "\n\014proxyService\022D\n\ncheckalive\022\032.proxy_pro"
+  "to.CheckaliveCMD\032\032.proxy_proto.RequestRe"
+  "sult\022L\n\022encodeAndSetObject\022\037.proxy_proto"
+  ".ObjectAndPlacement\032\025.proxy_proto.SetRep"
+  "ly\022L\n\022decodeAndGetObject\022\037.proxy_proto.O"
+  "bjectAndPlacement\032\025.proxy_proto.GetReply"
+  "\022P\n\014degradedRead\022 .proxy_proto.DegradedR"
+  "eadRequest\032\036.proxy_proto.DegradedReadRep"
+  "ly\022S\n\023degradedRead2Client\022\034.proxy_proto."
   "RecoveryRequest\032\036.proxy_proto.DegradedRe"
-  "adReply\022X\n\035degradedReadWithBlockStripeID"
-  "\022 .proxy_proto.DegradedReadRequest\032\025.pro"
-  "xy_proto.GetReply\022V\n\017partialDecoding\022#.p"
-  "roxy_proto.PartialDecodingRequest\032\036.prox"
-  "y_proto.DegradedReadReply\022D\n\010recovery\022\034."
-  "proxy_proto.RecoveryRequest\032\032.proxy_prot"
-  "o.RecoveryReply\022M\n\021recoveryBreakdown\022\034.p"
-  "roxy_proto.RecoveryRequest\032\032.proxy_proto"
-  ".RecoveryReply\022O\n\020multipleRecovery\022$.pro"
-  "xy_proto.MultipleRecoveryRequest\032\025.proxy"
-  "_proto.GetReply\022\?\n\013deleteBlock\022\031.proxy_p"
-  "roto.NodeAndBlock\032\025.proxy_proto.DelReply"
-  "\022X\n\027scheduleAppend2Datanode\022&.proxy_prot"
-  "o.AppendStripeDataPlacement\032\025.proxy_prot"
-  "o.SetReply\022B\n\tgetBlocks\022\036.proxy_proto.St"
-  "ripeAndBlockIDs\032\025.proxy_proto.GetReplyb\006"
-  "proto3"
+  "adReply\022Y\n\025degradedReadBreakdown\022 .proxy"
+  "_proto.DegradedReadRequest\032\036.proxy_proto"
+  ".DegradedReadReply\022\\\n\034degradedRead2Clien"
+  "tBreakdown\022\034.proxy_proto.RecoveryRequest"
+  "\032\036.proxy_proto.DegradedReadReply\022X\n\035degr"
+  "adedReadWithBlockStripeID\022 .proxy_proto."
+  "DegradedReadRequest\032\025.proxy_proto.GetRep"
+  "ly\022V\n\017partialDecoding\022#.proxy_proto.Part"
+  "ialDecodingRequest\032\036.proxy_proto.Degrade"
+  "dReadReply\022D\n\010recovery\022\034.proxy_proto.Rec"
+  "overyRequest\032\032.proxy_proto.RecoveryReply"
+  "\022M\n\021recoveryBreakdown\022\034.proxy_proto.Reco"
+  "veryRequest\032\032.proxy_proto.RecoveryReply\022"
+  "O\n\020multipleRecovery\022$.proxy_proto.Multip"
+  "leRecoveryRequest\032\025.proxy_proto.GetReply"
+  "\022\?\n\013deleteBlock\022\031.proxy_proto.NodeAndBlo"
+  "ck\032\025.proxy_proto.DelReply\022X\n\027scheduleApp"
+  "end2Datanode\022&.proxy_proto.AppendStripeD"
+  "ataPlacement\032\025.proxy_proto.SetReply\022B\n\tg"
+  "etBlocks\022\036.proxy_proto.StripeAndBlockIDs"
+  "\032\025.proxy_proto.GetReplyb\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_proxy_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_proxy_2eproto = {
-    false, false, 6926, descriptor_table_protodef_proxy_2eproto,
+    false, false, 6991, descriptor_table_protodef_proxy_2eproto,
     "proxy.proto",
     &descriptor_table_proxy_2eproto_once, nullptr, 0, 23,
     schemas, file_default_instances, TableStruct_proxy_2eproto::offsets,
@@ -6918,6 +6923,7 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
     , decltype(_impl_.pipeline_local_failed_block_key_){}
     , decltype(_impl_.pipeline_local_replaced_node_ip_){}
     , decltype(_impl_.pipeline_hub_block_key_){}
+    , decltype(_impl_.hybrid_commit_token_){}
     , decltype(_impl_.replaced_node_port_){}
     , decltype(_impl_.failed_block_id_){}
     , decltype(_impl_.cross_rack_num_){}
@@ -7005,6 +7011,14 @@ RecoveryRequest::RecoveryRequest(const RecoveryRequest& from)
     _this->_impl_.pipeline_hub_block_key_.Set(from._internal_pipeline_hub_block_key(), 
       _this->GetArenaForAllocation());
   }
+  _impl_.hybrid_commit_token_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.hybrid_commit_token_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (!from._internal_hybrid_commit_token().empty()) {
+    _this->_impl_.hybrid_commit_token_.Set(from._internal_hybrid_commit_token(), 
+      _this->GetArenaForAllocation());
+  }
   ::memcpy(&_impl_.replaced_node_port_, &from._impl_.replaced_node_port_,
     static_cast<size_t>(reinterpret_cast<char*>(&_impl_.pipeline_global_shard_count_) -
     reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_global_shard_count_));
@@ -7076,6 +7090,7 @@ inline void RecoveryRequest::SharedCtor(
     , decltype(_impl_.pipeline_local_failed_block_key_){}
     , decltype(_impl_.pipeline_local_replaced_node_ip_){}
     , decltype(_impl_.pipeline_hub_block_key_){}
+    , decltype(_impl_.hybrid_commit_token_){}
     , decltype(_impl_.replaced_node_port_){0}
     , decltype(_impl_.failed_block_id_){0}
     , decltype(_impl_.cross_rack_num_){0}
@@ -7138,6 +7153,10 @@ inline void RecoveryRequest::SharedCtor(
   #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
     _impl_.pipeline_hub_block_key_.Set("", GetArenaForAllocation());
   #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  _impl_.hybrid_commit_token_.InitDefault();
+  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+    _impl_.hybrid_commit_token_.Set("", GetArenaForAllocation());
+  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
 }
 
 RecoveryRequest::~RecoveryRequest() {
@@ -7189,6 +7208,7 @@ inline void RecoveryRequest::SharedDtor() {
   _impl_.pipeline_local_failed_block_key_.Destroy();
   _impl_.pipeline_local_replaced_node_ip_.Destroy();
   _impl_.pipeline_hub_block_key_.Destroy();
+  _impl_.hybrid_commit_token_.Destroy();
 }
 
 void RecoveryRequest::SetCachedSize(int size) const {
@@ -7239,6 +7259,7 @@ void RecoveryRequest::Clear() {
   _impl_.pipeline_local_failed_block_key_.ClearToEmpty();
   _impl_.pipeline_local_replaced_node_ip_.ClearToEmpty();
   _impl_.pipeline_hub_block_key_.ClearToEmpty();
+  _impl_.hybrid_commit_token_.ClearToEmpty();
   ::memset(&_impl_.replaced_node_port_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&_impl_.pipeline_global_shard_count_) -
       reinterpret_cast<char*>(&_impl_.replaced_node_port_)) + sizeof(_impl_.pipeline_global_shard_count_));
@@ -7991,6 +8012,16 @@ const char* RecoveryRequest::_InternalParse(const char* ptr, ::_pbi::ParseContex
         } else
           goto handle_unusual;
         continue;
+      // string hybrid_commit_token = 76;
+      case 76:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 98)) {
+          auto str = _internal_mutable_hybrid_commit_token();
+          ptr = ::_pbi::InlineGreedyStringParser(str, ptr, ctx);
+          CHK_(ptr);
+          CHK_(::_pbi::VerifyUTF8(str, "proxy_proto.RecoveryRequest.hybrid_commit_token"));
+        } else
+          goto handle_unusual;
+        continue;
       default:
         goto handle_unusual;
     }  // switch
@@ -8594,6 +8625,16 @@ uint8_t* RecoveryRequest::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteBoolToArray(74, this->_internal_phase2_ready_only(), target);
   }
 
+  // string hybrid_commit_token = 76;
+  if (!this->_internal_hybrid_commit_token().empty()) {
+    ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::VerifyUtf8String(
+      this->_internal_hybrid_commit_token().data(), static_cast<int>(this->_internal_hybrid_commit_token().length()),
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::SERIALIZE,
+      "proxy_proto.RecoveryRequest.hybrid_commit_token");
+    target = stream->WriteStringMaybeAliased(
+        76, this->_internal_hybrid_commit_token(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -9040,6 +9081,13 @@ size_t RecoveryRequest::ByteSizeLong() const {
         this->_internal_pipeline_hub_block_key());
   }
 
+  // string hybrid_commit_token = 76;
+  if (!this->_internal_hybrid_commit_token().empty()) {
+    total_size += 2 +
+      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::StringSize(
+        this->_internal_hybrid_commit_token());
+  }
+
   // int32 replaced_node_port = 2;
   if (this->_internal_replaced_node_port() != 0) {
     total_size += ::_pbi::WireFormatLite::Int32SizePlusOne(this->_internal_replaced_node_port());
@@ -9338,6 +9386,9 @@ void RecoveryRequest::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const 
   if (!from._internal_pipeline_hub_block_key().empty()) {
     _this->_internal_set_pipeline_hub_block_key(from._internal_pipeline_hub_block_key());
   }
+  if (!from._internal_hybrid_commit_token().empty()) {
+    _this->_internal_set_hybrid_commit_token(from._internal_hybrid_commit_token());
+  }
   if (from._internal_replaced_node_port() != 0) {
     _this->_internal_set_replaced_node_port(from._internal_replaced_node_port());
   }
@@ -9520,6 +9571,10 @@ void RecoveryRequest::InternalSwap(RecoveryRequest* other) {
   ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
       &_impl_.pipeline_hub_block_key_, lhs_arena,
       &other->_impl_.pipeline_hub_block_key_, rhs_arena
+  );
+  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
+      &_impl_.hybrid_commit_token_, lhs_arena,
+      &other->_impl_.hybrid_commit_token_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(RecoveryRequest, _impl_.pipeline_global_shard_count_)
@@ -9908,12 +9963,13 @@ RecoveryReply::RecoveryReply(const RecoveryReply& from)
     , decltype(_impl_.data_node_grpc_start_time_){}
     , decltype(_impl_.dest_data_node_network_time_){}
     , decltype(_impl_.dest_data_node_disk_io_time_){}
+    , decltype(_impl_.recovery_commit_time_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
   ::memcpy(&_impl_.disk_io_start_time_, &from._impl_.disk_io_start_time_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.dest_data_node_disk_io_time_) -
-    reinterpret_cast<char*>(&_impl_.disk_io_start_time_)) + sizeof(_impl_.dest_data_node_disk_io_time_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.recovery_commit_time_) -
+    reinterpret_cast<char*>(&_impl_.disk_io_start_time_)) + sizeof(_impl_.recovery_commit_time_));
   // @@protoc_insertion_point(copy_constructor:proxy_proto.RecoveryReply)
 }
 
@@ -9935,6 +9991,7 @@ inline void RecoveryReply::SharedCtor(
     , decltype(_impl_.data_node_grpc_start_time_){0}
     , decltype(_impl_.dest_data_node_network_time_){0}
     , decltype(_impl_.dest_data_node_disk_io_time_){0}
+    , decltype(_impl_.recovery_commit_time_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
 }
@@ -9963,8 +10020,8 @@ void RecoveryReply::Clear() {
   (void) cached_has_bits;
 
   ::memset(&_impl_.disk_io_start_time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.dest_data_node_disk_io_time_) -
-      reinterpret_cast<char*>(&_impl_.disk_io_start_time_)) + sizeof(_impl_.dest_data_node_disk_io_time_));
+      reinterpret_cast<char*>(&_impl_.recovery_commit_time_) -
+      reinterpret_cast<char*>(&_impl_.disk_io_start_time_)) + sizeof(_impl_.recovery_commit_time_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -10074,6 +10131,14 @@ const char* RecoveryReply::_InternalParse(const char* ptr, ::_pbi::ParseContext*
       case 13:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 105)) {
           _impl_.dest_data_node_disk_io_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double recovery_commit_time = 14;
+      case 14:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 113)) {
+          _impl_.recovery_commit_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
           ptr += sizeof(double);
         } else
           goto handle_unusual;
@@ -10237,6 +10302,16 @@ uint8_t* RecoveryReply::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteDoubleToArray(13, this->_internal_dest_data_node_disk_io_time(), target);
   }
 
+  // double recovery_commit_time = 14;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_recovery_commit_time = this->_internal_recovery_commit_time();
+  uint64_t raw_recovery_commit_time;
+  memcpy(&raw_recovery_commit_time, &tmp_recovery_commit_time, sizeof(tmp_recovery_commit_time));
+  if (raw_recovery_commit_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(14, this->_internal_recovery_commit_time(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -10370,6 +10445,15 @@ size_t RecoveryReply::ByteSizeLong() const {
     total_size += 1 + 8;
   }
 
+  // double recovery_commit_time = 14;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_recovery_commit_time = this->_internal_recovery_commit_time();
+  uint64_t raw_recovery_commit_time;
+  memcpy(&raw_recovery_commit_time, &tmp_recovery_commit_time, sizeof(tmp_recovery_commit_time));
+  if (raw_recovery_commit_time != 0) {
+    total_size += 1 + 8;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -10479,6 +10563,13 @@ void RecoveryReply::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   if (raw_dest_data_node_disk_io_time != 0) {
     _this->_internal_set_dest_data_node_disk_io_time(from._internal_dest_data_node_disk_io_time());
   }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_recovery_commit_time = from._internal_recovery_commit_time();
+  uint64_t raw_recovery_commit_time;
+  memcpy(&raw_recovery_commit_time, &tmp_recovery_commit_time, sizeof(tmp_recovery_commit_time));
+  if (raw_recovery_commit_time != 0) {
+    _this->_internal_set_recovery_commit_time(from._internal_recovery_commit_time());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -10497,8 +10588,8 @@ void RecoveryReply::InternalSwap(RecoveryReply* other) {
   using std::swap;
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.dest_data_node_disk_io_time_)
-      + sizeof(RecoveryReply::_impl_.dest_data_node_disk_io_time_)
+      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.recovery_commit_time_)
+      + sizeof(RecoveryReply::_impl_.recovery_commit_time_)
       - PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.disk_io_start_time_)>(
           reinterpret_cast<char*>(&_impl_.disk_io_start_time_),
           reinterpret_cast<char*>(&other->_impl_.disk_io_start_time_));

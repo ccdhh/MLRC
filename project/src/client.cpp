@@ -1527,6 +1527,14 @@ namespace ECProject
     metrics.equation_policy = reply.equation_policy();
     metrics.hybrid_p = reply.hybrid_p();
     metrics.hybrid_p_continuous = reply.hybrid_p_continuous();
+    metrics.hybrid_p_select_time = reply.hybrid_p_select_time();
+    metrics.hybrid_phase2_wall_time = reply.hybrid_phase2_wall_time();
+    metrics.hybrid_pipeline_wall_time = reply.hybrid_pipeline_wall_time();
+    metrics.hybrid_phase2_network_hot_time = reply.hybrid_phase2_network_hot_time();
+    metrics.hybrid_pipeline_tail_ingress_time = reply.hybrid_pipeline_tail_ingress_time();
+    metrics.hybrid_failed_node_hot_time = reply.hybrid_failed_node_hot_time();
+    metrics.hybrid_hub_egress_hot_time = reply.hybrid_hub_egress_hot_time();
+    metrics.hybrid_commit_time = reply.hybrid_commit_time();
     metrics.selected_equations.clear();
     metrics.helper_block_ids.clear();
     for (int i = 0; i < reply.selected_equations_size(); i++)

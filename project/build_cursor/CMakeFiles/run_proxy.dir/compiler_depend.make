@@ -3965,10 +3965,12 @@ CMakeFiles/run_proxy.dir/src/coordinator.cpp.o: ../src/coordinator.cpp \
   /usr/include/c++/11/numeric \
   /usr/include/c++/11/bits/stl_numeric.h \
   /usr/include/c++/11/pstl/glue_numeric_defs.h \
-  /usr/include/c++/11/thread \
-  /usr/include/c++/11/bits/std_thread.h \
-  /usr/include/c++/11/bits/this_thread_sleep.h \
+  /usr/include/c++/11/future \
   /usr/include/c++/11/condition_variable \
+  /usr/include/c++/11/bits/atomic_futex.h \
+  /usr/include/c++/11/bits/std_thread.h \
+  /usr/include/c++/11/thread \
+  /usr/include/c++/11/bits/this_thread_sleep.h \
   ../include/config.h \
   ../include/toolbox.h \
   ../src/proto/proxy.pb.h \
@@ -4574,8 +4576,6 @@ CMakeFiles/run_proxy.dir/src/coordinator.cpp.o: ../src/coordinator.cpp \
   ../third_party/asio/include/asio/multiple_exceptions.hpp \
   ../third_party/asio/include/asio/packaged_task.hpp \
   ../third_party/asio/include/asio/detail/future.hpp \
-  /usr/include/c++/11/future \
-  /usr/include/c++/11/bits/atomic_futex.h \
   ../third_party/asio/include/asio/placeholders.hpp \
   ../third_party/asio/include/asio/posix/basic_descriptor.hpp \
   ../third_party/asio/include/asio/posix/basic_stream_descriptor.hpp \

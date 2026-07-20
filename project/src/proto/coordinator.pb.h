@@ -3913,6 +3913,14 @@ class RecoveryReply final :
     kSetupTimeFieldNumber = 19,
     kDataPlaneTimeFieldNumber = 20,
     kTeardownTimeFieldNumber = 21,
+    kHybridPSelectTimeFieldNumber = 22,
+    kHybridPhase2WallTimeFieldNumber = 23,
+    kHybridPipelineWallTimeFieldNumber = 24,
+    kHybridPhase2NetworkHotTimeFieldNumber = 25,
+    kHybridPipelineTailIngressTimeFieldNumber = 26,
+    kHybridFailedNodeHotTimeFieldNumber = 27,
+    kHybridHubEgressHotTimeFieldNumber = 28,
+    kHybridCommitTimeFieldNumber = 29,
   };
   // repeated string selected_equations = 9;
   int selected_equations_size() const;
@@ -4159,6 +4167,78 @@ class RecoveryReply final :
   void _internal_set_teardown_time(double value);
   public:
 
+  // double hybrid_p_select_time = 22;
+  void clear_hybrid_p_select_time();
+  double hybrid_p_select_time() const;
+  void set_hybrid_p_select_time(double value);
+  private:
+  double _internal_hybrid_p_select_time() const;
+  void _internal_set_hybrid_p_select_time(double value);
+  public:
+
+  // double hybrid_phase2_wall_time = 23;
+  void clear_hybrid_phase2_wall_time();
+  double hybrid_phase2_wall_time() const;
+  void set_hybrid_phase2_wall_time(double value);
+  private:
+  double _internal_hybrid_phase2_wall_time() const;
+  void _internal_set_hybrid_phase2_wall_time(double value);
+  public:
+
+  // double hybrid_pipeline_wall_time = 24;
+  void clear_hybrid_pipeline_wall_time();
+  double hybrid_pipeline_wall_time() const;
+  void set_hybrid_pipeline_wall_time(double value);
+  private:
+  double _internal_hybrid_pipeline_wall_time() const;
+  void _internal_set_hybrid_pipeline_wall_time(double value);
+  public:
+
+  // double hybrid_phase2_network_hot_time = 25;
+  void clear_hybrid_phase2_network_hot_time();
+  double hybrid_phase2_network_hot_time() const;
+  void set_hybrid_phase2_network_hot_time(double value);
+  private:
+  double _internal_hybrid_phase2_network_hot_time() const;
+  void _internal_set_hybrid_phase2_network_hot_time(double value);
+  public:
+
+  // double hybrid_pipeline_tail_ingress_time = 26;
+  void clear_hybrid_pipeline_tail_ingress_time();
+  double hybrid_pipeline_tail_ingress_time() const;
+  void set_hybrid_pipeline_tail_ingress_time(double value);
+  private:
+  double _internal_hybrid_pipeline_tail_ingress_time() const;
+  void _internal_set_hybrid_pipeline_tail_ingress_time(double value);
+  public:
+
+  // double hybrid_failed_node_hot_time = 27;
+  void clear_hybrid_failed_node_hot_time();
+  double hybrid_failed_node_hot_time() const;
+  void set_hybrid_failed_node_hot_time(double value);
+  private:
+  double _internal_hybrid_failed_node_hot_time() const;
+  void _internal_set_hybrid_failed_node_hot_time(double value);
+  public:
+
+  // double hybrid_hub_egress_hot_time = 28;
+  void clear_hybrid_hub_egress_hot_time();
+  double hybrid_hub_egress_hot_time() const;
+  void set_hybrid_hub_egress_hot_time(double value);
+  private:
+  double _internal_hybrid_hub_egress_hot_time() const;
+  void _internal_set_hybrid_hub_egress_hot_time(double value);
+  public:
+
+  // double hybrid_commit_time = 29;
+  void clear_hybrid_commit_time();
+  double hybrid_commit_time() const;
+  void set_hybrid_commit_time(double value);
+  private:
+  double _internal_hybrid_commit_time() const;
+  void _internal_set_hybrid_commit_time(double value);
+  public:
+
   // @@protoc_insertion_point(class_scope:coordinator_proto.RecoveryReply)
  private:
   class _Internal;
@@ -4190,6 +4270,14 @@ class RecoveryReply final :
     double setup_time_;
     double data_plane_time_;
     double teardown_time_;
+    double hybrid_p_select_time_;
+    double hybrid_phase2_wall_time_;
+    double hybrid_pipeline_wall_time_;
+    double hybrid_phase2_network_hot_time_;
+    double hybrid_pipeline_tail_ingress_time_;
+    double hybrid_failed_node_hot_time_;
+    double hybrid_hub_egress_hot_time_;
+    double hybrid_commit_time_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -7247,6 +7335,166 @@ inline void RecoveryReply::_internal_set_teardown_time(double value) {
 inline void RecoveryReply::set_teardown_time(double value) {
   _internal_set_teardown_time(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.teardown_time)
+}
+
+// double hybrid_p_select_time = 22;
+inline void RecoveryReply::clear_hybrid_p_select_time() {
+  _impl_.hybrid_p_select_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_p_select_time() const {
+  return _impl_.hybrid_p_select_time_;
+}
+inline double RecoveryReply::hybrid_p_select_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_p_select_time)
+  return _internal_hybrid_p_select_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_p_select_time(double value) {
+  
+  _impl_.hybrid_p_select_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_p_select_time(double value) {
+  _internal_set_hybrid_p_select_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_p_select_time)
+}
+
+// double hybrid_phase2_wall_time = 23;
+inline void RecoveryReply::clear_hybrid_phase2_wall_time() {
+  _impl_.hybrid_phase2_wall_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_phase2_wall_time() const {
+  return _impl_.hybrid_phase2_wall_time_;
+}
+inline double RecoveryReply::hybrid_phase2_wall_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_phase2_wall_time)
+  return _internal_hybrid_phase2_wall_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_phase2_wall_time(double value) {
+  
+  _impl_.hybrid_phase2_wall_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_phase2_wall_time(double value) {
+  _internal_set_hybrid_phase2_wall_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_phase2_wall_time)
+}
+
+// double hybrid_pipeline_wall_time = 24;
+inline void RecoveryReply::clear_hybrid_pipeline_wall_time() {
+  _impl_.hybrid_pipeline_wall_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_pipeline_wall_time() const {
+  return _impl_.hybrid_pipeline_wall_time_;
+}
+inline double RecoveryReply::hybrid_pipeline_wall_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_pipeline_wall_time)
+  return _internal_hybrid_pipeline_wall_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_pipeline_wall_time(double value) {
+  
+  _impl_.hybrid_pipeline_wall_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_pipeline_wall_time(double value) {
+  _internal_set_hybrid_pipeline_wall_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_pipeline_wall_time)
+}
+
+// double hybrid_phase2_network_hot_time = 25;
+inline void RecoveryReply::clear_hybrid_phase2_network_hot_time() {
+  _impl_.hybrid_phase2_network_hot_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_phase2_network_hot_time() const {
+  return _impl_.hybrid_phase2_network_hot_time_;
+}
+inline double RecoveryReply::hybrid_phase2_network_hot_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_phase2_network_hot_time)
+  return _internal_hybrid_phase2_network_hot_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_phase2_network_hot_time(double value) {
+  
+  _impl_.hybrid_phase2_network_hot_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_phase2_network_hot_time(double value) {
+  _internal_set_hybrid_phase2_network_hot_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_phase2_network_hot_time)
+}
+
+// double hybrid_pipeline_tail_ingress_time = 26;
+inline void RecoveryReply::clear_hybrid_pipeline_tail_ingress_time() {
+  _impl_.hybrid_pipeline_tail_ingress_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_pipeline_tail_ingress_time() const {
+  return _impl_.hybrid_pipeline_tail_ingress_time_;
+}
+inline double RecoveryReply::hybrid_pipeline_tail_ingress_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_pipeline_tail_ingress_time)
+  return _internal_hybrid_pipeline_tail_ingress_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_pipeline_tail_ingress_time(double value) {
+  
+  _impl_.hybrid_pipeline_tail_ingress_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_pipeline_tail_ingress_time(double value) {
+  _internal_set_hybrid_pipeline_tail_ingress_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_pipeline_tail_ingress_time)
+}
+
+// double hybrid_failed_node_hot_time = 27;
+inline void RecoveryReply::clear_hybrid_failed_node_hot_time() {
+  _impl_.hybrid_failed_node_hot_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_failed_node_hot_time() const {
+  return _impl_.hybrid_failed_node_hot_time_;
+}
+inline double RecoveryReply::hybrid_failed_node_hot_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_failed_node_hot_time)
+  return _internal_hybrid_failed_node_hot_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_failed_node_hot_time(double value) {
+  
+  _impl_.hybrid_failed_node_hot_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_failed_node_hot_time(double value) {
+  _internal_set_hybrid_failed_node_hot_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_failed_node_hot_time)
+}
+
+// double hybrid_hub_egress_hot_time = 28;
+inline void RecoveryReply::clear_hybrid_hub_egress_hot_time() {
+  _impl_.hybrid_hub_egress_hot_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_hub_egress_hot_time() const {
+  return _impl_.hybrid_hub_egress_hot_time_;
+}
+inline double RecoveryReply::hybrid_hub_egress_hot_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_hub_egress_hot_time)
+  return _internal_hybrid_hub_egress_hot_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_hub_egress_hot_time(double value) {
+  
+  _impl_.hybrid_hub_egress_hot_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_hub_egress_hot_time(double value) {
+  _internal_set_hybrid_hub_egress_hot_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_hub_egress_hot_time)
+}
+
+// double hybrid_commit_time = 29;
+inline void RecoveryReply::clear_hybrid_commit_time() {
+  _impl_.hybrid_commit_time_ = 0;
+}
+inline double RecoveryReply::_internal_hybrid_commit_time() const {
+  return _impl_.hybrid_commit_time_;
+}
+inline double RecoveryReply::hybrid_commit_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.hybrid_commit_time)
+  return _internal_hybrid_commit_time();
+}
+inline void RecoveryReply::_internal_set_hybrid_commit_time(double value) {
+  
+  _impl_.hybrid_commit_time_ = value;
+}
+inline void RecoveryReply::set_hybrid_commit_time(double value) {
+  _internal_set_hybrid_commit_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_commit_time)
 }
 
 // -------------------------------------------------------------------

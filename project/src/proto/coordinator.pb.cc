@@ -356,6 +356,14 @@ PROTOBUF_CONSTEXPR RecoveryReply::RecoveryReply(
   , /*decltype(_impl_.setup_time_)*/0
   , /*decltype(_impl_.data_plane_time_)*/0
   , /*decltype(_impl_.teardown_time_)*/0
+  , /*decltype(_impl_.hybrid_p_select_time_)*/0
+  , /*decltype(_impl_.hybrid_phase2_wall_time_)*/0
+  , /*decltype(_impl_.hybrid_pipeline_wall_time_)*/0
+  , /*decltype(_impl_.hybrid_phase2_network_hot_time_)*/0
+  , /*decltype(_impl_.hybrid_pipeline_tail_ingress_time_)*/0
+  , /*decltype(_impl_.hybrid_failed_node_hot_time_)*/0
+  , /*decltype(_impl_.hybrid_hub_egress_hot_time_)*/0
+  , /*decltype(_impl_.hybrid_commit_time_)*/0
   , /*decltype(_impl_._cached_size_)*/{}} {}
 struct RecoveryReplyDefaultTypeInternal {
   PROTOBUF_CONSTEXPR RecoveryReplyDefaultTypeInternal()
@@ -639,6 +647,14 @@ const uint32_t TableStruct_coordinator_2eproto::offsets[] PROTOBUF_SECTION_VARIA
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.setup_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.data_plane_time_),
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.teardown_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_p_select_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_phase2_wall_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_pipeline_wall_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_phase2_network_hot_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_pipeline_tail_ingress_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_failed_node_hot_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_hub_egress_hot_time_),
+  PROTOBUF_FIELD_OFFSET(::coordinator_proto::RecoveryReply, _impl_.hybrid_commit_time_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::coordinator_proto::StripePos, _internal_metadata_),
   ~0u,  // no _extensions_
@@ -700,10 +716,10 @@ static const ::_pbi::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protode
   { 162, -1, -1, sizeof(::coordinator_proto::RepBlockNum)},
   { 169, -1, -1, sizeof(::coordinator_proto::DegradedReadReply)},
   { 179, -1, -1, sizeof(::coordinator_proto::RecoveryReply)},
-  { 206, -1, -1, sizeof(::coordinator_proto::StripePos)},
-  { 214, -1, -1, sizeof(::coordinator_proto::StripePosListAndClient)},
-  { 223, -1, -1, sizeof(::coordinator_proto::MergeRequest)},
-  { 233, -1, -1, sizeof(::coordinator_proto::MergeReply)},
+  { 214, -1, -1, sizeof(::coordinator_proto::StripePos)},
+  { 222, -1, -1, sizeof(::coordinator_proto::StripePosListAndClient)},
+  { 231, -1, -1, sizeof(::coordinator_proto::MergeRequest)},
+  { 241, -1, -1, sizeof(::coordinator_proto::MergeReply)},
 };
 
 static const ::_pb::Message* const file_default_instances[] = {
@@ -774,8 +790,8 @@ const char descriptor_table_protodef_coordinator_2eproto[] PROTOBUF_SECTION_VARI
   "ipe_ids\030\001 \003(\005\" \n\013RepBlockNum\022\021\n\tblock_nu"
   "m\030\001 \001(\005\"m\n\021DegradedReadReply\022\024\n\014disk_io_"
   "time\030\001 \001(\001\022\024\n\014network_time\030\002 \001(\001\022\023\n\013deco"
-  "de_time\030\003 \001(\001\022\027\n\017grpc_start_time\030\004 \001(\001\"\202"
-  "\004\n\rRecoveryReply\022\026\n\016disk_read_time\030\001 \001(\001"
+  "de_time\030\003 \001(\001\022\027\n\017grpc_start_time\030\004 \001(\001\"\234"
+  "\006\n\rRecoveryReply\022\026\n\016disk_read_time\030\001 \001(\001"
   "\022\024\n\014network_time\030\002 \001(\001\022\023\n\013decode_time\030\003 "
   "\001(\001\022\027\n\017disk_write_time\030\004 \001(\001\022\027\n\017grpc_sta"
   "rt_time\030\005 \001(\001\022\022\n\ntotal_time\030\006 \001(\001\022\020\n\010ilp"
@@ -787,81 +803,88 @@ const char descriptor_table_protodef_coordinator_2eproto[] PROTOBUF_SECTION_VARI
   "\017 \003(\005\022!\n\031max_partition_shard_count\030\020 \001(\005"
   "\022\020\n\010hybrid_p\030\021 \001(\005\022\033\n\023hybrid_p_continuou"
   "s\030\022 \001(\001\022\022\n\nsetup_time\030\023 \001(\001\022\027\n\017data_plan"
-  "e_time\030\024 \001(\001\022\025\n\rteardown_time\030\025 \001(\001\"+\n\tS"
-  "tripePos\022\021\n\tstripe_id\030\001 \001(\005\022\013\n\003pos\030\002 \001(\005"
-  "\"k\n\026StripePosListAndClient\022+\n\005items\030\001 \003("
-  "\0132\034.coordinator_proto.StripePos\022\020\n\010clien"
-  "tip\030\002 \001(\t\022\022\n\nclientport\030\003 \001(\005\"d\n\014MergeRe"
-  "quest\022\023\n\013stripe_id_a\030\001 \001(\005\022\023\n\013stripe_id_"
-  "b\030\002 \001(\005\022\023\n\013merge_round\030\003 \001(\005\022\025\n\rnew_stri"
-  "pe_id\030\004 \001(\005\"s\n\nMergeReply\022\017\n\007success\030\001 \001"
-  "(\010\022\025\n\rnew_stripe_id\030\002 \001(\005\022\036\n\026data_migrat"
-  "ion_seconds\030\003 \001(\001\022\035\n\025parity_update_secon"
-  "ds\030\004 \001(\0012\343\022\n\022coordinatorService\022k\n\025sayHe"
-  "lloToCoordinator\022\'.coordinator_proto.Req"
-  "uestToCoordinator\032\'.coordinator_proto.Re"
-  "plyFromCoordinator\"\000\022`\n\ncheckalive\022\'.coo"
-  "rdinator_proto.RequestToCoordinator\032\'.co"
-  "ordinator_proto.ReplyFromCoordinator\"\000\022V"
-  "\n\014setParameter\022\034.coordinator_proto.Param"
-  "eter\032&.coordinator_proto.RepIfSetParaSuc"
-  "cess\"\000\022d\n\024uploadOriginKeyValue\022%.coordin"
-  "ator_proto.RequestProxyIPPort\032#.coordina"
-  "tor_proto.ReplyProxyIPPort\"\000\022a\n\021reportCo"
-  "mmitAbort\022!.coordinator_proto.CommitAbor"
-  "tKey\032\'.coordinator_proto.ReplyFromCoordi"
-  "nator\"\000\022V\n\020checkCommitAbort\022\037.coordinato"
-  "r_proto.AskIfSuccess\032\037.coordinator_proto"
-  ".RepIfSuccess\"\000\022`\n\016uploadSetValue\022%.coor"
-  "dinator_proto.RequestProxyIPPort\032%.coord"
-  "inator_proto.ReplyProxyIPsPorts\"\000\022c\n\021upl"
-  "oadSubsetValue\022%.coordinator_proto.Reque"
-  "stProxyIPPort\032%.coordinator_proto.ReplyP"
-  "roxyIPsPorts\"\000\022c\n\021uploadAppendValue\022%.co"
+  "e_time\030\024 \001(\001\022\025\n\rteardown_time\030\025 \001(\001\022\034\n\024h"
+  "ybrid_p_select_time\030\026 \001(\001\022\037\n\027hybrid_phas"
+  "e2_wall_time\030\027 \001(\001\022!\n\031hybrid_pipeline_wa"
+  "ll_time\030\030 \001(\001\022&\n\036hybrid_phase2_network_h"
+  "ot_time\030\031 \001(\001\022)\n!hybrid_pipeline_tail_in"
+  "gress_time\030\032 \001(\001\022#\n\033hybrid_failed_node_h"
+  "ot_time\030\033 \001(\001\022\"\n\032hybrid_hub_egress_hot_t"
+  "ime\030\034 \001(\001\022\032\n\022hybrid_commit_time\030\035 \001(\001\"+\n"
+  "\tStripePos\022\021\n\tstripe_id\030\001 \001(\005\022\013\n\003pos\030\002 \001"
+  "(\005\"k\n\026StripePosListAndClient\022+\n\005items\030\001 "
+  "\003(\0132\034.coordinator_proto.StripePos\022\020\n\010cli"
+  "entip\030\002 \001(\t\022\022\n\nclientport\030\003 \001(\005\"d\n\014Merge"
+  "Request\022\023\n\013stripe_id_a\030\001 \001(\005\022\023\n\013stripe_i"
+  "d_b\030\002 \001(\005\022\023\n\013merge_round\030\003 \001(\005\022\025\n\rnew_st"
+  "ripe_id\030\004 \001(\005\"s\n\nMergeReply\022\017\n\007success\030\001"
+  " \001(\010\022\025\n\rnew_stripe_id\030\002 \001(\005\022\036\n\026data_migr"
+  "ation_seconds\030\003 \001(\001\022\035\n\025parity_update_sec"
+  "onds\030\004 \001(\0012\343\022\n\022coordinatorService\022k\n\025say"
+  "HelloToCoordinator\022\'.coordinator_proto.R"
+  "equestToCoordinator\032\'.coordinator_proto."
+  "ReplyFromCoordinator\"\000\022`\n\ncheckalive\022\'.c"
+  "oordinator_proto.RequestToCoordinator\032\'."
+  "coordinator_proto.ReplyFromCoordinator\"\000"
+  "\022V\n\014setParameter\022\034.coordinator_proto.Par"
+  "ameter\032&.coordinator_proto.RepIfSetParaS"
+  "uccess\"\000\022d\n\024uploadOriginKeyValue\022%.coord"
+  "inator_proto.RequestProxyIPPort\032#.coordi"
+  "nator_proto.ReplyProxyIPPort\"\000\022a\n\021report"
+  "CommitAbort\022!.coordinator_proto.CommitAb"
+  "ortKey\032\'.coordinator_proto.ReplyFromCoor"
+  "dinator\"\000\022V\n\020checkCommitAbort\022\037.coordina"
+  "tor_proto.AskIfSuccess\032\037.coordinator_pro"
+  "to.RepIfSuccess\"\000\022`\n\016uploadSetValue\022%.co"
   "ordinator_proto.RequestProxyIPPort\032%.coo"
-  "rdinator_proto.ReplyProxyIPsPorts\"\000\022S\n\010g"
-  "etValue\022!.coordinator_proto.KeyAndClient"
-  "IP\032\".coordinator_proto.RepIfGetSuccess\"\000"
-  "\022W\n\tgetStripe\022!.coordinator_proto.KeyAnd"
-  "ClientIP\032%.coordinator_proto.ReplyProxyI"
-  "PsPorts\"\000\022\\\n\tgetBlocks\022&.coordinator_pro"
-  "to.BlockIDsAndClientIP\032%.coordinator_pro"
-  "to.ReplyProxyIPsPorts\"\000\022j\n\024getBlocksBySt"
-  "ripePos\022).coordinator_proto.StripePosLis"
-  "tAndClient\032%.coordinator_proto.ReplyProx"
-  "yIPsPorts\"\000\022h\n\025getDegradedReadBlocks\022&.c"
-  "oordinator_proto.BlockIDsAndClientIP\032%.c"
-  "oordinator_proto.ReplyProxyIPsPorts\"\000\022a\n"
-  "\024getDegradedReadBlock\022!.coordinator_prot"
+  "rdinator_proto.ReplyProxyIPsPorts\"\000\022c\n\021u"
+  "ploadSubsetValue\022%.coordinator_proto.Req"
+  "uestProxyIPPort\032%.coordinator_proto.Repl"
+  "yProxyIPsPorts\"\000\022c\n\021uploadAppendValue\022%."
+  "coordinator_proto.RequestProxyIPPort\032%.c"
+  "oordinator_proto.ReplyProxyIPsPorts\"\000\022S\n"
+  "\010getValue\022!.coordinator_proto.KeyAndClie"
+  "ntIP\032\".coordinator_proto.RepIfGetSuccess"
+  "\"\000\022W\n\tgetStripe\022!.coordinator_proto.KeyA"
+  "ndClientIP\032%.coordinator_proto.ReplyProx"
+  "yIPsPorts\"\000\022\\\n\tgetBlocks\022&.coordinator_p"
+  "roto.BlockIDsAndClientIP\032%.coordinator_p"
+  "roto.ReplyProxyIPsPorts\"\000\022j\n\024getBlocksBy"
+  "StripePos\022).coordinator_proto.StripePosL"
+  "istAndClient\032%.coordinator_proto.ReplyPr"
+  "oxyIPsPorts\"\000\022h\n\025getDegradedReadBlocks\022&"
+  ".coordinator_proto.BlockIDsAndClientIP\032%"
+  ".coordinator_proto.ReplyProxyIPsPorts\"\000\022"
+  "a\n\024getDegradedReadBlock\022!.coordinator_pr"
+  "oto.KeyAndClientIP\032$.coordinator_proto.D"
+  "egradedReadReply\"\000\022j\n\035getDegradedReadBlo"
+  "ckBreakdown\022!.coordinator_proto.KeyAndCl"
+  "ientIP\032$.coordinator_proto.DegradedReadR"
+  "eply\"\000\022T\n\013getRecovery\022!.coordinator_prot"
+  "o.KeyAndClientIP\032 .coordinator_proto.Rec"
+  "overyReply\"\000\022]\n\024getRecoveryBreakdown\022!.c"
+  "oordinator_proto.KeyAndClientIP\032 .coordi"
+  "nator_proto.RecoveryReply\"\000\022Y\n\020fullNodeR"
+  "ecovery\022#.coordinator_proto.NodeIdFromCl"
+  "ient\032\036.coordinator_proto.RepBlockNum\"\000\022j"
+  "\n\022multiBlockRecovery\0220.coordinator_proto"
+  ".StripeIdAndBlockIDsFromClient\032 .coordin"
+  "ator_proto.RecoveryReply\"\000\022N\n\010delByKey\022 "
+  ".coordinator_proto.KeyFromClient\032\036.coord"
+  "inator_proto.RepIfDeling\"\000\022V\n\013delByStrip"
+  "e\022%.coordinator_proto.StripeIdFromClient"
+  "\032\036.coordinator_proto.RepIfDeling\"\000\022P\n\014me"
+  "rgeStripes\022\037.coordinator_proto.MergeRequ"
+  "est\032\035.coordinator_proto.MergeReply\"\000\022Y\n\013"
+  "listStripes\022\'.coordinator_proto.RequestT"
+  "oCoordinator\032\037.coordinator_proto.RepStri"
+  "peIds\"\000\022W\n\ndecodeTest\022!.coordinator_prot"
   "o.KeyAndClientIP\032$.coordinator_proto.Deg"
-  "radedReadReply\"\000\022j\n\035getDegradedReadBlock"
-  "Breakdown\022!.coordinator_proto.KeyAndClie"
-  "ntIP\032$.coordinator_proto.DegradedReadRep"
-  "ly\"\000\022T\n\013getRecovery\022!.coordinator_proto."
-  "KeyAndClientIP\032 .coordinator_proto.Recov"
-  "eryReply\"\000\022]\n\024getRecoveryBreakdown\022!.coo"
-  "rdinator_proto.KeyAndClientIP\032 .coordina"
-  "tor_proto.RecoveryReply\"\000\022Y\n\020fullNodeRec"
-  "overy\022#.coordinator_proto.NodeIdFromClie"
-  "nt\032\036.coordinator_proto.RepBlockNum\"\000\022j\n\022"
-  "multiBlockRecovery\0220.coordinator_proto.S"
-  "tripeIdAndBlockIDsFromClient\032 .coordinat"
-  "or_proto.RecoveryReply\"\000\022N\n\010delByKey\022 .c"
-  "oordinator_proto.KeyFromClient\032\036.coordin"
-  "ator_proto.RepIfDeling\"\000\022V\n\013delByStripe\022"
-  "%.coordinator_proto.StripeIdFromClient\032\036"
-  ".coordinator_proto.RepIfDeling\"\000\022P\n\014merg"
-  "eStripes\022\037.coordinator_proto.MergeReques"
-  "t\032\035.coordinator_proto.MergeReply\"\000\022Y\n\013li"
-  "stStripes\022\'.coordinator_proto.RequestToC"
-  "oordinator\032\037.coordinator_proto.RepStripe"
-  "Ids\"\000\022W\n\ndecodeTest\022!.coordinator_proto."
-  "KeyAndClientIP\032$.coordinator_proto.Degra"
-  "dedReadReply\"\000b\006proto3"
+  "radedReadReply\"\000b\006proto3"
   ;
 static ::_pbi::once_flag descriptor_table_coordinator_2eproto_once;
 const ::_pbi::DescriptorTable descriptor_table_coordinator_2eproto = {
-    false, false, 4862, descriptor_table_protodef_coordinator_2eproto,
+    false, false, 5144, descriptor_table_protodef_coordinator_2eproto,
     "coordinator.proto",
     &descriptor_table_coordinator_2eproto_once, nullptr, 0, 26,
     schemas, file_default_instances, TableStruct_coordinator_2eproto::offsets,
@@ -5935,6 +5958,14 @@ RecoveryReply::RecoveryReply(const RecoveryReply& from)
     , decltype(_impl_.setup_time_){}
     , decltype(_impl_.data_plane_time_){}
     , decltype(_impl_.teardown_time_){}
+    , decltype(_impl_.hybrid_p_select_time_){}
+    , decltype(_impl_.hybrid_phase2_wall_time_){}
+    , decltype(_impl_.hybrid_pipeline_wall_time_){}
+    , decltype(_impl_.hybrid_phase2_network_hot_time_){}
+    , decltype(_impl_.hybrid_pipeline_tail_ingress_time_){}
+    , decltype(_impl_.hybrid_failed_node_hot_time_){}
+    , decltype(_impl_.hybrid_hub_egress_hot_time_){}
+    , decltype(_impl_.hybrid_commit_time_){}
     , /*decltype(_impl_._cached_size_)*/{}};
 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
@@ -5963,8 +5994,8 @@ RecoveryReply::RecoveryReply(const RecoveryReply& from)
       _this->GetArenaForAllocation());
   }
   ::memcpy(&_impl_.disk_read_time_, &from._impl_.disk_read_time_,
-    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.teardown_time_) -
-    reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.teardown_time_));
+    static_cast<size_t>(reinterpret_cast<char*>(&_impl_.hybrid_commit_time_) -
+    reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.hybrid_commit_time_));
   // @@protoc_insertion_point(copy_constructor:coordinator_proto.RecoveryReply)
 }
 
@@ -5996,6 +6027,14 @@ inline void RecoveryReply::SharedCtor(
     , decltype(_impl_.setup_time_){0}
     , decltype(_impl_.data_plane_time_){0}
     , decltype(_impl_.teardown_time_){0}
+    , decltype(_impl_.hybrid_p_select_time_){0}
+    , decltype(_impl_.hybrid_phase2_wall_time_){0}
+    , decltype(_impl_.hybrid_pipeline_wall_time_){0}
+    , decltype(_impl_.hybrid_phase2_network_hot_time_){0}
+    , decltype(_impl_.hybrid_pipeline_tail_ingress_time_){0}
+    , decltype(_impl_.hybrid_failed_node_hot_time_){0}
+    , decltype(_impl_.hybrid_hub_egress_hot_time_){0}
+    , decltype(_impl_.hybrid_commit_time_){0}
     , /*decltype(_impl_._cached_size_)*/{}
   };
   _impl_.message_.InitDefault();
@@ -6048,8 +6087,8 @@ void RecoveryReply::Clear() {
   _impl_.repair_mode_.ClearToEmpty();
   _impl_.equation_policy_.ClearToEmpty();
   ::memset(&_impl_.disk_read_time_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&_impl_.teardown_time_) -
-      reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.teardown_time_));
+      reinterpret_cast<char*>(&_impl_.hybrid_commit_time_) -
+      reinterpret_cast<char*>(&_impl_.disk_read_time_)) + sizeof(_impl_.hybrid_commit_time_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -6242,6 +6281,70 @@ const char* RecoveryReply::_InternalParse(const char* ptr, ::_pbi::ParseContext*
       case 21:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 169)) {
           _impl_.teardown_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_p_select_time = 22;
+      case 22:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 177)) {
+          _impl_.hybrid_p_select_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_phase2_wall_time = 23;
+      case 23:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 185)) {
+          _impl_.hybrid_phase2_wall_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_pipeline_wall_time = 24;
+      case 24:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 193)) {
+          _impl_.hybrid_pipeline_wall_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_phase2_network_hot_time = 25;
+      case 25:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 201)) {
+          _impl_.hybrid_phase2_network_hot_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_pipeline_tail_ingress_time = 26;
+      case 26:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 209)) {
+          _impl_.hybrid_pipeline_tail_ingress_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_failed_node_hot_time = 27;
+      case 27:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 217)) {
+          _impl_.hybrid_failed_node_hot_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_hub_egress_hot_time = 28;
+      case 28:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 225)) {
+          _impl_.hybrid_hub_egress_hot_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
+          ptr += sizeof(double);
+        } else
+          goto handle_unusual;
+        continue;
+      // double hybrid_commit_time = 29;
+      case 29:
+        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 233)) {
+          _impl_.hybrid_commit_time_ = ::PROTOBUF_NAMESPACE_ID::internal::UnalignedLoad<double>(ptr);
           ptr += sizeof(double);
         } else
           goto handle_unusual;
@@ -6467,6 +6570,86 @@ uint8_t* RecoveryReply::_InternalSerialize(
     target = ::_pbi::WireFormatLite::WriteDoubleToArray(21, this->_internal_teardown_time(), target);
   }
 
+  // double hybrid_p_select_time = 22;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_p_select_time = this->_internal_hybrid_p_select_time();
+  uint64_t raw_hybrid_p_select_time;
+  memcpy(&raw_hybrid_p_select_time, &tmp_hybrid_p_select_time, sizeof(tmp_hybrid_p_select_time));
+  if (raw_hybrid_p_select_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(22, this->_internal_hybrid_p_select_time(), target);
+  }
+
+  // double hybrid_phase2_wall_time = 23;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_wall_time = this->_internal_hybrid_phase2_wall_time();
+  uint64_t raw_hybrid_phase2_wall_time;
+  memcpy(&raw_hybrid_phase2_wall_time, &tmp_hybrid_phase2_wall_time, sizeof(tmp_hybrid_phase2_wall_time));
+  if (raw_hybrid_phase2_wall_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(23, this->_internal_hybrid_phase2_wall_time(), target);
+  }
+
+  // double hybrid_pipeline_wall_time = 24;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_wall_time = this->_internal_hybrid_pipeline_wall_time();
+  uint64_t raw_hybrid_pipeline_wall_time;
+  memcpy(&raw_hybrid_pipeline_wall_time, &tmp_hybrid_pipeline_wall_time, sizeof(tmp_hybrid_pipeline_wall_time));
+  if (raw_hybrid_pipeline_wall_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(24, this->_internal_hybrid_pipeline_wall_time(), target);
+  }
+
+  // double hybrid_phase2_network_hot_time = 25;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_network_hot_time = this->_internal_hybrid_phase2_network_hot_time();
+  uint64_t raw_hybrid_phase2_network_hot_time;
+  memcpy(&raw_hybrid_phase2_network_hot_time, &tmp_hybrid_phase2_network_hot_time, sizeof(tmp_hybrid_phase2_network_hot_time));
+  if (raw_hybrid_phase2_network_hot_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(25, this->_internal_hybrid_phase2_network_hot_time(), target);
+  }
+
+  // double hybrid_pipeline_tail_ingress_time = 26;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_tail_ingress_time = this->_internal_hybrid_pipeline_tail_ingress_time();
+  uint64_t raw_hybrid_pipeline_tail_ingress_time;
+  memcpy(&raw_hybrid_pipeline_tail_ingress_time, &tmp_hybrid_pipeline_tail_ingress_time, sizeof(tmp_hybrid_pipeline_tail_ingress_time));
+  if (raw_hybrid_pipeline_tail_ingress_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(26, this->_internal_hybrid_pipeline_tail_ingress_time(), target);
+  }
+
+  // double hybrid_failed_node_hot_time = 27;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_failed_node_hot_time = this->_internal_hybrid_failed_node_hot_time();
+  uint64_t raw_hybrid_failed_node_hot_time;
+  memcpy(&raw_hybrid_failed_node_hot_time, &tmp_hybrid_failed_node_hot_time, sizeof(tmp_hybrid_failed_node_hot_time));
+  if (raw_hybrid_failed_node_hot_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(27, this->_internal_hybrid_failed_node_hot_time(), target);
+  }
+
+  // double hybrid_hub_egress_hot_time = 28;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_hub_egress_hot_time = this->_internal_hybrid_hub_egress_hot_time();
+  uint64_t raw_hybrid_hub_egress_hot_time;
+  memcpy(&raw_hybrid_hub_egress_hot_time, &tmp_hybrid_hub_egress_hot_time, sizeof(tmp_hybrid_hub_egress_hot_time));
+  if (raw_hybrid_hub_egress_hot_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(28, this->_internal_hybrid_hub_egress_hot_time(), target);
+  }
+
+  // double hybrid_commit_time = 29;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_commit_time = this->_internal_hybrid_commit_time();
+  uint64_t raw_hybrid_commit_time;
+  memcpy(&raw_hybrid_commit_time, &tmp_hybrid_commit_time, sizeof(tmp_hybrid_commit_time));
+  if (raw_hybrid_commit_time != 0) {
+    target = stream->EnsureSpace(target);
+    target = ::_pbi::WireFormatLite::WriteDoubleToArray(29, this->_internal_hybrid_commit_time(), target);
+  }
+
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
@@ -6663,6 +6846,78 @@ size_t RecoveryReply::ByteSizeLong() const {
     total_size += 2 + 8;
   }
 
+  // double hybrid_p_select_time = 22;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_p_select_time = this->_internal_hybrid_p_select_time();
+  uint64_t raw_hybrid_p_select_time;
+  memcpy(&raw_hybrid_p_select_time, &tmp_hybrid_p_select_time, sizeof(tmp_hybrid_p_select_time));
+  if (raw_hybrid_p_select_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_phase2_wall_time = 23;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_wall_time = this->_internal_hybrid_phase2_wall_time();
+  uint64_t raw_hybrid_phase2_wall_time;
+  memcpy(&raw_hybrid_phase2_wall_time, &tmp_hybrid_phase2_wall_time, sizeof(tmp_hybrid_phase2_wall_time));
+  if (raw_hybrid_phase2_wall_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_pipeline_wall_time = 24;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_wall_time = this->_internal_hybrid_pipeline_wall_time();
+  uint64_t raw_hybrid_pipeline_wall_time;
+  memcpy(&raw_hybrid_pipeline_wall_time, &tmp_hybrid_pipeline_wall_time, sizeof(tmp_hybrid_pipeline_wall_time));
+  if (raw_hybrid_pipeline_wall_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_phase2_network_hot_time = 25;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_network_hot_time = this->_internal_hybrid_phase2_network_hot_time();
+  uint64_t raw_hybrid_phase2_network_hot_time;
+  memcpy(&raw_hybrid_phase2_network_hot_time, &tmp_hybrid_phase2_network_hot_time, sizeof(tmp_hybrid_phase2_network_hot_time));
+  if (raw_hybrid_phase2_network_hot_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_pipeline_tail_ingress_time = 26;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_tail_ingress_time = this->_internal_hybrid_pipeline_tail_ingress_time();
+  uint64_t raw_hybrid_pipeline_tail_ingress_time;
+  memcpy(&raw_hybrid_pipeline_tail_ingress_time, &tmp_hybrid_pipeline_tail_ingress_time, sizeof(tmp_hybrid_pipeline_tail_ingress_time));
+  if (raw_hybrid_pipeline_tail_ingress_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_failed_node_hot_time = 27;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_failed_node_hot_time = this->_internal_hybrid_failed_node_hot_time();
+  uint64_t raw_hybrid_failed_node_hot_time;
+  memcpy(&raw_hybrid_failed_node_hot_time, &tmp_hybrid_failed_node_hot_time, sizeof(tmp_hybrid_failed_node_hot_time));
+  if (raw_hybrid_failed_node_hot_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_hub_egress_hot_time = 28;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_hub_egress_hot_time = this->_internal_hybrid_hub_egress_hot_time();
+  uint64_t raw_hybrid_hub_egress_hot_time;
+  memcpy(&raw_hybrid_hub_egress_hot_time, &tmp_hybrid_hub_egress_hot_time, sizeof(tmp_hybrid_hub_egress_hot_time));
+  if (raw_hybrid_hub_egress_hot_time != 0) {
+    total_size += 2 + 8;
+  }
+
+  // double hybrid_commit_time = 29;
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_commit_time = this->_internal_hybrid_commit_time();
+  uint64_t raw_hybrid_commit_time;
+  memcpy(&raw_hybrid_commit_time, &tmp_hybrid_commit_time, sizeof(tmp_hybrid_commit_time));
+  if (raw_hybrid_commit_time != 0) {
+    total_size += 2 + 8;
+  }
+
   return MaybeComputeUnknownFieldsSize(total_size, &_impl_._cached_size_);
 }
 
@@ -6782,6 +7037,62 @@ void RecoveryReply::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message& to_msg, const ::
   if (raw_teardown_time != 0) {
     _this->_internal_set_teardown_time(from._internal_teardown_time());
   }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_p_select_time = from._internal_hybrid_p_select_time();
+  uint64_t raw_hybrid_p_select_time;
+  memcpy(&raw_hybrid_p_select_time, &tmp_hybrid_p_select_time, sizeof(tmp_hybrid_p_select_time));
+  if (raw_hybrid_p_select_time != 0) {
+    _this->_internal_set_hybrid_p_select_time(from._internal_hybrid_p_select_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_wall_time = from._internal_hybrid_phase2_wall_time();
+  uint64_t raw_hybrid_phase2_wall_time;
+  memcpy(&raw_hybrid_phase2_wall_time, &tmp_hybrid_phase2_wall_time, sizeof(tmp_hybrid_phase2_wall_time));
+  if (raw_hybrid_phase2_wall_time != 0) {
+    _this->_internal_set_hybrid_phase2_wall_time(from._internal_hybrid_phase2_wall_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_wall_time = from._internal_hybrid_pipeline_wall_time();
+  uint64_t raw_hybrid_pipeline_wall_time;
+  memcpy(&raw_hybrid_pipeline_wall_time, &tmp_hybrid_pipeline_wall_time, sizeof(tmp_hybrid_pipeline_wall_time));
+  if (raw_hybrid_pipeline_wall_time != 0) {
+    _this->_internal_set_hybrid_pipeline_wall_time(from._internal_hybrid_pipeline_wall_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_phase2_network_hot_time = from._internal_hybrid_phase2_network_hot_time();
+  uint64_t raw_hybrid_phase2_network_hot_time;
+  memcpy(&raw_hybrid_phase2_network_hot_time, &tmp_hybrid_phase2_network_hot_time, sizeof(tmp_hybrid_phase2_network_hot_time));
+  if (raw_hybrid_phase2_network_hot_time != 0) {
+    _this->_internal_set_hybrid_phase2_network_hot_time(from._internal_hybrid_phase2_network_hot_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_pipeline_tail_ingress_time = from._internal_hybrid_pipeline_tail_ingress_time();
+  uint64_t raw_hybrid_pipeline_tail_ingress_time;
+  memcpy(&raw_hybrid_pipeline_tail_ingress_time, &tmp_hybrid_pipeline_tail_ingress_time, sizeof(tmp_hybrid_pipeline_tail_ingress_time));
+  if (raw_hybrid_pipeline_tail_ingress_time != 0) {
+    _this->_internal_set_hybrid_pipeline_tail_ingress_time(from._internal_hybrid_pipeline_tail_ingress_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_failed_node_hot_time = from._internal_hybrid_failed_node_hot_time();
+  uint64_t raw_hybrid_failed_node_hot_time;
+  memcpy(&raw_hybrid_failed_node_hot_time, &tmp_hybrid_failed_node_hot_time, sizeof(tmp_hybrid_failed_node_hot_time));
+  if (raw_hybrid_failed_node_hot_time != 0) {
+    _this->_internal_set_hybrid_failed_node_hot_time(from._internal_hybrid_failed_node_hot_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_hub_egress_hot_time = from._internal_hybrid_hub_egress_hot_time();
+  uint64_t raw_hybrid_hub_egress_hot_time;
+  memcpy(&raw_hybrid_hub_egress_hot_time, &tmp_hybrid_hub_egress_hot_time, sizeof(tmp_hybrid_hub_egress_hot_time));
+  if (raw_hybrid_hub_egress_hot_time != 0) {
+    _this->_internal_set_hybrid_hub_egress_hot_time(from._internal_hybrid_hub_egress_hot_time());
+  }
+  static_assert(sizeof(uint64_t) == sizeof(double), "Code assumes uint64_t and double are the same size.");
+  double tmp_hybrid_commit_time = from._internal_hybrid_commit_time();
+  uint64_t raw_hybrid_commit_time;
+  memcpy(&raw_hybrid_commit_time, &tmp_hybrid_commit_time, sizeof(tmp_hybrid_commit_time));
+  if (raw_hybrid_commit_time != 0) {
+    _this->_internal_set_hybrid_commit_time(from._internal_hybrid_commit_time());
+  }
   _this->_internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -6817,8 +7128,8 @@ void RecoveryReply::InternalSwap(RecoveryReply* other) {
       &other->_impl_.equation_policy_, rhs_arena
   );
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
-      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.teardown_time_)
-      + sizeof(RecoveryReply::_impl_.teardown_time_)
+      PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.hybrid_commit_time_)
+      + sizeof(RecoveryReply::_impl_.hybrid_commit_time_)
       - PROTOBUF_FIELD_OFFSET(RecoveryReply, _impl_.disk_read_time_)>(
           reinterpret_cast<char*>(&_impl_.disk_read_time_),
           reinterpret_cast<char*>(&other->_impl_.disk_read_time_));

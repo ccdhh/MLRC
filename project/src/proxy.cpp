@@ -2467,6 +2467,35 @@ namespace ECProject
         get_threads[i].join();
       }
 
+      // Phase1 pulls every helper block into one anchor proxy. The helper datanodes
+      // have independent egress NICs, but all remote streams contend for this node's
+      // single ingress NIC. Drain the TCP streams first to avoid receiver-side
+      // backpressure, then enforce the aggregate H*block_size/B ingress timeline.
+      // This also makes the reported network span use the same physical-node model
+      // as Phase2, Pipeline, and Hybrid.
+      size_t remote_ingress_bytes = 0;
+      for (int i = 0; i < recovery_request->datanodeip_size(); i++)
+      {
+        if (!isLocalDatanode(recovery_request->datanodeip(i).c_str(),
+                             recovery_request->datanodeport(i)))
+          remote_ingress_bytes += m_sys_config->BlockSize;
+      }
+      double phase1_ingress_end = 0.0;
+      if (remote_ingress_bytes > 0)
+      {
+        const double ingress_start =
+            *std::min_element(data_node_network_start_time.begin(), data_node_network_start_time.end());
+        const double ingress_io_elapsed = std::max(
+            0.0, std::chrono::duration<double>(
+                     std::chrono::high_resolution_clock::now().time_since_epoch()).count() -
+                     ingress_start);
+        if (SharedBandwidthLimiter *ingress_bw = nodeIngressBandwidth())
+          ingress_bw->account_after_io(remote_ingress_bytes, ingress_io_elapsed);
+        phase1_ingress_end =
+            std::chrono::duration<double>(
+                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+      }
+
       auto cleanup_recovery_bufs = [&]() {
         free_aligned_buf(res_buf);
         free_aligned_buf(real_res_buf);
@@ -2483,7 +2512,9 @@ namespace ECProject
       response->set_disk_io_start_time(*std::min_element(data_node_disk_io_start_time.begin(), data_node_disk_io_start_time.end()));
       response->set_disk_io_end_time(*std::max_element(data_node_disk_io_end_time.begin(), data_node_disk_io_end_time.end()));
       response->set_network_start_time(*std::min_element(data_node_network_start_time.begin(), data_node_network_start_time.end()));
-      response->set_network_end_time(*std::max_element(data_node_network_end_time.begin(), data_node_network_end_time.end()));
+      response->set_network_end_time(std::max(
+          *std::max_element(data_node_network_end_time.begin(), data_node_network_end_time.end()),
+          phase1_ingress_end));
       response->set_data_node_grpc_notify_time(*std::min_element(data_node_grpc_notify_time.begin(), data_node_grpc_notify_time.end()));
       response->set_data_node_grpc_start_time(*std::max_element(data_node_grpc_start_time.begin(), data_node_grpc_start_time.end()));
       

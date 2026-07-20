@@ -273,6 +273,9 @@ message RecoveryRequest{
   bool phase2_share_proxy_node_bandwidth = 73;
   /** Phase2 only: bind exchange acceptor and return (coordinator READY handshake). */
   bool phase2_ready_only = 74;
+  reserved 75;
+  /** Shared by the Phase2 prefix and Pipeline tail of one Hybrid attempt. */
+  string hybrid_commit_token = 76;
 }
 
 message MultipleRecoveryRequest{
@@ -297,6 +300,7 @@ message RecoveryReply {
   double data_node_grpc_start_time = 11;
   double dest_data_node_network_time = 12;
   double dest_data_node_disk_io_time = 13;
+  double recovery_commit_time = 14;
   
 }
 

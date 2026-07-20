@@ -56,6 +56,7 @@ message RequestResult {
     double grpc_start_time = 5;
     double exec_seconds = 6;
     int32 data_port = 7;
+    double recovery_commit_time = 8;
 }
 
 message SetInfo {
@@ -84,6 +85,12 @@ message MergeParityInfo {
     int32 recovery_size = 4;
     string proxy_ip = 5;
     int32 proxy_port = 6;
+    // Hybrid range writes defer durability until both disjoint halves arrive.
+    bool recovery_defer_fsync = 7;
+    reserved 8;
+    // Both Hybrid range writers use the same token and wait for all parts.
+    string recovery_commit_token = 9;
+    int32 recovery_commit_parts = 10;
 }
 
 message GetInfo {

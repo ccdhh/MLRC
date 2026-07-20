@@ -14,6 +14,7 @@
 #include <atomic>
 #if defined(__linux__) || defined(__APPLE__)
 #include <sys/socket.h>
+#include <unistd.h>
 #endif
 #include <condition_variable>
 #include <deque>
@@ -974,6 +975,12 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       // written pipeline-owned [p,S) tail untouched.
       write_stream->recovery_info.set_recovery_size(
           hybrid_partial_write ? static_cast<int>(phase2_write_bytes) : 0);
+      write_stream->recovery_info.set_recovery_defer_fsync(hybrid_partial_write);
+      if (hybrid_partial_write)
+      {
+        write_stream->recovery_info.set_recovery_commit_token(recovery_request->hybrid_commit_token());
+        write_stream->recovery_info.set_recovery_commit_parts(2);
+      }
       write_stream->recovery_info.set_proxy_ip(m_ip);
       write_stream->recovery_info.set_proxy_port(m_port);
       write_stream->grpc_context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(180));
@@ -1224,6 +1231,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   };
 
   std::vector<std::thread> exchange_workers;
+  std::vector<std::unique_ptr<asio::ip::tcp::socket>> exchange_read_socks;
   auto add_exchange_workers = [&](int peer, int peer_part) {
     if (exchange_failed.load())
       return;
@@ -1250,9 +1258,32 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
       return;
     }
 
-    // One synchronous reader and one synchronous writer may operate on the
-    // same full-duplex TCP connection concurrently. This keeps A->B and B->A
-    // independent, matching the separate node-ingress/node-egress model.
+    // Keep one Asio object per thread. Concurrent synchronous read/write on
+    // the same TCP connection is full-duplex at the OS level, but sharing one
+    // asio::socket object across threads is not guaranteed thread-safe.
+    asio::error_code dup_ec;
+    const int duplicated_fd = ::dup(sock->native_handle());
+    if (duplicated_fd < 0)
+    {
+      set_phase2_error("failed to duplicate exchange socket for peer " + std::to_string(peer_part));
+      exchange_failed.store(true);
+      decoded_cv.notify_all();
+      return;
+    }
+    auto read_sock = std::make_unique<asio::ip::tcp::socket>(sock->get_executor());
+    read_sock->assign(sock->local_endpoint().protocol(), duplicated_fd, dup_ec);
+    if (dup_ec)
+    {
+      ::close(duplicated_fd);
+      set_phase2_error("failed to assign duplicated exchange socket for peer " + std::to_string(peer_part) +
+                       ": " + dup_ec.message());
+      exchange_failed.store(true);
+      decoded_cv.notify_all();
+      return;
+    }
+    asio::ip::tcp::socket *recv_sock = read_sock.get();
+    exchange_read_socks.push_back(std::move(read_sock));
+
     exchange_workers.emplace_back([&, sock, peer_part, peer_egress]() {
       asio::error_code send_ec;
       for (int shard_k = 0; shard_k < local_shard_count && !exchange_failed.load(); shard_k++)
@@ -1276,13 +1307,13 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     });
 
     exchange_workers.emplace_back(
-        [&, sock, peer_part, peer_shard_begin, peer_shard_count, peer_ingress]() {
+        [&, recv_sock, peer_part, peer_shard_begin, peer_shard_count, peer_ingress]() {
           asio::error_code recv_ec;
           std::vector<char> recv_stripe(stripe_byte_len);
           for (int shard_k = 0; shard_k < peer_shard_count && !exchange_failed.load(); shard_k++)
           {
             Phase2PeerHeader hdr{};
-            if (!recv_shard_frame(*sock, hdr, recv_stripe.data(), recv_stripe.size(), peer_ingress, recv_ec))
+            if (!recv_shard_frame(*recv_sock, hdr, recv_stripe.data(), recv_stripe.size(), peer_ingress, recv_ec))
             {
               set_phase2_error("shard recv from peer " + std::to_string(peer_part) + " failed: " +
                                recv_ec.message());
@@ -1328,6 +1359,14 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     {
       if (th.joinable())
         th.join();
+    }
+    for (auto &sock : exchange_read_socks)
+    {
+      if (sock && sock->is_open())
+      {
+        asio::error_code ignore_ec;
+        sock->close(ignore_ec);
+      }
     }
   };
 
@@ -1722,6 +1761,7 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
     total_write_net += write_stream->network_time;
     total_write_disk += write_stream->recovery_result.disk_io_end_time() -
                         write_stream->recovery_result.disk_io_start_time();
+    response->set_recovery_commit_time(write_stream->recovery_result.recovery_commit_time());
   }
 
   const auto ex_end = std::chrono::high_resolution_clock::now();

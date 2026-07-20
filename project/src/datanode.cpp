@@ -4,16 +4,100 @@
 #include "unilrc_encoder.h"
 #include "tinyxml2.h"
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <thread>
+#include <unordered_map>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
 namespace ECProject
 {
+    namespace
+    {
+        struct HybridRangeCommitState
+        {
+            int arrived = 0;
+            int waiters = 0;
+            bool all_parts_ok = true;
+            bool commit_done = false;
+            bool commit_ok = false;
+            double commit_sec = 0.0;
+            std::condition_variable cv;
+        };
+
+        std::mutex g_hybrid_commit_mu;
+        std::unordered_map<std::string, std::shared_ptr<HybridRangeCommitState>> g_hybrid_commits;
+
+        std::string datanode_storage_dir(int port)
+        {
+            const char *configured_root = std::getenv("DDRT_STORAGE_ROOT");
+            std::string root =
+                (configured_root != nullptr && configured_root[0] != '\0') ? configured_root : "./storage";
+            while (root.size() > 1 && root.back() == '/')
+                root.pop_back();
+            return root + "/" + std::to_string(port) + "/";
+        }
+
+        bool coordinate_hybrid_range_commit(const std::string &key, int expected_parts,
+                                            const std::string &temp_path, const std::string &final_path,
+                                            bool this_part_ok, double &commit_sec)
+        {
+            if (key.empty() || expected_parts <= 1)
+                return this_part_ok;
+
+            std::unique_lock<std::mutex> lock(g_hybrid_commit_mu);
+            auto &slot = g_hybrid_commits[key];
+            if (!slot)
+                slot = std::make_shared<HybridRangeCommitState>();
+            const std::shared_ptr<HybridRangeCommitState> state = slot;
+            state->arrived++;
+            state->waiters++;
+            state->all_parts_ok = state->all_parts_ok && this_part_ok;
+            const bool last_part = state->arrived == expected_parts;
+
+            if (last_part)
+            {
+                const bool should_commit = state->all_parts_ok;
+                lock.unlock();
+                const auto begin = std::chrono::high_resolution_clock::now();
+                const bool publish_ok =
+                    should_commit && (std::rename(temp_path.c_str(), final_path.c_str()) == 0);
+                if (!publish_ok)
+                    std::remove(temp_path.c_str());
+                const double elapsed =
+                    std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - begin).count();
+                lock.lock();
+                state->commit_ok = publish_ok;
+                state->commit_sec = elapsed;
+                state->commit_done = true;
+                state->cv.notify_all();
+            }
+            else
+            {
+                state->cv.wait_for(lock, std::chrono::seconds(120), [&]() { return state->commit_done; });
+                if (!state->commit_done)
+                {
+                    state->commit_ok = false;
+                    state->commit_done = true;
+                    state->cv.notify_all();
+                }
+            }
+
+            commit_sec = state->commit_sec;
+            const bool ok = state->commit_ok;
+            state->waiters--;
+            if (state->waiters == 0 && state->commit_done)
+                g_hybrid_commits.erase(key);
+            return ok;
+        }
+    }
+
     // Publish a full block only after the bytes are on disk.  Truncate-in-place
     // while a concurrent GET streams the same key causes short reads / EOF mid
     // block (seen as chain_head "shard send count mismatch" right after SET).
@@ -290,7 +374,7 @@ namespace ECProject
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), append_size), ec);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
 
                 if (access(targetdir.c_str(), 0) == -1)
@@ -362,7 +446,7 @@ namespace ECProject
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), append_size), ec);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
 
                 if (access(targetdir.c_str(), 0) == -1)
@@ -475,7 +559,7 @@ namespace ECProject
                 socket.shutdown(asio::ip::tcp::socket::shutdown_both, ignore_ec);
                 socket.close(ignore_ec);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
                 if(access(targetdir.c_str(), 0) == -1)
                 {
@@ -531,6 +615,9 @@ namespace ECProject
         const int recovery_size =
             recovery_info->recovery_size() > 0 ? recovery_info->recovery_size() : m_sys_config->BlockSize;
         const bool stripe_mode = recovery_info->recovery_size() > 0;
+        const bool defer_fsync = recovery_info->recovery_defer_fsync();
+        const std::string commit_token = recovery_info->recovery_commit_token();
+        const int commit_parts = recovery_info->recovery_commit_parts();
         // A full-block (recovery_size==0) stream is paced by the pipeline hub's
         // shared egress NIC.  Charging the target ingress again makes one
         // physical transfer take ~2B/w because the receiver cannot observe the
@@ -541,16 +628,21 @@ namespace ECProject
                 ? nullptr
                 : ingressBandwidthForRepairProxy(recovery_info->proxy_ip(), recovery_info->proxy_port());
 
-        auto handler = [this, ingress_bw, &response](std::string block_key, int block_id, int recovery_offset,
-                                                     int recovery_size, bool stripe_mode) mutable {
+        auto handler = [this, ingress_bw, defer_fsync, commit_token, commit_parts,
+                        &response](std::string block_key, int block_id, int recovery_offset,
+                                   int recovery_size, bool stripe_mode) mutable {
             try
             {
                 asio::error_code ec;
                 asio::ip::tcp::socket socket(io_context);
                 acceptor.accept(socket);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
+                const bool hybrid_atomic_range =
+                    stripe_mode && defer_fsync && !commit_token.empty() && commit_parts > 1;
+                const std::string range_writepath =
+                    hybrid_atomic_range ? writepath + ".recovery.hybrid." + commit_token : writepath;
                 if (access(targetdir.c_str(), 0) == -1)
                 {
                     mkdir(targetdir.c_str(), S_IRWXU);
@@ -559,6 +651,7 @@ namespace ECProject
                 std::chrono::high_resolution_clock::time_point disk_begin{};
                 std::chrono::high_resolution_clock::time_point disk_end{};
                 double disk_active_sec = 0.0;
+                double commit_sec = 0.0;
                 size_t wrote = 0;
 
                 // Stream TCP payload directly into the block file.  The old path
@@ -653,13 +746,26 @@ namespace ECProject
                         wrote += requested;
                         remaining -= requested;
                     }
-                    const auto flush_begin = std::chrono::high_resolution_clock::now();
-                    if (::fsync(fd) != 0)
-                        ec = asio::error::fault;
-                    disk_active_sec +=
-                        std::chrono::duration<double>(
-                            std::chrono::high_resolution_clock::now() - flush_begin)
-                            .count();
+                    const bool payload_ok = !ec && wrote == static_cast<size_t>(recovery_size);
+                    if (defer_fsync && !commit_token.empty() && commit_parts > 1)
+                    {
+                        const std::string commit_key =
+                            std::to_string(m_port) + ":" + block_key + ":" + commit_token;
+                        if (!coordinate_hybrid_range_commit(commit_key, commit_parts, range_writepath,
+                                                            writepath, payload_ok, commit_sec))
+                            ec = asio::error::fault;
+                        disk_active_sec += commit_sec;
+                    }
+                    else if (!defer_fsync)
+                    {
+                        const auto flush_begin = std::chrono::high_resolution_clock::now();
+                        if (::fsync(fd) != 0)
+                            ec = asio::error::fault;
+                        disk_active_sec +=
+                            std::chrono::duration<double>(
+                                std::chrono::high_resolution_clock::now() - flush_begin)
+                                .count();
+                    }
                     if (disk_begin.time_since_epoch().count() != 0)
                     {
                         disk_end =
@@ -676,10 +782,10 @@ namespace ECProject
                     // Hybrid Phase2 and Pipeline write disjoint ranges of the same
                     // recovered block concurrently. Never truncate on offset zero:
                     // create/pre-size once and use positional writes for both halves.
-                    const int fd = ::open(writepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+                    const int fd = ::open(range_writepath.c_str(), O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
                     if (fd < 0)
                     {
-                        std::cerr << "[Recovery] Failed to open range file: " << writepath << std::endl;
+                        std::cerr << "[Recovery] Failed to open range file: " << range_writepath << std::endl;
                     }
                     else
                     {
@@ -689,7 +795,7 @@ namespace ECProject
                         if (::fstat(fd, &st) != 0 ||
                             (st.st_size < m_sys_config->BlockSize &&
                              ::ftruncate(fd, static_cast<off_t>(m_sys_config->BlockSize)) != 0))
-                            std::cerr << "[Recovery] Failed to size range file: " << writepath << std::endl;
+                            std::cerr << "[Recovery] Failed to size range file: " << range_writepath << std::endl;
                         else
                             ok = stream_to_range(fd);
                         ::close(fd);
@@ -743,6 +849,7 @@ namespace ECProject
                         std::chrono::duration_cast<std::chrono::duration<double>>(disk_end.time_since_epoch()).count());
                 }
                 response->set_message(ok);
+                response->set_recovery_commit_time(commit_sec);
 
                 if (IF_DEBUG)
                 {
@@ -782,7 +889,7 @@ namespace ECProject
         {
             try
             {
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string readpath = targetdir + block_key;
 
                 // std::cout << "[Datanode" << m_port << "][Merge Parity Slices] readpath: " << readpath << std::endl;
@@ -840,7 +947,7 @@ namespace ECProject
         {
             try
             {
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string readpath = targetdir + block_key;
                 if (access(readpath.c_str(), 0) == -1)
                 {
@@ -904,7 +1011,7 @@ namespace ECProject
                 acceptor.accept(socket);
                 asio::read(socket, asio::buffer(buf.data(), block_size), ec);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
                 if (access(targetdir.c_str(), 0) == -1)
                 {
@@ -950,7 +1057,7 @@ namespace ECProject
 
                 asio::read(socket, asio::buffer(buf.data(), block_size), ec);
 
-                std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+                std::string targetdir = datanode_storage_dir(m_port);
                 std::string writepath = targetdir + block_key;
                 if (access(targetdir.c_str(), 0) == -1)
                 {
@@ -1021,7 +1128,7 @@ namespace ECProject
         }
         SharedBandwidthLimiter *egress_bw =
             egressBandwidthForRepairProxy(get_info->proxy_ip(), get_info->proxy_port());
-        std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+        std::string targetdir = datanode_storage_dir(m_port);
         std::string readpath = targetdir + block_key;
 
         auto data_acceptor = std::make_shared<asio::ip::tcp::acceptor>(io_context);
@@ -1145,7 +1252,7 @@ namespace ECProject
         std::string proxy_ip = get_info->proxy_ip();
         int proxy_port = get_info->proxy_port();
         SharedBandwidthLimiter *egress_bw = egressBandwidthForRepairProxy(proxy_ip, proxy_port);
-        std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+        std::string targetdir = datanode_storage_dir(m_port);
         std::string readpath = targetdir + block_key;
         char *buf = new char[block_size];
         if (access(readpath.c_str(), 0) == -1)
@@ -1203,7 +1310,7 @@ namespace ECProject
         (void)context;
         std::string block_key = request->block_key();
         int block_size = request->block_size();
-        std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+        std::string targetdir = datanode_storage_dir(m_port);
         std::string readpath = targetdir + block_key;
 
         if (block_size <= 0 || access(readpath.c_str(), 0) == -1) {
@@ -1254,7 +1361,7 @@ namespace ECProject
         std::string parity_b_ip = info->parity_b_datanode_ip();
         int parity_b_port = info->parity_b_datanode_port();
 
-        std::string targetdir = "./storage/" + std::to_string(m_port) + "/";
+        std::string targetdir = datanode_storage_dir(m_port);
         std::string path_a = targetdir + parity_key_a;
         std::string path_b = targetdir + parity_key_b;
         std::string path_new = targetdir + new_parity_key;
@@ -1371,7 +1478,7 @@ namespace ECProject
         datanode_proto::RequestResult *response)
     {
         std::string block_key = del_info->block_key();
-        std::string file_path = "./storage/" + std::to_string(m_port) + "/" + block_key;
+        std::string file_path = datanode_storage_dir(m_port) + block_key;
         if (IF_DEBUG)
         {
             std::cout << "[Datanode" << m_port << "] File path:" << file_path << std::endl;

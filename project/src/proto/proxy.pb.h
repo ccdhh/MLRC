@@ -4036,6 +4036,7 @@ class RecoveryRequest final :
     kPipelineLocalFailedBlockKeyFieldNumber = 56,
     kPipelineLocalReplacedNodeIpFieldNumber = 57,
     kPipelineHubBlockKeyFieldNumber = 62,
+    kHybridCommitTokenFieldNumber = 76,
     kReplacedNodePortFieldNumber = 2,
     kFailedBlockIdFieldNumber = 3,
     kCrossRackNumFieldNumber = 5,
@@ -4881,6 +4882,20 @@ class RecoveryRequest final :
   std::string* _internal_mutable_pipeline_hub_block_key();
   public:
 
+  // string hybrid_commit_token = 76;
+  void clear_hybrid_commit_token();
+  const std::string& hybrid_commit_token() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_hybrid_commit_token(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_hybrid_commit_token();
+  PROTOBUF_NODISCARD std::string* release_hybrid_commit_token();
+  void set_allocated_hybrid_commit_token(std::string* hybrid_commit_token);
+  private:
+  const std::string& _internal_hybrid_commit_token() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_hybrid_commit_token(const std::string& value);
+  std::string* _internal_mutable_hybrid_commit_token();
+  public:
+
   // int32 replaced_node_port = 2;
   void clear_replaced_node_port();
   int32_t replaced_node_port() const;
@@ -5273,6 +5288,7 @@ class RecoveryRequest final :
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr pipeline_local_failed_block_key_;
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr pipeline_local_replaced_node_ip_;
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr pipeline_hub_block_key_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr hybrid_commit_token_;
     int32_t replaced_node_port_;
     int32_t failed_block_id_;
     int32_t cross_rack_num_;
@@ -5676,6 +5692,7 @@ class RecoveryReply final :
     kDataNodeGrpcStartTimeFieldNumber = 11,
     kDestDataNodeNetworkTimeFieldNumber = 12,
     kDestDataNodeDiskIoTimeFieldNumber = 13,
+    kRecoveryCommitTimeFieldNumber = 14,
   };
   // double disk_io_start_time = 1;
   void clear_disk_io_start_time();
@@ -5794,6 +5811,15 @@ class RecoveryReply final :
   void _internal_set_dest_data_node_disk_io_time(double value);
   public:
 
+  // double recovery_commit_time = 14;
+  void clear_recovery_commit_time();
+  double recovery_commit_time() const;
+  void set_recovery_commit_time(double value);
+  private:
+  double _internal_recovery_commit_time() const;
+  void _internal_set_recovery_commit_time(double value);
+  public:
+
   // @@protoc_insertion_point(class_scope:proxy_proto.RecoveryReply)
  private:
   class _Internal;
@@ -5815,6 +5841,7 @@ class RecoveryReply final :
     double data_node_grpc_start_time_;
     double dest_data_node_network_time_;
     double dest_data_node_disk_io_time_;
+    double recovery_commit_time_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -13189,6 +13216,56 @@ inline void RecoveryRequest::set_phase2_ready_only(bool value) {
   // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.phase2_ready_only)
 }
 
+// string hybrid_commit_token = 76;
+inline void RecoveryRequest::clear_hybrid_commit_token() {
+  _impl_.hybrid_commit_token_.ClearToEmpty();
+}
+inline const std::string& RecoveryRequest::hybrid_commit_token() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryRequest.hybrid_commit_token)
+  return _internal_hybrid_commit_token();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void RecoveryRequest::set_hybrid_commit_token(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.hybrid_commit_token_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryRequest.hybrid_commit_token)
+}
+inline std::string* RecoveryRequest::mutable_hybrid_commit_token() {
+  std::string* _s = _internal_mutable_hybrid_commit_token();
+  // @@protoc_insertion_point(field_mutable:proxy_proto.RecoveryRequest.hybrid_commit_token)
+  return _s;
+}
+inline const std::string& RecoveryRequest::_internal_hybrid_commit_token() const {
+  return _impl_.hybrid_commit_token_.Get();
+}
+inline void RecoveryRequest::_internal_set_hybrid_commit_token(const std::string& value) {
+  
+  _impl_.hybrid_commit_token_.Set(value, GetArenaForAllocation());
+}
+inline std::string* RecoveryRequest::_internal_mutable_hybrid_commit_token() {
+  
+  return _impl_.hybrid_commit_token_.Mutable(GetArenaForAllocation());
+}
+inline std::string* RecoveryRequest::release_hybrid_commit_token() {
+  // @@protoc_insertion_point(field_release:proxy_proto.RecoveryRequest.hybrid_commit_token)
+  return _impl_.hybrid_commit_token_.Release();
+}
+inline void RecoveryRequest::set_allocated_hybrid_commit_token(std::string* hybrid_commit_token) {
+  if (hybrid_commit_token != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.hybrid_commit_token_.SetAllocated(hybrid_commit_token, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.hybrid_commit_token_.IsDefault()) {
+    _impl_.hybrid_commit_token_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:proxy_proto.RecoveryRequest.hybrid_commit_token)
+}
+
 // -------------------------------------------------------------------
 
 // MultipleRecoveryRequest
@@ -13667,6 +13744,26 @@ inline void RecoveryReply::_internal_set_dest_data_node_disk_io_time(double valu
 inline void RecoveryReply::set_dest_data_node_disk_io_time(double value) {
   _internal_set_dest_data_node_disk_io_time(value);
   // @@protoc_insertion_point(field_set:proxy_proto.RecoveryReply.dest_data_node_disk_io_time)
+}
+
+// double recovery_commit_time = 14;
+inline void RecoveryReply::clear_recovery_commit_time() {
+  _impl_.recovery_commit_time_ = 0;
+}
+inline double RecoveryReply::_internal_recovery_commit_time() const {
+  return _impl_.recovery_commit_time_;
+}
+inline double RecoveryReply::recovery_commit_time() const {
+  // @@protoc_insertion_point(field_get:proxy_proto.RecoveryReply.recovery_commit_time)
+  return _internal_recovery_commit_time();
+}
+inline void RecoveryReply::_internal_set_recovery_commit_time(double value) {
+  
+  _impl_.recovery_commit_time_ = value;
+}
+inline void RecoveryReply::set_recovery_commit_time(double value) {
+  _internal_set_recovery_commit_time(value);
+  // @@protoc_insertion_point(field_set:proxy_proto.RecoveryReply.recovery_commit_time)
 }
 
 // -------------------------------------------------------------------

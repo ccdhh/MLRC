@@ -45,7 +45,7 @@
     <GlrcRepairMode>hybrid</GlrcRepairMode>
     <GlrcHybridP>auto</GlrcHybridP>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
-    <GlrcEquationPolicy>local-first</GlrcEquationPolicy>
+    <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 
     <GlrcShardCount>128</GlrcShardCount>
     <GlrcPipelineWindow>0</GlrcPipelineWindow>

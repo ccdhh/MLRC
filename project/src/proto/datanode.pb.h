@@ -372,6 +372,7 @@ class RequestResult final :
     kDiskIoEndTimeFieldNumber = 4,
     kGrpcStartTimeFieldNumber = 5,
     kExecSecondsFieldNumber = 6,
+    kRecoveryCommitTimeFieldNumber = 8,
     kDataPortFieldNumber = 7,
   };
   // bool message = 1;
@@ -428,6 +429,15 @@ class RequestResult final :
   void _internal_set_exec_seconds(double value);
   public:
 
+  // double recovery_commit_time = 8;
+  void clear_recovery_commit_time();
+  double recovery_commit_time() const;
+  void set_recovery_commit_time(double value);
+  private:
+  double _internal_recovery_commit_time() const;
+  void _internal_set_recovery_commit_time(double value);
+  public:
+
   // int32 data_port = 7;
   void clear_data_port();
   int32_t data_port() const;
@@ -451,6 +461,7 @@ class RequestResult final :
     double disk_io_end_time_;
     double grpc_start_time_;
     double exec_seconds_;
+    double recovery_commit_time_;
     int32_t data_port_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
@@ -992,10 +1003,13 @@ class MergeParityInfo final :
   enum : int {
     kBlockKeyFieldNumber = 1,
     kProxyIpFieldNumber = 5,
+    kRecoveryCommitTokenFieldNumber = 9,
     kBlockIdFieldNumber = 2,
     kRecoveryOffsetFieldNumber = 3,
     kRecoverySizeFieldNumber = 4,
     kProxyPortFieldNumber = 6,
+    kRecoveryDeferFsyncFieldNumber = 7,
+    kRecoveryCommitPartsFieldNumber = 10,
   };
   // string block_key = 1;
   void clear_block_key();
@@ -1023,6 +1037,20 @@ class MergeParityInfo final :
   const std::string& _internal_proxy_ip() const;
   inline PROTOBUF_ALWAYS_INLINE void _internal_set_proxy_ip(const std::string& value);
   std::string* _internal_mutable_proxy_ip();
+  public:
+
+  // string recovery_commit_token = 9;
+  void clear_recovery_commit_token();
+  const std::string& recovery_commit_token() const;
+  template <typename ArgT0 = const std::string&, typename... ArgT>
+  void set_recovery_commit_token(ArgT0&& arg0, ArgT... args);
+  std::string* mutable_recovery_commit_token();
+  PROTOBUF_NODISCARD std::string* release_recovery_commit_token();
+  void set_allocated_recovery_commit_token(std::string* recovery_commit_token);
+  private:
+  const std::string& _internal_recovery_commit_token() const;
+  inline PROTOBUF_ALWAYS_INLINE void _internal_set_recovery_commit_token(const std::string& value);
+  std::string* _internal_mutable_recovery_commit_token();
   public:
 
   // int32 block_id = 2;
@@ -1061,6 +1089,24 @@ class MergeParityInfo final :
   void _internal_set_proxy_port(int32_t value);
   public:
 
+  // bool recovery_defer_fsync = 7;
+  void clear_recovery_defer_fsync();
+  bool recovery_defer_fsync() const;
+  void set_recovery_defer_fsync(bool value);
+  private:
+  bool _internal_recovery_defer_fsync() const;
+  void _internal_set_recovery_defer_fsync(bool value);
+  public:
+
+  // int32 recovery_commit_parts = 10;
+  void clear_recovery_commit_parts();
+  int32_t recovery_commit_parts() const;
+  void set_recovery_commit_parts(int32_t value);
+  private:
+  int32_t _internal_recovery_commit_parts() const;
+  void _internal_set_recovery_commit_parts(int32_t value);
+  public:
+
   // @@protoc_insertion_point(class_scope:datanode_proto.MergeParityInfo)
  private:
   class _Internal;
@@ -1071,10 +1117,13 @@ class MergeParityInfo final :
   struct Impl_ {
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr block_key_;
     ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr proxy_ip_;
+    ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr recovery_commit_token_;
     int32_t block_id_;
     int32_t recovery_offset_;
     int32_t recovery_size_;
     int32_t proxy_port_;
+    bool recovery_defer_fsync_;
+    int32_t recovery_commit_parts_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -2224,6 +2273,26 @@ inline void RequestResult::set_data_port(int32_t value) {
   // @@protoc_insertion_point(field_set:datanode_proto.RequestResult.data_port)
 }
 
+// double recovery_commit_time = 8;
+inline void RequestResult::clear_recovery_commit_time() {
+  _impl_.recovery_commit_time_ = 0;
+}
+inline double RequestResult::_internal_recovery_commit_time() const {
+  return _impl_.recovery_commit_time_;
+}
+inline double RequestResult::recovery_commit_time() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.RequestResult.recovery_commit_time)
+  return _internal_recovery_commit_time();
+}
+inline void RequestResult::_internal_set_recovery_commit_time(double value) {
+  
+  _impl_.recovery_commit_time_ = value;
+}
+inline void RequestResult::set_recovery_commit_time(double value) {
+  _internal_set_recovery_commit_time(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.RequestResult.recovery_commit_time)
+}
+
 // -------------------------------------------------------------------
 
 // SetInfo
@@ -2724,6 +2793,96 @@ inline void MergeParityInfo::_internal_set_proxy_port(int32_t value) {
 inline void MergeParityInfo::set_proxy_port(int32_t value) {
   _internal_set_proxy_port(value);
   // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.proxy_port)
+}
+
+// bool recovery_defer_fsync = 7;
+inline void MergeParityInfo::clear_recovery_defer_fsync() {
+  _impl_.recovery_defer_fsync_ = false;
+}
+inline bool MergeParityInfo::_internal_recovery_defer_fsync() const {
+  return _impl_.recovery_defer_fsync_;
+}
+inline bool MergeParityInfo::recovery_defer_fsync() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.recovery_defer_fsync)
+  return _internal_recovery_defer_fsync();
+}
+inline void MergeParityInfo::_internal_set_recovery_defer_fsync(bool value) {
+  
+  _impl_.recovery_defer_fsync_ = value;
+}
+inline void MergeParityInfo::set_recovery_defer_fsync(bool value) {
+  _internal_set_recovery_defer_fsync(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_defer_fsync)
+}
+
+// string recovery_commit_token = 9;
+inline void MergeParityInfo::clear_recovery_commit_token() {
+  _impl_.recovery_commit_token_.ClearToEmpty();
+}
+inline const std::string& MergeParityInfo::recovery_commit_token() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.recovery_commit_token)
+  return _internal_recovery_commit_token();
+}
+template <typename ArgT0, typename... ArgT>
+inline PROTOBUF_ALWAYS_INLINE
+void MergeParityInfo::set_recovery_commit_token(ArgT0&& arg0, ArgT... args) {
+ 
+ _impl_.recovery_commit_token_.Set(static_cast<ArgT0 &&>(arg0), args..., GetArenaForAllocation());
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_commit_token)
+}
+inline std::string* MergeParityInfo::mutable_recovery_commit_token() {
+  std::string* _s = _internal_mutable_recovery_commit_token();
+  // @@protoc_insertion_point(field_mutable:datanode_proto.MergeParityInfo.recovery_commit_token)
+  return _s;
+}
+inline const std::string& MergeParityInfo::_internal_recovery_commit_token() const {
+  return _impl_.recovery_commit_token_.Get();
+}
+inline void MergeParityInfo::_internal_set_recovery_commit_token(const std::string& value) {
+  
+  _impl_.recovery_commit_token_.Set(value, GetArenaForAllocation());
+}
+inline std::string* MergeParityInfo::_internal_mutable_recovery_commit_token() {
+  
+  return _impl_.recovery_commit_token_.Mutable(GetArenaForAllocation());
+}
+inline std::string* MergeParityInfo::release_recovery_commit_token() {
+  // @@protoc_insertion_point(field_release:datanode_proto.MergeParityInfo.recovery_commit_token)
+  return _impl_.recovery_commit_token_.Release();
+}
+inline void MergeParityInfo::set_allocated_recovery_commit_token(std::string* recovery_commit_token) {
+  if (recovery_commit_token != nullptr) {
+    
+  } else {
+    
+  }
+  _impl_.recovery_commit_token_.SetAllocated(recovery_commit_token, GetArenaForAllocation());
+#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  if (_impl_.recovery_commit_token_.IsDefault()) {
+    _impl_.recovery_commit_token_.Set("", GetArenaForAllocation());
+  }
+#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
+  // @@protoc_insertion_point(field_set_allocated:datanode_proto.MergeParityInfo.recovery_commit_token)
+}
+
+// int32 recovery_commit_parts = 10;
+inline void MergeParityInfo::clear_recovery_commit_parts() {
+  _impl_.recovery_commit_parts_ = 0;
+}
+inline int32_t MergeParityInfo::_internal_recovery_commit_parts() const {
+  return _impl_.recovery_commit_parts_;
+}
+inline int32_t MergeParityInfo::recovery_commit_parts() const {
+  // @@protoc_insertion_point(field_get:datanode_proto.MergeParityInfo.recovery_commit_parts)
+  return _internal_recovery_commit_parts();
+}
+inline void MergeParityInfo::_internal_set_recovery_commit_parts(int32_t value) {
+  
+  _impl_.recovery_commit_parts_ = value;
+}
+inline void MergeParityInfo::set_recovery_commit_parts(int32_t value) {
+  _internal_set_recovery_commit_parts(value);
+  // @@protoc_insertion_point(field_set:datanode_proto.MergeParityInfo.recovery_commit_parts)
 }
 
 // -------------------------------------------------------------------
