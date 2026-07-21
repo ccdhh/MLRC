@@ -220,6 +220,8 @@ message RecoveryReply {
   double hybrid_failed_node_hot_time = 27;
   double hybrid_hub_egress_hot_time = 28;
   double hybrid_commit_time = 29;
+  /** Max proxy-side Phase2 streaming wall, including helper, peer exchange and write join. */
+  double phase2_stream_wall_time = 30;
 }
 
 message StripePos {

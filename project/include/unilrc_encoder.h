@@ -79,10 +79,12 @@ namespace ECProject
     void gen_glrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
     void gen_uniform_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z);
 
-    int glrc_non_global_data_quota(int k, int r, int z);
-    int glrc_global_payload_quota(int k, int r, int z);
+    int glrc_payload_blocks_in_group(int group_id, int k, int r, int z);
+    int glrc_payload_group_id(int payload_block_index, int k, int r, int z);
     int glrc_data_group_id(int data_block_index, int k, int r, int z);
     int glrc_data_blocks_in_group(int group_id, int k, int r, int z);
+    int glrc_global_blocks_in_group(int group_id, int k, int r, int z);
+    unsigned char glrc_local_block_coefficient(int block_id, int k, int r);
     void glrc_fill_data_blocks_per_group(std::vector<int> &data_blocks_per_group, int k, int r, int z);
 
     void decode_unilrc(const int k, const int r, const int z, const int block_num,

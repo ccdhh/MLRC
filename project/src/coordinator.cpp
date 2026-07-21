@@ -509,9 +509,9 @@ namespace ECProject
 
   void CoordinatorImpl::initialize_glrc_stripe_placement(Stripe *stripe)
   {
-    // Split (k+r) across z groups: groups 0..z-2 each hold q_max=data blocks;
-    // group z-1 (global) holds remaining data + all global parities (defective when T%z!=0).
-    // Local parity Li: group i.
+    // Split the ordered payload D0..D{k-1},G0..G{r-1} as evenly as
+    // possible across z large groups. The final (k+r)%z groups get one
+    // additional payload block. Local parity Li belongs to large group i.
     Block *blocks_info = new Block[stripe->n];
     assert(stripe->object_keys.size() == 1);
     int t_cluster_id = stripe->stripe_id % m_sys_config->ClusterNum;
@@ -542,7 +542,8 @@ namespace ECProject
                                  std::to_string(i - stripe->k);
         blocks_info[i].block_id = i;
         blocks_info[i].block_type = 'G';
-        blocks_info[i].map2group = stripe->z - 1;
+        blocks_info[i].map2group =
+            glrc_payload_group_id(i, stripe->k, stripe->r, stripe->z);
       }
       else
       {
@@ -1314,13 +1315,9 @@ namespace ECProject
     }
     else if (code_type == "gLRC")
     {
-      if (failed_block_id < k)
+      if (failed_block_id < k + r)
       {
-        recovery_group_ids.push_back(glrc_data_group_id(failed_block_id, k, r, z));
-      }
-      else if (failed_block_id < k + r)
-      {
-        recovery_group_ids.push_back(z - 1);
+        recovery_group_ids.push_back(glrc_payload_group_id(failed_block_id, k, r, z));
       }
       else
       {
@@ -3322,6 +3319,7 @@ namespace ECProject
 
     bool all_ok = true;
     double max_disk = 0.0, max_helper_net = 0.0, max_decode = 0.0;
+    double max_phase2_stream_wall = 0.0;
     double sum_write_net = 0.0, sum_write_disk = 0.0, max_commit_time = 0.0;
     for (int pi = 0; pi < f; pi++)
     {
@@ -3339,6 +3337,7 @@ namespace ECProject
           max_decode,
           std::max(breakdown_metric_span(rep.decode_start_time(), rep.decode_end_time()),
                    rep.cross_rack_xor_time()));
+      max_phase2_stream_wall = std::max(max_phase2_stream_wall, rep.cross_rack_time());
       sum_write_net += rep.dest_data_node_network_time();
       sum_write_disk += rep.dest_data_node_disk_io_time();
       max_commit_time = std::max(max_commit_time, rep.recovery_commit_time());
@@ -3363,6 +3362,7 @@ namespace ECProject
     // data-plane wall diagnostic, not a pure network-hotspot measurement.
     recovery_reply->set_network_time(max_helper_net);
     recovery_reply->set_decode_time(max_decode);
+    recovery_reply->set_phase2_stream_wall_time(max_phase2_stream_wall);
     recovery_reply->set_disk_write_time(sum_write_disk);
     recovery_reply->set_hybrid_commit_time(max_commit_time);
     recovery_reply->set_success(true);

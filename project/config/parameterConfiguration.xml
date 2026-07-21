@@ -42,7 +42,7 @@
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
     <!-- 修复方式：phase1 | phase2 | pipeline | hybrid -->
-    <GlrcRepairMode>hybrid</GlrcRepairMode>
+    <GlrcRepairMode>phase2</GlrcRepairMode>
     <GlrcHybridP>auto</GlrcHybridP>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
     <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
@@ -63,7 +63,7 @@
     <alpha>2</alpha>
 
     <CodeType>gLRC</CodeType>
-    <!-- n=28: k=24 数据块, r=2 全局校验 G, z=2 局部校验 L；global 组为缺陷组 -->
+    <!-- n=28: k=24 数据块, r=2 全局校验 G, z=2 局部校验 L；k+r 按 z 个大组均匀划分 -->
     <k>24</k>
     <r>2</r>
     <z>2</z>

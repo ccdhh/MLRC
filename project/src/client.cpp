@@ -559,7 +559,8 @@ namespace ECProject
     else if (code_type == "gLRC")
     {
       for (int i = 0; i < z; i++)
-        global_pairty_block_num_per_group.push_back(i == z - 1 ? r : 0);
+        global_pairty_block_num_per_group.push_back(
+            glrc_global_blocks_in_group(i, k, r, z));
     }
     else if (code_type == "RS")
     {
@@ -1522,6 +1523,7 @@ namespace ECProject
     metrics.setup_time = reply.setup_time();
     metrics.data_plane_time = reply.data_plane_time();
     metrics.teardown_time = reply.teardown_time();
+    metrics.phase2_stream_wall_time = reply.phase2_stream_wall_time();
     metrics.helper_block_count = reply.helper_block_count();
     metrics.repair_mode = reply.repair_mode();
     metrics.equation_policy = reply.equation_policy();

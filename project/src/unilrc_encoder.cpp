@@ -470,22 +470,10 @@ void ECProject::gen_optimal_lrc_matrix(unsigned char *encode_matrix, int k, int 
 
 void ECProject::gen_uniform_lrc_matrix(unsigned char *encode_matrix, int k, int r, int z)
 {
-    int m = k + r;
-    memset(encode_matrix, 0, (m + z) * k);
-    gf_gen_cauchy_matrix1(encode_matrix, m, k);
-    unsigned char *local_vector = new unsigned char[k];
-    gf_gen_local_vector(local_vector, k, r);
-    int group_size = (k + r) / z;
-    for(int i = 0; i < k; i++){
-        int row = i / group_size;
-        encode_matrix[(m + row) * k + i] = local_vector[i];
-    }
-    for(int i = 0; i < r; i++){
-        for(int j = 0; j < k; j++){
-            encode_matrix[(m + z - 1) * k + j] ^= encode_matrix[(k + i) * k + j];
-        }
-    }
-    delete[] local_vector;
+    // UniformLRC and the large-group gLRC variant use the same algebraic
+    // code. They differ only in placement/recovery execution (UniformLRC may
+    // further split a large group into rack-aware fine groups).
+    gen_glrc_matrix(encode_matrix, k, r, z);
 }
 
 
@@ -1023,44 +1011,68 @@ void ECProject::partial_encode_glrc(int k, int r, int z, int data_block_num, uns
     delete[] g_tbls;
 }
 
-int ECProject::glrc_non_global_data_quota(int k, int r, int z)
+int ECProject::glrc_payload_blocks_in_group(int group_id, int k, int r, int z)
 {
-    int total_payload = k + r;
-    return (total_payload + z - 1) / z;
+    if (z <= 0 || group_id < 0 || group_id >= z)
+        return 0;
+    const int total_payload = k + r;
+    const int base = total_payload / z;
+    const int larger_group_count = total_payload % z;
+    const int first_larger_group = z - larger_group_count;
+    return base + (larger_group_count > 0 && group_id >= first_larger_group ? 1 : 0);
 }
 
-int ECProject::glrc_global_payload_quota(int k, int r, int z)
+int ECProject::glrc_payload_group_id(int payload_block_index, int k, int r, int z)
 {
-    int q_max = glrc_non_global_data_quota(k, r, z);
-    return (k + r) - (z - 1) * q_max;
+    const int total_payload = k + r;
+    if (z <= 1 || total_payload <= 0)
+        return 0;
+    if (payload_block_index < 0)
+        return 0;
+    if (payload_block_index >= total_payload)
+        return z - 1;
+
+    const int base = total_payload / z;
+    const int larger_group_count = total_payload % z;
+    const int smaller_group_count = z - larger_group_count;
+    const int smaller_payload_count = smaller_group_count * base;
+    if (base > 0 && payload_block_index < smaller_payload_count)
+        return payload_block_index / base;
+    return smaller_group_count + (payload_block_index - smaller_payload_count) / (base + 1);
 }
 
 int ECProject::glrc_data_group_id(int data_block_index, int k, int r, int z)
 {
-    if (z <= 1)
-        return 0;
-    int q_max = glrc_non_global_data_quota(k, r, z);
-    int non_global_data_cap = (z - 1) * q_max;
-    if (data_block_index < non_global_data_cap)
-        return data_block_index / q_max;
-    return z - 1;
+    return glrc_payload_group_id(data_block_index, k, r, z);
 }
 
 int ECProject::glrc_data_blocks_in_group(int group_id, int k, int r, int z)
 {
-    if (z <= 1)
-        return k;
-    int q_max = glrc_non_global_data_quota(k, r, z);
-    if (group_id < z - 1)
-    {
-        int start = group_id * q_max;
-        if (start >= k)
-            return 0;
-        int remain = k - start;
-        return remain >= q_max ? q_max : remain;
-    }
-    int prefix_data = (z - 1) * q_max;
-    return k > prefix_data ? k - prefix_data : 0;
+    if (z <= 0 || group_id < 0 || group_id >= z)
+        return 0;
+    int payload_start = 0;
+    for (int g = 0; g < group_id; g++)
+        payload_start += glrc_payload_blocks_in_group(g, k, r, z);
+    const int payload_end = payload_start + glrc_payload_blocks_in_group(group_id, k, r, z);
+    return std::max(0, std::min(payload_end, k) - payload_start);
+}
+
+int ECProject::glrc_global_blocks_in_group(int group_id, int k, int r, int z)
+{
+    if (z <= 0 || group_id < 0 || group_id >= z)
+        return 0;
+    int payload_start = 0;
+    for (int g = 0; g < group_id; g++)
+        payload_start += glrc_payload_blocks_in_group(g, k, r, z);
+    const int payload_end = payload_start + glrc_payload_blocks_in_group(group_id, k, r, z);
+    return std::max(0, payload_end - std::max(payload_start, k));
+}
+
+unsigned char ECProject::glrc_local_block_coefficient(int block_id, int k, int r)
+{
+    if (block_id >= 0 && block_id < k)
+        return gf_inv(block_id ^ (k + r));
+    return 1;
 }
 
 void ECProject::glrc_fill_data_blocks_per_group(std::vector<int> &data_blocks_per_group, int k, int r, int z)
@@ -1081,13 +1093,11 @@ void ECProject::gen_glrc_matrix(unsigned char *encode_matrix, int k, int r, int 
         int row = glrc_data_group_id(j, k, r, z);
         encode_matrix[(m + row) * k + j] = local_vector[j];
     }
-    for (int i = 0; i < z; i++)
+    for (int l = 0; l < r; l++)
     {
+        const int group_id = glrc_payload_group_id(k + l, k, r, z);
         for (int j = 0; j < k; j++)
-        {
-            for (int l = 0; l < r; l++)
-                encode_matrix[(m + i) * k + j] ^= encode_matrix[(k + l) * k + j];
-        }
+            encode_matrix[(m + group_id) * k + j] ^= encode_matrix[(k + l) * k + j];
     }
     delete[] local_vector;
 }
@@ -1096,25 +1106,13 @@ void ECProject::decode_glrc(const int k, const int r, const int z, const int blo
                            int failed_block_id)
 {
     memset(res_ptr, 0, block_size);
-    unsigned char *local_vector = new unsigned char[k];
-    gf_gen_local_vector(local_vector, k, r);
     unsigned char *decode_vector = new unsigned char[block_num];
-    if (block_indexes->at(0) >= k)
-    {
-        for (int i = 0; i < block_num; i++)
-            decode_vector[i] = 1;
-    }
-    else
-    {
-        for (int i = 0; i < block_num; i++)
-            decode_vector[i] = local_vector[block_indexes->at(i)];
-    }
-    if (failed_block_id < k)
-    {
-        unsigned char factor = gf_inv(local_vector[failed_block_id]);
-        for (int i = 0; i < block_num; i++)
-            decode_vector[i] = gf_mul(decode_vector[i], factor);
-    }
+    for (int i = 0; i < block_num; i++)
+        decode_vector[i] = glrc_local_block_coefficient(block_indexes->at(i), k, r);
+    const unsigned char factor =
+        gf_inv(glrc_local_block_coefficient(failed_block_id, k, r));
+    for (int i = 0; i < block_num; i++)
+        decode_vector[i] = gf_mul(decode_vector[i], factor);
 
     unsigned char *g_tbls = new unsigned char[block_num * 32];
     unsigned char **res_ptr_ptr = new unsigned char *[1];
@@ -1122,7 +1120,6 @@ void ECProject::decode_glrc(const int k, const int r, const int z, const int blo
     ec_init_tables(block_num, 1, decode_vector, g_tbls);
     ec_encode_data_avx2(block_size, block_num, 1, g_tbls, block_ptrs, res_ptr_ptr);
 
-    delete[] local_vector;
     delete[] decode_vector;
     delete[] g_tbls;
     delete[] res_ptr_ptr;
@@ -1138,7 +1135,7 @@ namespace
     if (eq_index < z)
     {
       for (int b : groups[eq_index])
-        coef_row[b] = 1;
+        coef_row[b] = ECProject::glrc_local_block_coefficient(b, k, r);
     }
     else
     {

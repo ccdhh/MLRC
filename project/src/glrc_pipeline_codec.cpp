@@ -13,7 +13,7 @@ namespace
     if (eq_index < z)
     {
       for (int b : groups[eq_index])
-        coef_row[b] = 1;
+        coef_row[b] = glrc_local_block_coefficient(b, k, r);
     }
     else
     {
@@ -39,12 +39,12 @@ void glrc_pipeline_build_coef_row(int k, int r, int z, int eq_index, std::vector
 GlrcPipelineEqCodec glrc_pipeline_equation_codec(int k, int r, int z, int eq_index)
 {
   if (eq_index >= 0 && eq_index < z)
-    return GlrcPipelineEqCodec::LOCAL_XOR;
+    return GlrcPipelineEqCodec::LOCAL_LINEAR;
   if (eq_index >= z && eq_index < z + r)
     return GlrcPipelineEqCodec::GLOBAL_CAUCHY;
   (void)k;
   (void)r;
-  return GlrcPipelineEqCodec::LOCAL_XOR;
+  return GlrcPipelineEqCodec::LOCAL_LINEAR;
 }
 
 bool glrc_pipeline_verify_coef_row(int k, int r, int z, int eq_index,
@@ -66,10 +66,12 @@ bool glrc_pipeline_verify_coef_row(int k, int r, int z, int eq_index,
     glrc_build_placement_groups(k, r, z, groups);
     for (int b : groups[eq_index])
     {
-      if (coef_row[b] != 1)
+      const unsigned char expected = glrc_local_block_coefficient(b, k, r);
+      if (coef_row[b] != expected)
       {
         error_message = "local equation L" + std::to_string(eq_index) + " block " + std::to_string(b) +
-                        " coef=" + std::to_string(coef_row[b]) + " expected XOR coef 1";
+                        " coef=" + std::to_string(coef_row[b]) +
+                        " expected=" + std::to_string(expected);
         return false;
       }
     }
@@ -106,7 +108,7 @@ void glrc_pipeline_accumulate_byte(unsigned char &dst, unsigned char src, unsign
 {
   if (coef == 0)
     return;
-  if (codec == GlrcPipelineEqCodec::LOCAL_XOR)
+  if (codec == GlrcPipelineEqCodec::LOCAL_LINEAR)
   {
     if (coef != 1)
       dst ^= gf_mul(coef, src);
@@ -122,7 +124,7 @@ void glrc_pipeline_accumulate_range(unsigned char *dst, const unsigned char *src
 {
   if (coef == 0 || len <= 0)
     return;
-  if (codec == GlrcPipelineEqCodec::LOCAL_XOR && coef == 1)
+  if (codec == GlrcPipelineEqCodec::LOCAL_LINEAR && coef == 1)
   {
     for (int i = 0; i < len; i++)
       dst[i] ^= src[i];
@@ -137,7 +139,7 @@ void glrc_pipeline_init_partial_range(unsigned char *acc, const unsigned char *s
 {
   if (len <= 0)
     return;
-  if (codec == GlrcPipelineEqCodec::LOCAL_XOR)
+  if (codec == GlrcPipelineEqCodec::LOCAL_LINEAR)
   {
     if (coef != 1)
     {

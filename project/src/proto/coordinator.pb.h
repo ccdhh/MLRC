@@ -3921,6 +3921,7 @@ class RecoveryReply final :
     kHybridFailedNodeHotTimeFieldNumber = 27,
     kHybridHubEgressHotTimeFieldNumber = 28,
     kHybridCommitTimeFieldNumber = 29,
+    kPhase2StreamWallTimeFieldNumber = 30,
   };
   // repeated string selected_equations = 9;
   int selected_equations_size() const;
@@ -4239,6 +4240,15 @@ class RecoveryReply final :
   void _internal_set_hybrid_commit_time(double value);
   public:
 
+  // double phase2_stream_wall_time = 30;
+  void clear_phase2_stream_wall_time();
+  double phase2_stream_wall_time() const;
+  void set_phase2_stream_wall_time(double value);
+  private:
+  double _internal_phase2_stream_wall_time() const;
+  void _internal_set_phase2_stream_wall_time(double value);
+  public:
+
   // @@protoc_insertion_point(class_scope:coordinator_proto.RecoveryReply)
  private:
   class _Internal;
@@ -4278,6 +4288,7 @@ class RecoveryReply final :
     double hybrid_failed_node_hot_time_;
     double hybrid_hub_egress_hot_time_;
     double hybrid_commit_time_;
+    double phase2_stream_wall_time_;
     mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   };
   union { Impl_ _impl_; };
@@ -7495,6 +7506,26 @@ inline void RecoveryReply::_internal_set_hybrid_commit_time(double value) {
 inline void RecoveryReply::set_hybrid_commit_time(double value) {
   _internal_set_hybrid_commit_time(value);
   // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.hybrid_commit_time)
+}
+
+// double phase2_stream_wall_time = 30;
+inline void RecoveryReply::clear_phase2_stream_wall_time() {
+  _impl_.phase2_stream_wall_time_ = 0;
+}
+inline double RecoveryReply::_internal_phase2_stream_wall_time() const {
+  return _impl_.phase2_stream_wall_time_;
+}
+inline double RecoveryReply::phase2_stream_wall_time() const {
+  // @@protoc_insertion_point(field_get:coordinator_proto.RecoveryReply.phase2_stream_wall_time)
+  return _internal_phase2_stream_wall_time();
+}
+inline void RecoveryReply::_internal_set_phase2_stream_wall_time(double value) {
+  
+  _impl_.phase2_stream_wall_time_ = value;
+}
+inline void RecoveryReply::set_phase2_stream_wall_time(double value) {
+  _internal_set_phase2_stream_wall_time(value);
+  // @@protoc_insertion_point(field_set:coordinator_proto.RecoveryReply.phase2_stream_wall_time)
 }
 
 // -------------------------------------------------------------------

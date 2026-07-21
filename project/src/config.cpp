@@ -69,11 +69,10 @@ namespace ECProject
     if (CodeType == "gLRC")
     {
       assert(z > 0 && "Error: z must be positive for gLRC");
-      int q_max = (k + r + z - 1) / z;
-      int global_payload = (k + r) - (z - 1) * q_max;
-      assert(global_payload >= r &&
-             "Error: gLRC global group must hold all r global parities");
-      int max_blocks_per_group = std::max(q_max + 1, global_payload + 1);
+      int max_payload_per_group = (k + r + z - 1) / z;
+      assert(max_payload_per_group >= r &&
+             "Error: the final balanced gLRC group must hold all r global parities");
+      int max_blocks_per_group = max_payload_per_group + 1;
       assert(DatanodeNumPerCluster >= max_blocks_per_group &&
              "Error: DatanodeNumPerCluster must fit the largest gLRC placement group");
       assert(ClusterNum >= z && "Error: ClusterNum must be at least z for gLRC");

@@ -16,19 +16,12 @@ namespace ECProject
   {
     groups.clear();
     groups.resize(z);
+    int payload_block_id = 0;
     for (int g = 0; g < z; g++)
     {
-      int data_cnt = glrc_data_blocks_in_group(g, k, r, z);
-      int data_start = 0;
-      for (int i = 0; i < g; i++)
-        data_start += glrc_data_blocks_in_group(i, k, r, z);
-      for (int j = 0; j < data_cnt; j++)
-        groups[g].push_back(data_start + j);
-      if (g == z - 1)
-      {
-        for (int j = 0; j < r; j++)
-          groups[g].push_back(k + j);
-      }
+      const int payload_count = glrc_payload_blocks_in_group(g, k, r, z);
+      for (int j = 0; j < payload_count; j++)
+        groups[g].push_back(payload_block_id++);
       groups[g].push_back(k + r + g);
     }
   }
@@ -217,10 +210,8 @@ namespace ECProject
 
   static int local_then_global_primary_equation_index(int failed_id, int k, int r, int z)
   {
-    if (failed_id < k)
-      return glrc_data_group_id(failed_id, k, r, z);
     if (failed_id < k + r)
-      return z - 1;
+      return glrc_payload_group_id(failed_id, k, r, z);
     return failed_id - k - r;
   }
 

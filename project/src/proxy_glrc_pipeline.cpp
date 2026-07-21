@@ -384,7 +384,7 @@ bool read_all(asio::ip::tcp::socket &socket, char *data, size_t len, asio::error
 
 GlrcPipelineEqCodec pipeline_codec_from_request(const proxy_proto::RecoveryRequest *recovery_request)
 {
-  return recovery_request->pipeline_equation_is_local() != 0 ? GlrcPipelineEqCodec::LOCAL_XOR
+  return recovery_request->pipeline_equation_is_local() != 0 ? GlrcPipelineEqCodec::LOCAL_LINEAR
                                                              : GlrcPipelineEqCodec::GLOBAL_CAUCHY;
 }
 
@@ -392,7 +392,7 @@ GlrcPipelineEqCodec pipeline_hub_chain_codec(const proxy_proto::RecoveryRequest 
 {
   if (recovery_request->pipeline_hub_chain_equation_is_local_size() > chain_idx)
     return recovery_request->pipeline_hub_chain_equation_is_local(chain_idx) != 0
-               ? GlrcPipelineEqCodec::LOCAL_XOR
+               ? GlrcPipelineEqCodec::LOCAL_LINEAR
                : GlrcPipelineEqCodec::GLOBAL_CAUCHY;
   return GlrcPipelineEqCodec::GLOBAL_CAUCHY;
 }
@@ -941,7 +941,7 @@ bool ProxyImpl::glrcIlpPipelineChainHeadRecovery(const proxy_proto::RecoveryRequ
 
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] chain_head stream chain=" << chain_id
             << " eq_slot=" << eq_slot
-            << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
+            << (eq_codec == GlrcPipelineEqCodec::LOCAL_LINEAR ? " local-linear" : " cauchy")
             << " hops=" << hops_n << " shards=" << shard_count
             << " window=" << resolve_pipeline_window(m_sys_config, shard_count) << std::endl;
 
@@ -1179,7 +1179,7 @@ bool ProxyImpl::glrcIlpPipelineHopServerRecovery(const proxy_proto::RecoveryRequ
   }
   std::cout << "[Proxy" << m_self_cluster_id << "][gLRC Pipeline] hop_server listen chain=" << chain_id
             << " hop=" << my_idx
-            << (eq_codec == GlrcPipelineEqCodec::LOCAL_XOR ? " xor" : " cauchy")
+            << (eq_codec == GlrcPipelineEqCodec::LOCAL_LINEAR ? " local-linear" : " cauchy")
             << " port=" << listen_port << std::endl;
   std::shared_ptr<asio::io_context> hop_io;
   std::shared_ptr<asio::ip::tcp::acceptor> hop_acceptor;

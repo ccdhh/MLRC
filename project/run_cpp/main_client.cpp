@@ -14,6 +14,9 @@
 #include <random>
 #include <numeric>
 #include <sstream>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
 #include <thread>
 #include "unilrc_encoder.h"
 #include "glrc_repair_ilp.h"
@@ -26,25 +29,71 @@ static int env_int_or(const char *name, int default_value)
     return std::max(1, std::atoi(v));
 }
 
-static bool parse_failed_blocks_env(const char *raw, int n, std::vector<int> &out)
+static bool parse_failed_blocks(const std::string &raw, int k, int r, int z,
+                                std::vector<int> &out, std::string &error)
 {
-    if (!raw || raw[0] == '\0')
-        return false;
     out.clear();
     std::stringstream ss(raw);
     std::string token;
     while (std::getline(ss, token, ','))
     {
+        token.erase(token.begin(), std::find_if(token.begin(), token.end(),
+                                               [](unsigned char c) { return !std::isspace(c); }));
+        token.erase(std::find_if(token.rbegin(), token.rend(),
+                                [](unsigned char c) { return !std::isspace(c); }).base(),
+                    token.end());
         if (token.empty())
             continue;
-        int id = std::stoi(token);
-        if (id < 0 || id >= n)
+        int id = -1;
+        try
+        {
+            size_t consumed = 0;
+            if (std::isalpha(static_cast<unsigned char>(token[0])))
+            {
+                const char kind = static_cast<char>(std::toupper(static_cast<unsigned char>(token[0])));
+                const int index = std::stoi(token.substr(1), &consumed);
+                if (consumed != token.size() - 1 || index < 0)
+                    throw std::invalid_argument("bad block label");
+                if (kind == 'D' && index < k)
+                    id = index;
+                else if (kind == 'G' && index < r)
+                    id = k + index;
+                else if (kind == 'L' && index < z)
+                    id = k + r + index;
+            }
+            else
+            {
+                id = std::stoi(token, &consumed);
+                if (consumed != token.size())
+                    throw std::invalid_argument("bad block id");
+            }
+        }
+        catch (const std::exception &)
+        {
+            error = "invalid failed block: " + token;
             return false;
+        }
+        if (id < 0 || id >= k + r + z)
+        {
+            error = "failed block out of range: " + token;
+            return false;
+        }
         out.push_back(id);
     }
     std::sort(out.begin(), out.end());
+    const size_t original_size = out.size();
     out.erase(std::unique(out.begin(), out.end()), out.end());
-    return !out.empty();
+    if (out.empty())
+    {
+        error = "failed block list is empty";
+        return false;
+    }
+    if (out.size() != original_size)
+    {
+        error = "failed block list contains duplicates";
+        return false;
+    }
+    return true;
 }
 
 #include "runtime_paths.h"
@@ -56,6 +105,8 @@ static void print_glrc_client_usage(const char *argv0)
         << " [options] [coordinator_ip:port]\n"
         << "  -f, --fail-count N   number of failed blocks per trial (1..n-1)\n"
         << "  -n, --trials N       number of random trials (>=1)\n"
+        << "  --failed-blocks LIST fixed failures, e.g. D0,D7,G1 or 0,7,25\n"
+        << "  --seed N             deterministic random seed (uint32)\n"
         << "  --failure-mode MODE  random (default) | max\n"
         << "  --max-failure        shorthand for --failure-mode max\n"
         << "  --no-warmup          skip pre-trial pipeline warmup recovery\n"
@@ -63,13 +114,15 @@ static void print_glrc_client_usage(const char *argv0)
         << "\n"
         << "If -f/-n are omitted: prompt interactively when stdin is a TTY;\n"
         << "otherwise use env GLRC_FAIL_COUNT / GLRC_TRIALS (default 1/1).\n"
+        << "Equivalent env vars: GLRC_FAILED_BLOCKS and GLRC_RANDOM_SEED.\n"
         << "Coordinator may also be set via COORDINATOR_ADDR.\n";
 }
 
 /** Returns false on parse error / --help. Sets *show_help if help was requested. */
 static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &trial_count,
                                 bool &have_f, bool &have_n, std::string &coordinator_override,
-                                bool &show_help, bool &skip_warmup, std::string &failure_mode)
+                                bool &show_help, bool &skip_warmup, std::string &failure_mode,
+                                std::string &fixed_failed_raw, std::string &seed_raw)
 {
     have_f = false;
     have_n = false;
@@ -79,6 +132,8 @@ static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &tri
     trial_count = 0;
     coordinator_override.clear();
     failure_mode.clear();
+    fixed_failed_raw.clear();
+    seed_raw.clear();
 
     for (int i = 1; i < argc; ++i)
     {
@@ -118,6 +173,22 @@ static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &tri
         if (arg == "--no-warmup")
         {
             skip_warmup = true;
+            continue;
+        }
+        if (arg == "--failed-blocks")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            fixed_failed_raw = v;
+            continue;
+        }
+        if (arg == "--seed")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            seed_raw = v;
             continue;
         }
         if (arg == "--max-failure")
@@ -306,8 +377,15 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
       std::cout << "  teardown_time:           " << m.teardown_time << std::endl;
       std::cout << "  client_wall_time:        " << m.client_wall_time << "  (entire coordinator RPC)" << std::endl;
     }
-    else
-      std::cout << "  network_transfer_time:   " << m.network_time << std::endl;
+    std::cout << "  network_transfer_time:   " << m.network_time;
+    if (m.repair_mode == "phase2")
+      std::cout << "  (max helper-stream span across partitions)";
+    else if (m.repair_mode == "pipeline")
+      std::cout << "  (data-plane wall-clock)";
+    std::cout << std::endl;
+    if (m.repair_mode == "phase2")
+      std::cout << "  phase2_stream_wall_time: " << m.phase2_stream_wall_time
+                << "  (helper + peer exchange + write join, max partition)" << std::endl;
     std::cout << "  disk_read_time:          " << m.disk_read_time << "  (legacy per-proxy metric)" << std::endl;
     std::cout << "  decode_time:             " << m.decode_time << std::endl;
     std::cout << "  disk_write_time:         " << m.disk_write_time << "  (overlapping work total)" << std::endl;
@@ -350,7 +428,9 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
 
 static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config,
                                 int fail_count, int trial_count, bool have_f, bool have_n,
-                                bool skip_warmup, const std::string &requested_failure_mode)
+                                bool skip_warmup, const std::string &requested_failure_mode,
+                                const std::string &cli_fixed_failed_raw,
+                                const std::string &cli_seed_raw)
 {
     const int k = config->k;
     const int r = config->r;
@@ -369,10 +449,71 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         have_f = true;
     }
 
+    const char *env_fixed = std::getenv("GLRC_FAILED_BLOCKS");
+    const std::string fixed_failed_raw =
+        !cli_fixed_failed_raw.empty() ? cli_fixed_failed_raw
+                                     : ((env_fixed && env_fixed[0]) ? env_fixed : "");
+    std::vector<int> fixed_failed;
+    const bool use_fixed = !fixed_failed_raw.empty();
+    if (use_fixed)
+    {
+        std::string parse_error;
+        if (!parse_failed_blocks(fixed_failed_raw, k, r, z, fixed_failed, parse_error))
+        {
+            std::cerr << "[gLRC] invalid fixed failure list: " << parse_error << std::endl;
+            return 1;
+        }
+        if (failure_mode == "max")
+        {
+            std::cerr << "[gLRC] --failed-blocks cannot be combined with failure_mode=max" << std::endl;
+            return 1;
+        }
+        if (have_f && fail_count != static_cast<int>(fixed_failed.size()))
+        {
+            std::cerr << "[gLRC] fixed failure count " << fixed_failed.size()
+                      << " does not match --fail-count " << fail_count << std::endl;
+            return 1;
+        }
+        fail_count = static_cast<int>(fixed_failed.size());
+        have_f = true;
+    }
+
+    const char *env_seed = std::getenv("GLRC_RANDOM_SEED");
+    const std::string seed_raw =
+        !cli_seed_raw.empty() ? cli_seed_raw : ((env_seed && env_seed[0]) ? env_seed : "");
+    uint32_t random_seed = 0;
+    if (seed_raw.empty())
+    {
+        std::random_device rd;
+        random_seed = static_cast<uint32_t>(rd());
+    }
+    else
+    {
+        try
+        {
+            size_t consumed = 0;
+            const unsigned long long parsed = std::stoull(seed_raw, &consumed, 10);
+            if (consumed != seed_raw.size() ||
+                parsed > static_cast<unsigned long long>(std::numeric_limits<uint32_t>::max()))
+                throw std::out_of_range("seed");
+            random_seed = static_cast<uint32_t>(parsed);
+        }
+        catch (const std::exception &)
+        {
+            std::cerr << "[gLRC] invalid random seed: " << seed_raw
+                      << " (expected 0.." << std::numeric_limits<uint32_t>::max() << ")" << std::endl;
+            return 1;
+        }
+    }
+
     std::cout << "[gLRC] config (n,k,r,z)=(" << n << "," << k << "," << r << "," << z << ")"
               << " mode=" << config->GlrcRepairMode
               << " policy=" << config->GlrcEquationPolicy
-              << " failure_mode=" << failure_mode << std::endl;
+              << " failure_mode=" << failure_mode
+              << " random_seed=" << random_seed;
+    if (use_fixed)
+        std::cout << " fixed_failed=" << ECProject::glrc_format_block_list(fixed_failed, k, r, z);
+    std::cout << std::endl;
 
     if (!read_glrc_test_params(n, fail_count, trial_count, have_f, have_n))
         return 1;
@@ -387,20 +528,8 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         }
     }
 
-    std::vector<int> fixed_failed;
-    const bool use_fixed = parse_failed_blocks_env(std::getenv("GLRC_FAILED_BLOCKS"), n, fixed_failed);
-    if (failure_mode == "max" && use_fixed)
-    {
-        std::cerr << "[gLRC] GLRC_FAILED_BLOCKS cannot be combined with failure_mode=max" << std::endl;
-        return 1;
-    }
-    if (use_fixed && (int)fixed_failed.size() != fail_count)
-    {
-        std::cerr << "[gLRC] GLRC_FAILED_BLOCKS count must match GLRC_FAIL_COUNT=" << fail_count << std::endl;
-        return 1;
-    }
-
-    std::mt19937 rng(std::random_device{}());
+    std::mt19937 rng(random_seed);
+    std::mt19937 warmup_rng(random_seed ^ 0x9e3779b9U);
     const bool warmup_enabled = [&]() {
         if (skip_warmup ||
             (config->GlrcRepairMode != "pipeline" && config->GlrcRepairMode != "phase2"))
@@ -421,7 +550,7 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
             else if (failure_mode == "max")
             {
                 std::string pattern_error;
-                if (!generate_max_failure_pattern(k, r, z, rng, warmup_failed, pattern_error))
+                if (!generate_max_failure_pattern(k, r, z, warmup_rng, warmup_failed, pattern_error))
                 {
                     std::cerr << "  Warmup pattern generation FAILED: " << pattern_error << std::endl;
                     return 1;
@@ -568,9 +697,10 @@ int main(int argc, char **argv)
 {
     int cli_fail = 0, cli_trials = 0;
     bool have_f = false, have_n = false, show_help = false, skip_warmup = false;
-    std::string coordinator_override, failure_mode;
+    std::string coordinator_override, failure_mode, fixed_failed_raw, seed_raw;
     if (!parse_glrc_cli_args(argc, argv, cli_fail, cli_trials, have_f, have_n,
-                             coordinator_override, show_help, skip_warmup, failure_mode))
+                             coordinator_override, show_help, skip_warmup, failure_mode,
+                             fixed_failed_raw, seed_raw))
     {
         print_glrc_client_usage(argc > 0 ? argv[0] : nullptr);
         return show_help ? 0 : 2;
@@ -607,7 +737,7 @@ int main(int argc, char **argv)
 
     if (config->CodeType == "gLRC")
         return run_glrc_repair_test(client, config, cli_fail, cli_trials, have_f, have_n,
-                                    skip_warmup, failure_mode);
+                                    skip_warmup, failure_mode, fixed_failed_raw, seed_raw);
 
     std::vector<int> parameters = client.get_parameters();
     int k = parameters[0];
