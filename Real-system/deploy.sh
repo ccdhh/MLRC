@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Synchronize the prepared repository from node0 to every CloudLab host.
+# Synchronize the prepared repository from node0 to every real-system host.
 # Build once on node0 before running this script; binaries and generated
 # topology files are copied verbatim so every process uses the same revision.
 

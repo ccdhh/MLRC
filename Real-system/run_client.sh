@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 
-# Run the gLRC client from its dedicated CloudLab node.
+# Run the gLRC client from its dedicated real-system node.
 #
 # Usage:
-#   ./cloudlab/run_client.sh                  # interactive: prompt for f and trials
-#   ./cloudlab/run_client.sh -f 3 -n 10       # 3 failed blocks, 10 random trials
-#   ./cloudlab/run_client.sh --fail-count 2 --trials 5
-#   ./cloudlab/run_client.sh --failed-blocks D0,D7,G1 -n 10
-#   ./cloudlab/run_client.sh -f 3 -n 10 --seed 20260721
-#   ./cloudlab/run_client.sh --max-failure -n 10
-#   GLRC_FAIL_COUNT=2 GLRC_TRIALS=5 ./cloudlab/run_client.sh
+#   ./Real-system/run_client.sh                  # interactive: prompt for f and trials
+#   ./Real-system/run_client.sh -f 3 -n 10       # 3 failed blocks, 10 random trials
+#   ./Real-system/run_client.sh --fail-count 2 --trials 5
+#   ./Real-system/run_client.sh --failed-blocks D0,D7,G1 -n 10
+#   ./Real-system/run_client.sh -f 3 -n 10 --seed 20260721
+#   ./Real-system/run_client.sh --max-failure -n 10
+#   GLRC_FAIL_COUNT=2 GLRC_TRIALS=5 ./Real-system/run_client.sh
 #
 # Extra args are forwarded to main_client (see main_client --help).
 # Every run is also saved under logs/client_runs. Override the directory with

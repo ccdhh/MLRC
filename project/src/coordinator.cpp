@@ -97,7 +97,7 @@ private:
     const char *one_proxy_per_host = std::getenv("DDRT_ONE_PROXY_PER_HOST");
     const bool dedicated_host =
         one_proxy_per_host != nullptr && one_proxy_per_host[0] != '\0' && one_proxy_per_host[0] != '0';
-    // CloudLab has one proxy per host, so use the whole non-ephemeral range.
+    // The real system has one proxy per host, so use the whole non-ephemeral range.
     // This lets us quarantine every port for the coordinator lifetime instead
     // of immediately reusing a listener that may still be unwinding remotely.
     const int band = dedicated_host ? 10000 : ECProject::PROXY_PIPELINE_PER_PROXY_BAND;

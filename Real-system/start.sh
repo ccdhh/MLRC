@@ -32,4 +32,4 @@ for host in "${STORAGE_HOSTS[@]}"; do
 done
 
 echo "Started coordinator and ${#STORAGE_HOSTS[@]} storage pairs."
-echo "Check with: cloudlab/status.sh"
+echo "Check with: Real-system/status.sh"

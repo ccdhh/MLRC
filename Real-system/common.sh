@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-CLOUDLAB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$CLOUDLAB_DIR/.." && pwd)"
-HOSTS_FILE="${DDRT_HOSTS_FILE:-$HOME/optimallrc/conf/cloudlab_hosts}"
+REAL_SYSTEM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$REAL_SYSTEM_DIR/.." && pwd)"
+HOSTS_FILE="${DDRT_HOSTS_FILE:-$HOME/optimallrc/conf/Real-system_hosts}"
 SSH_USER="${DDRT_SSH_USER:-$USER}"
 SSH_KEY="${DDRT_SSH_KEY:-$HOME/.ssh/id_rsa}"
 REMOTE_ROOT="${DDRT_REMOTE_ROOT:-~/DdlRT}"

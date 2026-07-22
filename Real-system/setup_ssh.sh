@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Configure passwordless SSH from node0 to all experiment nodes.
-# CloudLab does not enable inter-node SSH by default; use the experiment
+# The real system does not enable inter-node SSH by default; use the experiment
 # key from geni-get, which is the supported cluster-wide key pair.
 
 set -euo pipefail
@@ -11,7 +11,7 @@ source "$(cd "$(dirname "$0")" && pwd)/common.sh"
 KEY="${DDRT_SSH_KEY:-$HOME/.ssh/id_rsa}"
 
 if [[ ! -x "$(command -v geni-get)" ]]; then
-  echo "geni-get not found; this script must run on a CloudLab node." >&2
+  echo "geni-get not found; this script must run on a real-system node." >&2
   exit 1
 fi
 
@@ -53,7 +53,7 @@ for host in "$CLIENT_HOST" "${STORAGE_HOSTS[@]:0:3}"; do
     echo "FAILED"
     echo
     echo "If this still fails, terminate and recreate the experiment after adding"
-    echo "your SSH public key in the CloudLab portal (Profile -> Manage SSH Keys)."
+    echo "your SSH public key in the real-system portal (Profile -> Manage SSH Keys)."
     exit 1
   fi
 done
@@ -61,5 +61,5 @@ done
 echo
 echo "SSH setup complete. Next:"
 echo "  cd ~/DdlRT"
-echo "  ./cloudlab/deploy.sh"
-echo "  ./cloudlab/start.sh"
+echo "  ./Real-system/deploy.sh"
+echo "  ./Real-system/start.sh"

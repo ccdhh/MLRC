@@ -51,7 +51,7 @@
     <GlrcPipelineWindow>0</GlrcPipelineWindow>
     <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
 
-    <!-- CloudLab: two gLRC placement groups, 14 real storage nodes each. -->
+    <!-- Real-system: two gLRC placement groups, 14 real storage nodes each. -->
     <DatanodeNumPerCluster>14</DatanodeNumPerCluster>
     <ClusterNum>2</ClusterNum>
     <CoordinatorIP>10.10.1.1</CoordinatorIP>

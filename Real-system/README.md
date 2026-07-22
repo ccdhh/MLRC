@@ -1,4 +1,4 @@
-# CloudLab deployment
+# Real-system deployment
 
 This directory deploys one `datanode` and one repair `proxy` on each storage
 host.  The first two non-comment entries in the hosts file are reserved for
@@ -20,7 +20,7 @@ Run all commands below from node0:
 
 # Generate project/config/{parameterConfiguration,clusterInformation}.xml.
 ./Real-system/generate_cluster_config.py \
-  --hosts ~/optimallrc/conf/cloudlab_hosts
+  --hosts ~/optimallrc/conf/Real-system_hosts
 
 # Compile before copying binaries. NASM is needed because compile.sh enables AVX2.
 sudo apt install -y nasm
@@ -42,7 +42,7 @@ bash compile.sh
 
 
 If `./Real-system/deploy.sh` fails with `Permission denied (publickey)`, run
-`./Real-system/setup_ssh.sh` first. CloudLab does not enable inter-node SSH
+`./Real-system/setup_ssh.sh` first. The real system does not enable inter-node SSH
 by default; the setup script installs the experiment-wide `geni-get` key.
 
 `deploy.sh` assumes passwordless SSH from node0 using the current username.
