@@ -1464,28 +1464,44 @@ bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block
   }
   delete[] encode_matrix;
 
+  const int helper_count = static_cast<int>(helper_block_ids.size());
+  if (helper_count <= 0)
+    return false;
+
+  // Fold the two scalar stages
+  //
+  //   rhs       = C_helper * helpers
+  //   recovered = A_inv    * rhs
+  //
+  // into one direct decode matrix.  The previous implementation evaluated
+  // both products byte-by-byte and performed billions of scalar gf_mul calls
+  // for a 64 MiB block.  ISA-L expands the coefficients once and evaluates
+  // all recovered blocks with its vectorized AVX2 kernel.
+  std::vector<unsigned char> direct_matrix(
+      static_cast<size_t>(f) * static_cast<size_t>(helper_count), 0);
+  for (int target = 0; target < f; target++)
+  {
+    unsigned char *row =
+        direct_matrix.data() + static_cast<size_t>(target) * static_cast<size_t>(helper_count);
+    for (int equation = 0; equation < f; equation++)
+    {
+      const unsigned char inverse_coef = A_inv[target * f + equation];
+      if (inverse_coef == 0)
+        continue;
+      for (const GlrcIlpEqHelperTerm &term : eq_helper_terms[equation])
+        row[term.helper_idx] ^= ECProject::gf_mul(inverse_coef, term.coef);
+    }
+  }
+
   recovered_ptrs.resize(f);
   for (int i = 0; i < f; i++)
     recovered_ptrs[i] = new unsigned char[block_size];
 
-  std::vector<unsigned char> col_b(f);
-  for (int byte_off = 0; byte_off < block_size; byte_off++)
-  {
-    for (int ei = 0; ei < f; ei++)
-    {
-      unsigned char rhs = 0;
-      for (const GlrcIlpEqHelperTerm &term : eq_helper_terms[ei])
-        rhs ^= ECProject::gf_mul(term.coef, helper_ptrs[term.helper_idx][byte_off]);
-      col_b[ei] = rhs;
-    }
-    for (int t = 0; t < f; t++)
-    {
-      unsigned char acc = 0;
-      for (int j = 0; j < f; j++)
-        acc ^= ECProject::gf_mul(A_inv[t * f + j], col_b[j]);
-      recovered_ptrs[t][byte_off] = acc;
-    }
-  }
+  std::vector<unsigned char> g_tbls(
+      static_cast<size_t>(helper_count) * static_cast<size_t>(f) * 32);
+  ec_init_tables(helper_count, f, direct_matrix.data(), g_tbls.data());
+  ec_encode_data_avx2(block_size, helper_count, f, g_tbls.data(),
+                      helper_ptrs, recovered_ptrs.data());
 
   return true;
 }
