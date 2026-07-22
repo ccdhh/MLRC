@@ -12,6 +12,8 @@
 #   GLRC_FAIL_COUNT=2 GLRC_TRIALS=5 ./cloudlab/run_client.sh
 #
 # Extra args are forwarded to main_client (see main_client --help).
+# Every run is also saved under logs/client_runs. Override the directory with
+# DDRT_CLIENT_LOG_DIR, or disable logging with DDRT_CLIENT_LOG=0.
 
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/common.sh"
@@ -49,5 +51,27 @@ if ((interactive)); then
   ssh_args+=(-t)
 fi
 
-ssh "${ssh_args[@]}" "${SSH_USER}@${CLIENT_HOST}" \
-  "cd $REMOTE_ROOT && ${env_exports} $REMOTE_ROOT/project/cmake/build/main_client${quoted_args}"
+client_command="cd $REMOTE_ROOT && ${env_exports} $REMOTE_ROOT/project/cmake/build/main_client${quoted_args}"
+if [[ "${DDRT_CLIENT_LOG:-1}" == "0" ]]; then
+  ssh "${ssh_args[@]}" "${SSH_USER}@${CLIENT_HOST}" "$client_command"
+else
+  log_dir="${DDRT_CLIENT_LOG_DIR:-$ROOT/logs/client_runs}"
+  mkdir -p "$log_dir"
+  timestamp="$(date '+%Y%m%d_%H%M%S')"
+  log_file="$log_dir/glrc_${timestamp}_$$.log"
+  {
+    echo "========== DdlRT client run =========="
+    echo "started_at: $(date --iso-8601=seconds)"
+    echo "client_host: $CLIENT_HOST"
+    echo "arguments:${quoted_args:- (interactive)}"
+    echo "log_file: $log_file"
+    echo "======================================"
+    status=0
+    ssh "${ssh_args[@]}" "${SSH_USER}@${CLIENT_HOST}" "$client_command" || status=$?
+    echo
+    echo "finished_at: $(date --iso-8601=seconds)"
+    echo "exit_code: $status"
+    exit "$status"
+  } 2>&1 | tee "$log_file"
+  echo "Saved client run log: $log_file"
+fi

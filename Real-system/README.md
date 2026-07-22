@@ -16,10 +16,10 @@ Run all commands below from node0:
 
 ```bash
 # Step 0: enable node-to-node SSH (required once per experiment).
-./cloudlab/setup_ssh.sh
+./Real-system/setup_ssh.sh
 
 # Generate project/config/{parameterConfiguration,clusterInformation}.xml.
-./cloudlab/generate_cluster_config.py \
+./Real-system/generate_cluster_config.py \
   --hosts ~/optimallrc/conf/cloudlab_hosts
 
 # Compile before copying binaries. NASM is needed because compile.sh enables AVX2.
@@ -27,22 +27,22 @@ sudo apt install -y nasm
 bash compile.sh
 
 # Copy the same repository revision, binaries, and topology to all nodes.
-./cloudlab/deploy.sh
+./Real-system/deploy.sh
 
 # Start one coordinator and 28 datanode/proxy pairs.
-./cloudlab/start.sh
-./cloudlab/status.sh
+./Real-system/start.sh
+./Real-system/status.sh
 
 # Run the repair client from node1.
 # Interactive (prompts for f and trial count):
-./cloudlab/run_client.sh
+./Real-system/run_client.sh
 # Or non-interactive:
-./cloudlab/run_client.sh -f 3 -n 10
+./Real-system/run_client.sh -f 3 -n 10
 ```
 
 
-If `./cloudlab/deploy.sh` fails with `Permission denied (publickey)`, run
-`./cloudlab/setup_ssh.sh` first. CloudLab does not enable inter-node SSH
+If `./Real-system/deploy.sh` fails with `Permission denied (publickey)`, run
+`./Real-system/setup_ssh.sh` first. CloudLab does not enable inter-node SSH
 by default; the setup script installs the experiment-wide `geni-get` key.
 
 `deploy.sh` assumes passwordless SSH from node0 using the current username.
@@ -50,19 +50,19 @@ Set `DDRT_SSH_USER` or `DDRT_REMOTE_ROOT` when the remote username or
 repository directory differs:
 
 ```bash
-DDRT_SSH_USER=chendh DDRT_REMOTE_ROOT=~/DdlRT ./cloudlab/deploy.sh
+DDRT_SSH_USER=chendh DDRT_REMOTE_ROOT=~/DdlRT ./Real-system/deploy.sh
 ```
 
 Stop processes without deleting block data:
 
 ```bash
-./cloudlab/stop.sh
+./Real-system/stop.sh
 ```
 
 Start a completely fresh experiment, removing storage only on storage hosts:
 
 ```bash
-./cloudlab/stop.sh --clear-storage
+./Real-system/stop.sh --clear-storage
 ```
 
 ## Bandwidth and scaling
