@@ -155,7 +155,7 @@ namespace ECProject
     std::vector<proxy_proto::AppendStripeDataPlacement> generateAppendPlan(Stripe *stripe, int curr_logical_offset, int append_size);
     void update_stripe_info_in_node(int t_node_id, int stripe_id, int index);
     int getClusterAppendSize(Stripe *stripe, const std::map<int, std::pair<int, int>> &block_to_slice_sizes, int curr_group_id, int parity_slice_size);
-    void notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan);
+    bool notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan);
     std::vector<int> get_recovery_group_ids(std::string code_type, int k, int r, int z, int failed_block_id);
     void init_recovery_group_lookup_table();
     void print_stripe_data_placement(Stripe &stripe);

@@ -1433,6 +1433,9 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   };
 
   std::vector<std::thread> helper_workers;
+  std::mutex compact_helper_read_mu;
+  std::condition_variable compact_helper_read_cv;
+  int compact_helper_readers = 0;
   auto start_helper_workers = [&]() {
     helper_workers.reserve(helper_n);
     for (int i = 0; i < helper_n; i++)
@@ -1494,6 +1497,77 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
         update_helper_breakdown_one(result.disk_io_start_time(), result.disk_io_end_time(), grpc_notify,
                                     grpc_notify, grpc_notify, result.grpc_start_time());
 
+        SharedBandwidthLimiter *helper_read_bw =
+            isLocalDatanode(recovery_request->datanodeip(i).c_str(),
+                            recovery_request->datanodeport(i))
+                ? nullptr
+                : nodeIngressBandwidth();
+
+        // A per-shard global barrier makes all helper senders stop and wake for
+        // every shard. With 48 helpers this control-plane fan-in is substantial
+        // (and grows linearly with p/f), although the model charges only bytes.
+        // Drain each helper's contiguous assigned range once, then publish all
+        // rounds together. The failed proxies still run in parallel and the
+        // shared limiter preserves the one-NIC byte time without barrier tails.
+        if (local_shard_count > 0)
+        {
+          // These streams all terminate on one physical ingress NIC. Let one
+          // socket drain at a time instead of allowing 48 readers to contend
+          // in the kernel and then serializing only their accounting. Since
+          // the limiter already models one 125 MB/s NIC, this preserves the
+          // intended aggregate throughput while removing scheduler/TCP tails.
+          {
+            std::unique_lock<std::mutex> lock(compact_helper_read_mu);
+            compact_helper_read_cv.wait(lock, [&]() {
+              return compact_helper_readers == 0;
+            });
+            if (exchange_failed.load())
+            {
+              lock.unlock();
+              compact_helper_read_cv.notify_all();
+              return;
+            }
+            compact_helper_readers = 1;
+          }
+          asio::error_code read_ec;
+          const auto net_begin = std::chrono::high_resolution_clock::now();
+          tcp_read_with_shared_bandwidth(
+              socket, get_bufs[i], static_cast<size_t>(byte_len), helper_read_bw, read_ec,
+              SharedBandwidthPace::DrainThenAccount);
+          const auto net_end = std::chrono::high_resolution_clock::now();
+          {
+            std::lock_guard<std::mutex> lock(compact_helper_read_mu);
+            compact_helper_readers = 0;
+          }
+          compact_helper_read_cv.notify_one();
+          if (read_ec)
+          {
+            set_phase2_error("compact helper stream read failed key=" +
+                             recovery_request->blockkeys(i) + " @ " + node_ip_port +
+                             ": " + read_ec.message());
+            exchange_failed.store(true);
+            helper_round_cv.notify_all();
+            decoded_cv.notify_all();
+            return;
+          }
+          update_helper_breakdown_one(
+              result.disk_io_start_time(), result.disk_io_end_time(),
+              std::chrono::duration_cast<std::chrono::duration<double>>(
+                  net_begin.time_since_epoch())
+                  .count(),
+              std::chrono::duration_cast<std::chrono::duration<double>>(
+                  net_end.time_since_epoch())
+                  .count(),
+              grpc_notify, result.grpc_start_time());
+          {
+            std::lock_guard<std::mutex> lk(helper_round_mu);
+            for (int shard_k = 0; shard_k < local_shard_count; ++shard_k)
+              helper_round_done[shard_k]++;
+          }
+          helper_round_cv.notify_all();
+          return;
+        }
+
         int last_round = -1;
         while (!exchange_failed.load())
         {
@@ -1519,11 +1593,6 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
           // repair node's one physical RX NIC.  Share the same 125 MB/s
           // node-ingress timeline across them; same-host DN traffic bypasses
           // the NIC model.
-          SharedBandwidthLimiter *helper_read_bw =
-              isLocalDatanode(recovery_request->datanodeip(i).c_str(),
-                              recovery_request->datanodeport(i))
-                  ? nullptr
-                  : nodeIngressBandwidth();
           // RX must drain before accounting. Waiting on the ingress limiter
           // before read() applies the 1-Gbps budget on top of the real TCP
           // transfer, stalls all helper streams behind the per-shard barrier,

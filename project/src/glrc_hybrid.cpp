@@ -204,31 +204,43 @@ double solve_continuous_p(int f, int global_shard_count, int stripe_byte_len, do
   return std::max(0.0, std::min(static_cast<double>(global_shard_count - 1), p_star));
 }
 
-/** Among floor(p*) and ceil(p*), pick p minimizing max(T_phase2_est, T_pipeline_est). */
+/**
+ * Start near the continuous solution and move toward the smaller side until
+ * the Phase2/Pipeline bottleneck ordering crosses. This captures ceil(p/f)
+ * partition steps without scanning the complete shard range.
+ */
 int discretize_p(double p_continuous, int global_shard_count, int f, int block_size, int stripe_byte_len,
                  double link_mbps, const GlrcIlpRepairPlan &plan_ilp, int hub_block_id,
                  int pipeline_local_direct_count, const std::unordered_set<int> &local_direct_failed,
                  const std::vector<int> &failed_block_ids, double &t_phase2_out, double &t_pipeline_out)
 {
   const int hi = global_shard_count - 1;
-  int p_floor = static_cast<int>(std::floor(p_continuous));
-  int p_ceil = static_cast<int>(std::ceil(p_continuous));
-  p_floor = std::max(1, std::min(hi, p_floor));
-  p_ceil = std::max(1, std::min(hi, p_ceil));
-
-  std::vector<int> candidates = {p_floor, p_ceil};
-  std::sort(candidates.begin(), candidates.end());
-  candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
-
+  const int start = std::max(1, std::min(hi, static_cast<int>(std::lround(p_continuous))));
   double best_score = 1e300;
-  int best_p = p_floor;
+  int best_p = start;
   double best_t2 = 0.0, best_tp = 0.0;
-  for (int p : candidates)
-  {
+
+  auto evaluate = [&](int p, double &t2, double &tp) {
     const int hot = max_partition_failed_block_id(p, f, failed_block_ids);
+    estimate_hybrid_times(p, f, global_shard_count, stripe_byte_len, block_size, link_mbps, plan_ilp,
+                          hub_block_id, pipeline_local_direct_count, local_direct_failed, hot, t2, tp);
+  };
+
+  double start_t2 = 0.0, start_tp = 0.0;
+  evaluate(start, start_t2, start_tp);
+  if (std::fabs(start_t2 - start_tp) < 1e-12)
+  {
+    t_phase2_out = start_t2;
+    t_pipeline_out = start_tp;
+    return start;
+  }
+
+  const bool phase2_dominates_at_start = start_t2 > start_tp;
+  const int direction = phase2_dominates_at_start ? -1 : 1;
+  for (int p = start; p >= 0 && p <= hi; p += direction)
+  {
     double t2 = 0.0, tp = 0.0;
-    estimate_hybrid_times(p, f, global_shard_count, stripe_byte_len, block_size, link_mbps, plan_ilp, hub_block_id,
-                          pipeline_local_direct_count, local_direct_failed, hot, t2, tp);
+    evaluate(p, t2, tp);
     const double s = std::max(t2, tp);
     if (s < best_score || (s == best_score && std::abs(p - p_continuous) < std::abs(best_p - p_continuous)))
     {
@@ -237,6 +249,10 @@ int discretize_p(double p_continuous, int global_shard_count, int f, int block_s
       best_t2 = t2;
       best_tp = tp;
     }
+
+    const bool phase2_dominates = t2 > tp;
+    if (p != start && phase2_dominates != phase2_dominates_at_start)
+      break;
   }
   t_phase2_out = best_t2;
   t_pipeline_out = best_tp;

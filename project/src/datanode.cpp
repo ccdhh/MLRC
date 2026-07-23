@@ -799,6 +799,12 @@ namespace ECProject
                         else
                             ok = stream_to_range(fd);
                         ::close(fd);
+                        // Both Hybrid range writers leave the commit barrier only
+                        // after all network reads have finished. Reset the failed
+                        // node's shared ingress timeline at that trial boundary so
+                        // the next trial cannot inherit reserved bandwidth slots.
+                        if (hybrid_atomic_range && ingress_bw != nullptr)
+                            ingress_bw->reset();
                     }
                 }
                 else

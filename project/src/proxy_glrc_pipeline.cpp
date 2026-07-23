@@ -788,6 +788,7 @@ bool ProxyImpl::glrcIlpPipelineTeardownRecovery(const proxy_proto::RecoveryReque
 {
   (void)recovery_request;
   clear_glrc_pipeline_session_state();
+  glrc_phase2_clear_ready_session();
   // Drop accumulated NIC timelines so the next trial cannot inherit a next_slot_
   // left far in the future by a cancelled/hung recovery.
   resetPeerLinkBandwidth();

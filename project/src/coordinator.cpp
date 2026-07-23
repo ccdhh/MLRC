@@ -896,10 +896,8 @@ namespace ECProject
     return append_plans;
   }
 
-  void CoordinatorImpl::notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan)
+  bool CoordinatorImpl::notify_proxies_ready(const proxy_proto::AppendStripeDataPlacement &plan)
   {
-    grpc::ClientContext cont;
-    proxy_proto::SetReply set_reply;
     std::string chosen_proxy = m_cluster_table[plan.cluster_id()].proxy_ip + ":" + std::to_string(m_cluster_table[plan.cluster_id()].proxy_port);
     {
       std::lock_guard<std::mutex> lock(m_mutex);
@@ -908,14 +906,29 @@ namespace ECProject
       // and let recovery race a still-growing block file.
       m_object_updating_table[plan.key()] = ObjectInfo(plan.append_size(), plan.stripe_id());
     }
-    grpc::Status status = m_proxy_ptrs[chosen_proxy]->scheduleAppend2Datanode(&cont, plan, &set_reply);
-    if (!status.ok())
+
+    grpc::Status last_status;
+    for (int attempt = 1; attempt <= 3; ++attempt)
     {
-      std::lock_guard<std::mutex> lock(m_mutex);
-      m_object_updating_table.erase(plan.key());
-      cv.notify_all();
-      std::cout << "[APPEND434] Send append plan" << plan.key() << " failed! " << std::endl;
+      grpc::ClientContext cont;
+      cont.set_wait_for_ready(true);
+      cont.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(15));
+      proxy_proto::SetReply set_reply;
+      last_status = m_proxy_ptrs[chosen_proxy]->scheduleAppend2Datanode(&cont, plan, &set_reply);
+      if (last_status.ok())
+        return true;
+
+      std::cout << "[APPEND] Scheduling plan " << plan.key() << " on " << chosen_proxy
+                << " failed (attempt " << attempt << "/3, code=" << last_status.error_code()
+                << "): " << last_status.error_message() << std::endl;
+      if (attempt < 3)
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_object_updating_table.erase(plan.key());
+    cv.notify_all();
+    return false;
   }
 
   // Only processing the appending within a single stripe
@@ -978,10 +991,14 @@ namespace ECProject
     // 3. notify proxies to receive data
     // need multiple proxies to receive data, so need multiple threads
     std::vector<std::thread> threads;
+    std::vector<int> proxy_ready(append_plans.size(), 0);
     int sum_append_size = 0;
-    for (const auto &plan : append_plans)
+    for (size_t i = 0; i < append_plans.size(); ++i)
     {
-      threads.push_back(std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
+      const auto &plan = append_plans[i];
+      threads.emplace_back([this, &append_plans, &proxy_ready, i]() {
+        proxy_ready[i] = notify_proxies_ready(append_plans[i]) ? 1 : 0;
+      });
       proxyIPPort->add_append_keys(plan.key());
       proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
       proxyIPPort->add_proxyports(m_cluster_table[plan.cluster_id()].proxy_port + ECProject::PROXY_PORT_SHIFT); // use another port to accept data
@@ -992,6 +1009,8 @@ namespace ECProject
     {
       thread.join();
     }
+    if (std::any_of(proxy_ready.begin(), proxy_ready.end(), [](int ready) { return ready == 0; }))
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE, "failed to schedule one or more append proxies");
     proxyIPPort->set_sum_append_size(sum_append_size);
 
     m_cur_offset_table[clientID].offset += appendSizeBytes;
@@ -1142,10 +1161,14 @@ namespace ECProject
     }
 
     std::vector<std::thread> threads;
+    std::vector<int> proxy_ready(add_plans.size(), 0);
     size_t sum_append_size = 0;
-    for (const auto &plan : add_plans)
+    for (size_t i = 0; i < add_plans.size(); ++i)
     {
-      threads.push_back(std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
+      const auto &plan = add_plans[i];
+      threads.emplace_back([this, &add_plans, &proxy_ready, i]() {
+        proxy_ready[i] = notify_proxies_ready(add_plans[i]) ? 1 : 0;
+      });
       proxyIPPort->add_append_keys(plan.key());
       proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
       proxyIPPort->add_proxyports(m_cluster_table[plan.cluster_id()].proxy_port + ECProject::PROXY_PORT_SHIFT); // use another port to accept data
@@ -1156,6 +1179,8 @@ namespace ECProject
     {
       thread.join();
     }
+    if (std::any_of(proxy_ready.begin(), proxy_ready.end(), [](int ready) { return ready == 0; }))
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE, "failed to schedule one or more set proxies");
     proxyIPPort->set_sum_append_size(sum_append_size);
 
     m_stripe_table[t_stripe.stripe_id] = std::move(t_stripe);
@@ -1212,10 +1237,14 @@ namespace ECProject
     }
 
     std::vector<std::thread> threads;
+    std::vector<int> proxy_ready(add_plans.size(), 0);
     size_t sum_append_size = 0;
-    for (const auto &plan : add_plans)
+    for (size_t i = 0; i < add_plans.size(); ++i)
     {
-      threads.push_back(std::thread(&CoordinatorImpl::notify_proxies_ready, this, plan));
+      const auto &plan = add_plans[i];
+      threads.emplace_back([this, &add_plans, &proxy_ready, i]() {
+        proxy_ready[i] = notify_proxies_ready(add_plans[i]) ? 1 : 0;
+      });
       proxyIPPort->add_append_keys(plan.key());
       proxyIPPort->add_proxyips(m_cluster_table[plan.cluster_id()].proxy_ip);
       proxyIPPort->add_proxyports(m_cluster_table[plan.cluster_id()].proxy_port + ECProject::PROXY_PORT_SHIFT); // use another port to accept data
@@ -1228,6 +1257,8 @@ namespace ECProject
     {
       thread.join();
     }
+    if (std::any_of(proxy_ready.begin(), proxy_ready.end(), [](int ready) { return ready == 0; }))
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE, "failed to schedule one or more subset proxies");
     proxyIPPort->set_sum_append_size(sum_append_size);
 
     m_stripe_table[t_stripe.stripe_id] = std::move(t_stripe);
@@ -3678,6 +3709,14 @@ namespace ECProject
       if (fid >= 0 && fid < (int)node_lookup.size())
         pipeline_proxy_keys.insert(node_lookup[fid].proxy_ip + ":" + std::to_string(node_lookup[fid].proxy_port));
     }
+    // Hybrid Phase2 runs one partition on every failed block's repair proxy.
+    // Include all of them in the teardown union, even when a failed block uses
+    // hub writeback and therefore has no local-direct pipeline chain.
+    for (int fid : failed_block_ids)
+    {
+      if (fid >= 0 && fid < (int)node_lookup.size())
+        pipeline_proxy_keys.insert(node_lookup[fid].proxy_ip + ":" + std::to_string(node_lookup[fid].proxy_port));
+    }
 
     bool workers_joined = false;
     auto join_pipeline_workers = [&]() {
@@ -3775,7 +3814,6 @@ namespace ECProject
       if (!allocate_chain_ports(chain, chain.local_direct_sink_proxy_ip, chain.local_direct_sink_proxy_port, "local sink"))
         return false;
     }
-
     {
       std::unordered_map<std::string, std::unordered_set<int>> assigned_ports;
       auto check_port = [&](const std::string &proxy_ip, int proxy_grpc_port, int port, const char *tag) -> bool {
@@ -4260,6 +4298,77 @@ namespace ECProject
                 << " hub=" << glrc_block_label(hub_block_id, ck, cr, cz)
                 << " est_phase2~" << choose.t_phase2_est_sec << "s est_pipeline~" << choose.t_pipeline_est_sec << "s"
                 << std::endl;
+    }
+
+    // A post-repair TEARDOWN is best effort and may be lost during a transient
+    // gRPC failure.  Make trial isolation a precondition instead of assuming
+    // the previous trial cleaned itself: reset every proxy participating in
+    // either half, wait for acknowledgements, and retry before data-plane
+    // timing starts.  The hybrid mutex guarantees that no repair is in flight.
+    std::unordered_set<std::string> hybrid_proxy_keys;
+    hybrid_proxy_keys.insert(pipeline_plan.hub_proxy_ip + ":" + std::to_string(pipeline_plan.hub_proxy_port));
+    auto add_chain_proxies = [&](const std::vector<GlrcPipelineChainPlan> &chains) {
+      for (const GlrcPipelineChainPlan &chain : chains)
+        for (const GlrcPipelineHopInfo &hop : chain.hops)
+          hybrid_proxy_keys.insert(hop.proxy_ip + ":" + std::to_string(hop.proxy_port));
+    };
+    add_chain_proxies(pipeline_plan.hub_chains);
+    add_chain_proxies(pipeline_plan.local_direct_chains);
+    for (int fid : failed_block_ids)
+    {
+      if (fid >= 0 && fid < static_cast<int>(node_lookup.size()))
+        hybrid_proxy_keys.insert(node_lookup[fid].proxy_ip + ":" +
+                                 std::to_string(node_lookup[fid].proxy_port));
+    }
+
+    std::mutex reset_error_mu;
+    std::vector<std::string> reset_errors;
+    std::vector<std::thread> reset_workers;
+    reset_workers.reserve(hybrid_proxy_keys.size());
+    for (const std::string &pk : hybrid_proxy_keys)
+    {
+      reset_workers.emplace_back([&, pk]() {
+        auto pit = m_proxy_ptrs.find(pk);
+        if (pit == m_proxy_ptrs.end() || !pit->second)
+        {
+          std::lock_guard<std::mutex> lock(reset_error_mu);
+          reset_errors.push_back(pk + " proxy stub missing");
+          return;
+        }
+
+        grpc::Status last_status;
+        bool reset_ok = false;
+        for (int attempt = 1; attempt <= 3 && !reset_ok; ++attempt)
+        {
+          proxy_proto::RecoveryRequest reset_req;
+          reset_req.set_glrc_ilp_recovery(true);
+          reset_req.set_glrc_ilp_pipeline(true);
+          reset_req.set_pipeline_role(static_cast<int>(GlrcPipelineRole::TEARDOWN));
+          proxy_proto::RecoveryReply reset_rep;
+          grpc::ClientContext reset_ctx;
+          reset_ctx.set_wait_for_ready(true);
+          reset_ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
+          last_status = pit->second->recoveryBreakdown(&reset_ctx, reset_req, &reset_rep);
+          reset_ok = last_status.ok();
+        }
+        if (!reset_ok)
+        {
+          std::lock_guard<std::mutex> lock(reset_error_mu);
+          reset_errors.push_back(pk + " reset failed: " + last_status.error_message());
+        }
+      });
+    }
+    for (std::thread &worker : reset_workers)
+      if (worker.joinable())
+        worker.join();
+    if (!reset_errors.empty())
+    {
+      std::string detail = "hybrid pre-trial cleanup failed";
+      for (const std::string &error : reset_errors)
+        detail += "; " + error;
+      recovery_reply->set_message(detail);
+      recovery_reply->set_success(false);
+      return false;
     }
 
     const double planner_sec =

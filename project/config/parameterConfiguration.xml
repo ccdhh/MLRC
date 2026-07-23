@@ -42,7 +42,7 @@
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
     <!-- 修复方式：phase1 | phase2 | pipeline | hybrid -->
-    <GlrcRepairMode>phase1</GlrcRepairMode>
+    <GlrcRepairMode>hybrid</GlrcRepairMode>
     <GlrcHybridP>auto</GlrcHybridP>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
     <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
