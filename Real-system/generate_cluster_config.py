@@ -11,7 +11,6 @@ assigned to each storage host.
 from __future__ import annotations
 
 import argparse
-import math
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -54,12 +53,26 @@ def replace_xml_value(path: Path, tag: str, value: str) -> None:
     path.write_text(result)
 
 
-def build_cluster_xml(storage_hosts: list[str], cluster_count: int, output: Path) -> int:
+def build_cluster_xml(
+    storage_hosts: list[str],
+    cluster_count: int,
+    output: Path,
+    cluster_sizes: list[int] | None = None,
+) -> int:
     root = ET.Element("clusters")
-    per_cluster = math.ceil(len(storage_hosts) / cluster_count)
+    if cluster_sizes is None:
+        base, remainder = divmod(len(storage_hosts), cluster_count)
+        cluster_sizes = [
+            base + (1 if cluster_id < remainder else 0)
+            for cluster_id in range(cluster_count)
+        ]
+    if len(cluster_sizes) != cluster_count or sum(cluster_sizes) != len(storage_hosts):
+        raise ValueError("cluster sizes do not match storage-host count")
+
+    start = 0
     for cluster_id in range(cluster_count):
-        start = cluster_id * per_cluster
-        members = storage_hosts[start : start + per_cluster]
+        members = storage_hosts[start : start + cluster_sizes[cluster_id]]
+        start += cluster_sizes[cluster_id]
         if not members:
             raise ValueError(f"cluster {cluster_id} has no storage host")
         cluster = ET.SubElement(
@@ -78,7 +91,7 @@ def build_cluster_xml(storage_hosts: list[str], cluster_count: int, output: Path
     output.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(root).write(output, encoding="utf-8", xml_declaration=True)
     output.write_text(output.read_text() + "\n")
-    return per_cluster
+    return max(cluster_sizes)
 
 
 def main() -> int:
@@ -116,7 +129,23 @@ def main() -> int:
     if cluster_count < 1 or cluster_count > len(storage):
         raise ValueError(f"invalid cluster count {cluster_count} for {len(storage)} storage hosts")
 
-    per_cluster = build_cluster_xml(storage, cluster_count, args.cluster_config)
+    cluster_sizes = None
+    if code_type == "gLRC":
+        k = int(xml_value(parameter_root, "k"))
+        r = int(xml_value(parameter_root, "r"))
+        z = int(xml_value(parameter_root, "z"))
+        payload_base, larger_group_count = divmod(k + r, z)
+        first_larger_group = z - larger_group_count
+        cluster_sizes = [
+            payload_base
+            + (1 if larger_group_count > 0 and group_id >= first_larger_group else 0)
+            + 1
+            for group_id in range(z)
+        ]
+
+    per_cluster = build_cluster_xml(
+        storage, cluster_count, args.cluster_config, cluster_sizes
+    )
     replace_xml_value(args.parameters, "DatanodeNumPerCluster", str(per_cluster))
     replace_xml_value(args.parameters, "ClusterNum", str(cluster_count))
     replace_xml_value(args.parameters, "CoordinatorIP", coordinator)

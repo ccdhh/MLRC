@@ -51,21 +51,21 @@
     <GlrcPipelineWindow>0</GlrcPipelineWindow>
     <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
 
-    <!-- Real-system: two gLRC placement groups, 14 real storage nodes each. -->
+    <!-- Real-system: four gLRC placement groups, up to 14 real storage nodes each. -->
     <DatanodeNumPerCluster>14</DatanodeNumPerCluster>
-    <ClusterNum>2</ClusterNum>
-    <CoordinatorIP>10.10.1.1</CoordinatorIP>
+    <ClusterNum>4</ClusterNum>
+    <CoordinatorIP>172.16.3.68</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
-    <ClientIP>10.10.1.2</ClientIP>
+    <ClientIP>172.16.3.75</ClientIP>
     <ClientPort>55555</ClientPort>
 
     <AppendMode>UNILRC_MODE</AppendMode>
     <alpha>2</alpha>
 
     <CodeType>gLRC</CodeType>
-    <!-- n=28: k=24 数据块, r=2 全局校验 G, z=2 局部校验 L；k+r 按 z 个大组均匀划分 -->
-    <k>24</k>
-    <r>2</r>
-    <z>2</z>
+    <!-- n=55: k=48 数据块, r=3 全局校验 G, z=4 局部校验 L；k+r 按 z 个大组均匀划分 -->
+    <k>48</k>
+    <r>3</r>
+    <z>4</z>
 
 </Configuration>

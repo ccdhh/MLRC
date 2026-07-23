@@ -514,8 +514,6 @@ namespace ECProject
     // additional payload block. Local parity Li belongs to large group i.
     Block *blocks_info = new Block[stripe->n];
     assert(stripe->object_keys.size() == 1);
-    int t_cluster_id = stripe->stripe_id % m_sys_config->ClusterNum;
-
     for (int i = 0; i < stripe->n; i++)
     {
       blocks_info[i].block_size = m_sys_config->BlockSize;
@@ -557,8 +555,10 @@ namespace ECProject
         blocks_info[i].block_type = 'L';
         blocks_info[i].map2group = local_idx;
       }
-      blocks_info[i].map2cluster =
-          (t_cluster_id + blocks_info[i].map2group) % m_sys_config->ClusterNum;
+      // gLRC cluster capacities mirror logical-group sizes. Keep each logical
+      // group on its matching cluster; rotating unequal groups can place a
+      // 14-block group on a 13-node cluster and make node selection loop forever.
+      blocks_info[i].map2cluster = blocks_info[i].map2group;
       int t_node_id =
           randomly_select_a_node(blocks_info[i].map2cluster, stripe->stripe_id);
       blocks_info[i].map2node = t_node_id;
