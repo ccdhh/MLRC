@@ -38,7 +38,7 @@
     <UnitSize>8192</UnitSize>
     <BlockSize>67108864</BlockSize>
 
-    <!-- 节点对带宽：每对节点单向 125 MB/s（ingress/egress 分向独立） -->
+    <!-- 节点对带宽：每对节点单向 125 MB/s（1 Gbps，ingress/egress 分向独立） -->
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
     <!-- 修复方式：phase1 | phase2 | pipeline | hybrid -->
@@ -51,7 +51,7 @@
     <GlrcPipelineWindow>0</GlrcPipelineWindow>
     <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
 
-    <!-- Real-system: four gLRC placement groups, up to 14 real storage nodes each. -->
+    <!-- Real-system: z=4 gLRC placement groups over 55 storage nodes. -->
     <DatanodeNumPerCluster>14</DatanodeNumPerCluster>
     <ClusterNum>4</ClusterNum>
     <CoordinatorIP>172.16.3.68</CoordinatorIP>

@@ -512,6 +512,11 @@ namespace ECProject
     // Split the ordered payload D0..D{k-1},G0..G{r-1} as evenly as
     // possible across z large groups. The final (k+r)%z groups get one
     // additional payload block. Local parity Li belongs to large group i.
+    //
+    // Physical placement is one global round-robin over ALL storage nodes.
+    // Single-stripe ring order is local-group major (e.g. (72,4,4)):
+    //   group0..group{z-1} concatenated; each group = its payload then Li.
+    //   position j  ->  node[(j + stripe_id) % N]
     Block *blocks_info = new Block[stripe->n];
     assert(stripe->object_keys.size() == 1);
     for (int i = 0; i < stripe->n; i++)
@@ -555,18 +560,46 @@ namespace ECProject
         blocks_info[i].block_type = 'L';
         blocks_info[i].map2group = local_idx;
       }
-      // gLRC cluster capacities mirror logical-group sizes. Keep each logical
-      // group on its matching cluster; rotating unequal groups can place a
-      // 14-block group on a 13-node cluster and make node selection loop forever.
-      blocks_info[i].map2cluster = blocks_info[i].map2group;
-      int t_node_id =
-          randomly_select_a_node(blocks_info[i].map2cluster, stripe->stripe_id);
-      blocks_info[i].map2node = t_node_id;
-      update_stripe_info_in_node(t_node_id, stripe->stripe_id, i);
-      m_cluster_table[blocks_info[i].map2cluster].blocks.push_back(&blocks_info[i]);
-      m_cluster_table[blocks_info[i].map2cluster].stripes.insert(stripe->stripe_id);
+      blocks_info[i].map2cluster = -1;
+      blocks_info[i].map2node = -1;
+    }
+
+    std::vector<std::vector<int>> groups;
+    glrc_build_placement_groups(stripe->k, stripe->r, stripe->z, groups);
+    assert(static_cast<int>(groups.size()) == stripe->z);
+
+    std::vector<int> stripe_blocks;
+    stripe_blocks.reserve(static_cast<size_t>(stripe->n));
+    for (int g = 0; g < stripe->z; g++)
+      stripe_blocks.insert(stripe_blocks.end(), groups[g].begin(), groups[g].end());
+    assert(static_cast<int>(stripe_blocks.size()) == stripe->n);
+
+    std::vector<int> all_nodes;
+    all_nodes.reserve(static_cast<size_t>(stripe->n));
+    for (const auto &kv : m_node_table)
+      all_nodes.push_back(kv.first); // std::map: ascending node_id
+    assert(static_cast<int>(all_nodes.size()) == stripe->n &&
+           "gLRC global round-robin requires storage-node count == n");
+
+    const int N = stripe->n;
+    for (int j = 0; j < N; j++)
+    {
+      const int block_id = stripe_blocks[j];
+      const int node_idx = (j + stripe->stripe_id) % N;
+      const int t_node_id = all_nodes[node_idx];
+      const int cluster_id = m_node_table[t_node_id].cluster_id;
+      blocks_info[block_id].map2node = t_node_id;
+      blocks_info[block_id].map2cluster = cluster_id;
+      update_stripe_info_in_node(t_node_id, stripe->stripe_id, block_id);
+      m_cluster_table[cluster_id].blocks.push_back(&blocks_info[block_id]);
+      m_cluster_table[cluster_id].stripes.insert(stripe->stripe_id);
+      stripe->place2clusters.insert(cluster_id);
+    }
+
+    for (int i = 0; i < stripe->n; i++)
+    {
+      assert(blocks_info[i].map2node >= 0 && "gLRC block missing round-robin placement");
       stripe->blocks.push_back(&blocks_info[i]);
-      stripe->place2clusters.insert(blocks_info[i].map2cluster);
       add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
     }
 
@@ -4653,6 +4686,90 @@ namespace ECProject
     if (!ok)
       return grpc::Status(grpc::StatusCode::INTERNAL, replyClient->message());
 
+    return grpc::Status::OK;
+  }
+
+  grpc::Status CoordinatorImpl::getBlocksOnNodes(
+      grpc::ServerContext *context,
+      const coordinator_proto::NodeIdsFromClient *request,
+      coordinator_proto::NodesPlacementReply *reply)
+  {
+    (void)context;
+    reply->Clear();
+
+    std::unordered_set<int> wanted;
+    for (int i = 0; i < request->node_ids_size(); ++i)
+    {
+      const int node_id = request->node_ids(i);
+      if (m_node_table.find(node_id) == m_node_table.end())
+      {
+        reply->set_success(false);
+        reply->set_message("unknown node_id: " + std::to_string(node_id));
+        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, reply->message());
+      }
+      wanted.insert(node_id);
+    }
+    for (int i = 0; i < request->node_ips_size(); ++i)
+    {
+      const std::string &ip = request->node_ips(i);
+      bool found = false;
+      for (const auto &kv : m_node_table)
+      {
+        if (kv.second.node_ip == ip)
+        {
+          wanted.insert(kv.first);
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        reply->set_success(false);
+        reply->set_message("unknown node_ip: " + ip);
+        return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, reply->message());
+      }
+    }
+    if (wanted.empty())
+    {
+      reply->set_success(false);
+      reply->set_message("empty node list");
+      return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, reply->message());
+    }
+
+    std::vector<int> resolved(wanted.begin(), wanted.end());
+    std::sort(resolved.begin(), resolved.end());
+    for (int node_id : resolved)
+    {
+      reply->add_resolved_node_ids(node_id);
+      reply->add_resolved_node_ips(m_node_table[node_id].node_ip);
+    }
+
+    std::map<int, std::vector<int>> stripe_to_blocks;
+    for (const auto &stripe_kv : m_stripe_table)
+    {
+      const int stripe_id = stripe_kv.first;
+      const Stripe &stripe = stripe_kv.second;
+      for (Block *block : stripe.blocks)
+      {
+        if (!block)
+          continue;
+        if (wanted.count(block->map2node))
+          stripe_to_blocks[stripe_id].push_back(block->block_id);
+      }
+    }
+
+    for (auto &kv : stripe_to_blocks)
+    {
+      std::sort(kv.second.begin(), kv.second.end());
+      kv.second.erase(std::unique(kv.second.begin(), kv.second.end()), kv.second.end());
+      auto *entry = reply->add_stripes();
+      entry->set_stripe_id(kv.first);
+      for (int block_id : kv.second)
+        entry->add_block_ids(block_id);
+    }
+
+    reply->set_success(true);
+    reply->set_message("ok");
     return grpc::Status::OK;
   }
 

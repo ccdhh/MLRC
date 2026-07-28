@@ -4,9 +4,8 @@ This directory deploys one `datanode` and one repair `proxy` on each storage
 host.  The first two non-comment entries in the hosts file are reserved for
 the coordinator and client; every later entry is a storage host.
 
-For the current `(n,k,r,z)=(28,24,2,2)` experiment, the supplied inventory
-maps `10.10.1.1` to coordinator, `10.10.1.2` to client, and
-`10.10.1.3`–`10.10.1.30` to 28 storage pairs.  Storage hosts use
+For the current `(n,k,r,z)=(105,96,5,4)` experiment, the hosts file lists
+coordinator + client + 105 storage pairs (`172.16.3.x`). Storage hosts use
 `17600` for the datanode and `50405` for the proxy.  Reusing these ports is
 safe because every pair has a different IP address.
 
@@ -29,7 +28,7 @@ bash compile.sh
 # Copy the same repository revision, binaries, and topology to all nodes.
 ./Real-system/deploy.sh
 
-# Start one coordinator and 28 datanode/proxy pairs.
+# Start one coordinator and 105 datanode/proxy pairs.
 ./Real-system/start.sh
 ./Real-system/status.sh
 

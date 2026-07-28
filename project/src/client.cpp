@@ -1078,6 +1078,53 @@ namespace ECProject
     return reply.block_num();
   }
 
+  bool Client::get_blocks_on_nodes(const std::vector<int> &node_ids,
+                                   const std::vector<std::string> &node_ips,
+                                   std::vector<int> &resolved_node_ids,
+                                   std::vector<std::string> &resolved_node_ips,
+                                   std::map<int, std::vector<int>> &stripe_to_failed_blocks,
+                                   std::string &error)
+  {
+    resolved_node_ids.clear();
+    resolved_node_ips.clear();
+    stripe_to_failed_blocks.clear();
+    error.clear();
+
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+    coordinator_proto::NodeIdsFromClient request;
+    for (int node_id : node_ids)
+      request.add_node_ids(node_id);
+    for (const std::string &ip : node_ips)
+      request.add_node_ips(ip);
+
+    coordinator_proto::NodesPlacementReply reply;
+    grpc::Status status = m_coordinator_ptr->getBlocksOnNodes(&context, request, &reply);
+    if (!status.ok())
+    {
+      error = status.error_message();
+      return false;
+    }
+    if (!reply.success())
+    {
+      error = reply.message();
+      return false;
+    }
+
+    for (int i = 0; i < reply.resolved_node_ids_size(); ++i)
+      resolved_node_ids.push_back(reply.resolved_node_ids(i));
+    for (int i = 0; i < reply.resolved_node_ips_size(); ++i)
+      resolved_node_ips.push_back(reply.resolved_node_ips(i));
+    for (int i = 0; i < reply.stripes_size(); ++i)
+    {
+      const auto &entry = reply.stripes(i);
+      std::vector<int> &blocks = stripe_to_failed_blocks[entry.stripe_id()];
+      for (int j = 0; j < entry.block_ids_size(); ++j)
+        blocks.push_back(entry.block_ids(j));
+    }
+    return true;
+  }
+
   std::shared_ptr<char[]> Client::get(std::string key, size_t &data_size)
   {
     grpc::ClientContext context;
@@ -1423,6 +1470,27 @@ namespace ECProject
       return true;
     }
     return false;
+  }
+
+  bool Client::list_stripe_ids(std::vector<int> &stripe_ids, std::string &error)
+  {
+    stripe_ids.clear();
+    error.clear();
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+    coordinator_proto::RepStripeIds rep;
+    coordinator_proto::RequestToCoordinator req;
+    req.set_name(m_clientID);
+    grpc::Status status = m_coordinator_ptr->listStripes(&context, req, &rep);
+    if (!status.ok())
+    {
+      error = status.error_message();
+      return false;
+    }
+    for (int i = 0; i < rep.stripe_ids_size(); ++i)
+      stripe_ids.push_back(rep.stripe_ids(i));
+    std::sort(stripe_ids.begin(), stripe_ids.end());
+    return true;
   }
 
   std::vector<int> Client::get_parameters()

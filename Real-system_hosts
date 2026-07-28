@@ -1,57 +1,57 @@
-172.16.3.68   i-z2zee7yl57  coordinator
-172.16.3.75   i-z2zee7yl56  client
-172.16.3.110  i-z2zee7yl3   storage-0
-172.16.3.57   i-z2zee7yl4   storage-1
-172.16.3.107  i-z2zee7yl5   storage-2
-172.16.3.112  i-z2zee7yl6   storage-3
-172.16.3.60   i-z2zee7yl7   storage-4
-172.16.3.91   i-z2zee7yl8   storage-5
-172.16.3.84   i-z2zee7yl9   storage-6
-172.16.3.94   i-z2zee7yl10  storage-7
-172.16.3.88   i-z2zee7yl11  storage-8
-172.16.3.89   i-z2zee7yl12  storage-9
-172.16.3.67   i-z2zee7yl13  storage-10
-172.16.3.79   i-z2zee7yl14  storage-11
-172.16.3.106  i-z2zee7yl15  storage-12
-172.16.3.93   i-z2zee7yl16  storage-13
-172.16.3.101  i-z2zee7yl17  storage-14
-172.16.3.100  i-z2zee7yl18  storage-15
-172.16.3.71   i-z2zee7yl19  storage-16
-172.16.3.73   i-z2zee7yl20  storage-17
-172.16.3.85   i-z2zee7yl21  storage-18
-172.16.3.102  i-z2zee7yl22  storage-19
-172.16.3.113  i-z2zee7yl23  storage-20
-172.16.3.63   i-z2zee7yl24  storage-21
-172.16.3.83   i-z2zee7yl25  storage-22
-172.16.3.66   i-z2zee7yl26  storage-23
-172.16.3.61   i-z2zee7yl27  storage-24
-172.16.3.108  i-z2zee7yl28  storage-25
-172.16.3.96   i-z2zee7yl29  storage-26
-172.16.3.95   i-z2zee7yl30  storage-27
-172.16.3.98   i-z2zee7yl31  storage-28
-172.16.3.72   i-z2zee7yl32  storage-29
-172.16.3.104  i-z2zee7yl33  storage-30
-172.16.3.82   i-z2zee7yl34  storage-31
-172.16.3.59   i-z2zee7yl35  storage-32
-172.16.3.76   i-z2zee7yl36  storage-33
-172.16.3.97   i-z2zee7yl37  storage-34
-172.16.3.80   i-z2zee7yl38  storage-35
-172.16.3.109  i-z2zee7yl39  storage-36
-172.16.3.74   i-z2zee7yl40  storage-37
-172.16.3.69   i-z2zee7yl41  storage-38
-172.16.3.81   i-z2zee7yl42  storage-39
-172.16.3.65   i-z2zee7yl43  storage-40
-172.16.3.70   i-z2zee7yl44  storage-41
-172.16.3.92   i-z2zee7yl45  storage-42
-172.16.3.77   i-z2zee7yl46  storage-43
-172.16.3.62   i-z2zee7yl47  storage-44
-172.16.3.86   i-z2zee7yl48  storage-45
-172.16.3.64   i-z2zee7yl49  storage-46
-172.16.3.87   i-z2zee7yl50  storage-47
-172.16.3.105  i-z2zee7yl51  storage-48
-172.16.3.99   i-z2zee7yl52  storage-49
-172.16.3.111  i-z2zee7yl53  storage-50
-172.16.3.58   i-z2zee7yl54  storage-51
-172.16.3.78   i-z2zee7yl55  storage-52
-172.16.3.90   i-z2zee7yl1   storage-53
-172.16.3.103  i-z2zee7yl2   storage-54
+172.16.3.68   coordinator
+172.16.3.75   client
+172.16.3.66   storage-0
+172.16.3.61   storage-1
+172.16.3.108  storage-2
+172.16.3.96   storage-3
+172.16.3.95   storage-4
+172.16.3.98   storage-5
+172.16.3.72   storage-6
+172.16.3.104  storage-7
+172.16.3.82   storage-8
+172.16.3.59   storage-9
+172.16.3.76   storage-10
+172.16.3.80   storage-11
+172.16.3.109  storage-12
+172.16.3.74   storage-13
+172.16.3.69   storage-14
+172.16.3.81   storage-15
+172.16.3.65   storage-16
+172.16.3.70   storage-17
+172.16.3.92   storage-18
+172.16.3.77   storage-19
+172.16.3.62   storage-20
+172.16.3.86   storage-21
+172.16.3.87   storage-22
+172.16.3.105  storage-23
+172.16.3.99   storage-24
+172.16.3.111  storage-25
+172.16.3.58   storage-26
+172.16.3.78   storage-27
+172.16.3.123  storage-28
+172.16.3.125  storage-29
+172.16.3.126  storage-30
+172.16.3.124  storage-31
+172.16.3.90   storage-32
+172.16.3.103  storage-33
+172.16.3.110  storage-34
+172.16.3.57   storage-35
+172.16.3.107  storage-36
+172.16.3.112  storage-37
+172.16.3.60   storage-38
+172.16.3.91   storage-39
+172.16.3.84   storage-40
+172.16.3.94   storage-41
+172.16.3.89   storage-42
+172.16.3.67   storage-43
+172.16.3.79   storage-44
+172.16.3.106  storage-45
+172.16.3.101  storage-46
+172.16.3.100  storage-47
+172.16.3.71   storage-48
+172.16.3.73   storage-49
+172.16.3.85   storage-50
+172.16.3.102  storage-51
+172.16.3.113  storage-52
+172.16.3.63   storage-53
+172.16.3.83   storage-54

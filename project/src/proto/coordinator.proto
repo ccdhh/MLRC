@@ -52,6 +52,8 @@ service coordinatorService {
   rpc getRecoveryBreakdown(KeyAndClientIP) returns (RecoveryReply) {};
   rpc fullNodeRecovery(NodeIdFromClient) returns (RepBlockNum) {};
   rpc multiBlockRecovery(StripeIdAndBlockIDsFromClient) returns (RecoveryReply) {};
+  // Resolve blocks that currently reside on the given failed nodes, grouped by stripe.
+  rpc getBlocksOnNodes(NodeIdsFromClient) returns (NodesPlacementReply) {};
   // delete
   rpc delByKey(KeyFromClient) returns (RepIfDeling) {};
   rpc delByStripe(StripeIdFromClient) returns (RepIfDeling) {};
@@ -164,6 +166,24 @@ message StripeIdAndBlockIDsFromClient {
 
 message NodeIdFromClient {
   int32 node_id = 1;
+}
+
+message NodeIdsFromClient {
+  repeated int32 node_ids = 1;
+  repeated string node_ips = 2;
+}
+
+message StripeFailedBlocks {
+  int32 stripe_id = 1;
+  repeated int32 block_ids = 2;
+}
+
+message NodesPlacementReply {
+  bool success = 1;
+  string message = 2;
+  repeated int32 resolved_node_ids = 3;
+  repeated string resolved_node_ips = 4;
+  repeated StripeFailedBlocks stripes = 5;
 }
 
 message RepIfDeling {

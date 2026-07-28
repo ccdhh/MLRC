@@ -12,6 +12,7 @@
 #include <asio.hpp>
 #include "config.h"
 #include "toolbox.h"
+#include <map>
 #include <string>
 #include <vector>
 namespace ECProject
@@ -111,6 +112,13 @@ namespace ECProject
     bool multi_block_recovery_breakdown(int stripe_id, std::vector<int> block_ids,
                                         GlrcMultiRecoveryMetrics &metrics);
     int recovery_full_node(int node_id);
+    /** Resolve blocks currently placed on the given nodes, grouped by stripe_id. */
+    bool get_blocks_on_nodes(const std::vector<int> &node_ids,
+                             const std::vector<std::string> &node_ips,
+                             std::vector<int> &resolved_node_ids,
+                             std::vector<std::string> &resolved_node_ips,
+                             std::map<int, std::vector<int>> &stripe_to_failed_blocks,
+                             std::string &error);
     std::vector<int> get_data_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_global_parity_block_num_per_group(int k, int r, int z, std::string code_type);
     std::vector<int> get_local_parity_block_num_per_group(int k, int r, int z, std::string code_type);
@@ -124,6 +132,7 @@ namespace ECProject
     bool delete_key(std::string key);
     bool delete_stripe(int stripe_id);
     bool delete_all_stripes();
+    bool list_stripe_ids(std::vector<int> &stripe_ids, std::string &error);
     int get_append_slice_plans(std::string append_mode, int curr_logical_offset, int append_size, std::vector<std::vector<int>> *node_slice_sizes_per_cluster, std::vector<int> *modified_data_block_nums_per_cluster, std::vector<int> *data_ptr_size_array, int &parity_slice_size, int &parity_slice_offset);
     void split_for_append_data_and_parity(const coordinator_proto::ReplyProxyIPsPorts *reply_proxy_ips_ports, const std::vector<char *> &cluster_slice_data, const std::vector<std::vector<int>> &node_slice_sizes_per_cluster, const std::vector<int> &modified_data_block_nums_per_cluster, std::vector<char *> &data_ptr_array, std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array);
     void split_for_set_data_and_parity(const coordinator_proto::ReplyProxyIPsPorts *reply_proxy_ips_ports, const std::vector<char *> &cluster_slice_data, const std::vector<int> &data_block_num_per_group, const std::vector<int> &global_parity_block_num_per_group, const std::vector<int> &local_parity_block_num_per_group, std::vector<char *> &data_ptr_array, std::vector<char *> &global_parity_ptr_array, std::vector<char *> &local_parity_ptr_array);

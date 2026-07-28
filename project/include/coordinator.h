@@ -117,6 +117,10 @@ namespace ECProject
       grpc::ServerContext *context,
       const coordinator_proto::StripeIdAndBlockIDsFromClient *request,
       coordinator_proto::RecoveryReply *replyClient) override;
+    grpc::Status getBlocksOnNodes(
+      grpc::ServerContext *context,
+      const coordinator_proto::NodeIdsFromClient *request,
+      coordinator_proto::NodesPlacementReply *reply) override;
     // delete
     grpc::Status delByKey(
         grpc::ServerContext *context,

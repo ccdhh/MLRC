@@ -18,8 +18,166 @@
 #include <limits>
 #include <stdexcept>
 #include <thread>
+#include <unordered_set>
+#include <ctime>
+#include <cerrno>
 #include "unilrc_encoder.h"
 #include "glrc_repair_ilp.h"
+#include "runtime_paths.h"
+
+namespace {
+
+class TeeStreambuf : public std::streambuf
+{
+public:
+  TeeStreambuf(std::streambuf *primary, std::streambuf *secondary)
+      : primary_(primary), secondary_(secondary) {}
+
+protected:
+  int overflow(int ch) override
+  {
+    if (ch == traits_type::eof())
+      return traits_type::not_eof(ch);
+    const auto c = static_cast<char>(ch);
+    const int r1 = primary_ ? primary_->sputc(c) : traits_type::eof();
+    const int r2 = secondary_ ? secondary_->sputc(c) : c;
+    return (r1 == traits_type::eof() || r2 == traits_type::eof()) ? traits_type::eof() : ch;
+  }
+
+  std::streamsize xsputn(const char *s, std::streamsize n) override
+  {
+    const std::streamsize n1 = primary_ ? primary_->sputn(s, n) : n;
+    const std::streamsize n2 = secondary_ ? secondary_->sputn(s, n) : n;
+    return std::min(n1, n2);
+  }
+
+  int sync() override
+  {
+    const int r1 = primary_ ? primary_->pubsync() : 0;
+    const int r2 = secondary_ ? secondary_->pubsync() : 0;
+    return (r1 == 0 && r2 == 0) ? 0 : -1;
+  }
+
+private:
+  std::streambuf *primary_;
+  std::streambuf *secondary_;
+};
+
+struct ExperimentLogger
+{
+  std::ofstream full_log;
+  std::ofstream summary_csv;
+  std::string full_log_path;
+  std::string summary_csv_path;
+  std::streambuf *old_cout = nullptr;
+  std::streambuf *old_cerr = nullptr;
+  TeeStreambuf *tee_out = nullptr;
+  TeeStreambuf *tee_err = nullptr;
+
+  bool start(const std::string &prefix)
+  {
+    if (const char *disabled = std::getenv("GLRC_SAVE_LOG"))
+    {
+      if (disabled[0] == '0')
+        return false;
+    }
+
+    std::string log_dir;
+    if (const char *env_dir = std::getenv("DDRT_CLIENT_LOG_DIR"))
+      log_dir = env_dir;
+    else
+      log_dir = resolve_path_relative_to_executable(nullptr, "../../logs/client_runs");
+
+    if (mkdir(log_dir.c_str(), 0755) != 0 && errno != EEXIST)
+    {
+      std::cerr << "[gLRC] warning: cannot create log dir " << log_dir << std::endl;
+      return false;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t tt = std::chrono::system_clock::to_time_t(now);
+    std::tm tm{};
+    localtime_r(&tt, &tm);
+    char stamp[32];
+    std::strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm);
+
+    full_log_path = log_dir + "/" + prefix + "_" + stamp + ".log";
+    summary_csv_path = log_dir + "/" + prefix + "_" + stamp + "_summary.csv";
+    const std::string latest_log = log_dir + "/latest_" + prefix + ".log";
+    const std::string latest_csv = log_dir + "/latest_" + prefix + "_summary.csv";
+
+    full_log.open(full_log_path, std::ios::out | std::ios::trunc);
+    summary_csv.open(summary_csv_path, std::ios::out | std::ios::trunc);
+    if (!full_log.is_open())
+    {
+      std::cerr << "[gLRC] warning: cannot open log file " << full_log_path << std::endl;
+      return false;
+    }
+
+    old_cout = std::cout.rdbuf();
+    old_cerr = std::cerr.rdbuf();
+    tee_out = new TeeStreambuf(old_cout, full_log.rdbuf());
+    tee_err = new TeeStreambuf(old_cerr, full_log.rdbuf());
+    std::cout.rdbuf(tee_out);
+    std::cerr.rdbuf(tee_err);
+
+    std::cout << "[gLRC] saving full log: " << full_log_path << std::endl;
+    if (summary_csv.is_open())
+      std::cout << "[gLRC] saving summary csv: " << summary_csv_path << std::endl;
+    latest_log_path_ = latest_log;
+    latest_csv_path_ = latest_csv;
+    return true;
+  }
+
+  void stop()
+  {
+    std::cout.flush();
+    std::cerr.flush();
+    if (old_cout)
+      std::cout.rdbuf(old_cout);
+    if (old_cerr)
+      std::cerr.rdbuf(old_cerr);
+    old_cout = nullptr;
+    old_cerr = nullptr;
+    delete tee_out;
+    delete tee_err;
+    tee_out = nullptr;
+    tee_err = nullptr;
+    if (full_log.is_open())
+    {
+      full_log.flush();
+      full_log.close();
+      // Stable names for run_client.sh to fetch after the run.
+      if (!latest_log_path_.empty())
+      {
+        std::ifstream src(full_log_path, std::ios::binary);
+        std::ofstream dst(latest_log_path_, std::ios::binary | std::ios::trunc);
+        dst << src.rdbuf();
+      }
+      std::cout << "[gLRC] full log saved: " << full_log_path << std::endl;
+    }
+    if (summary_csv.is_open())
+    {
+      summary_csv.flush();
+      summary_csv.close();
+      if (!latest_csv_path_.empty())
+      {
+        std::ifstream src(summary_csv_path, std::ios::binary);
+        std::ofstream dst(latest_csv_path_, std::ios::binary | std::ios::trunc);
+        dst << src.rdbuf();
+      }
+      std::cout << "[gLRC] summary csv saved: " << summary_csv_path << std::endl;
+    }
+  }
+
+  ~ExperimentLogger() { stop(); }
+
+private:
+  std::string latest_log_path_;
+  std::string latest_csv_path_;
+};
+
+} // namespace
 
 static int env_int_or(const char *name, int default_value)
 {
@@ -96,8 +254,6 @@ static bool parse_failed_blocks(const std::string &raw, int k, int r, int z,
     return true;
 }
 
-#include "runtime_paths.h"
-
 static void print_glrc_client_usage(const char *argv0)
 {
     std::cerr
@@ -110,30 +266,103 @@ static void print_glrc_client_usage(const char *argv0)
         << "  --failure-mode MODE  random (default) | max\n"
         << "  --max-failure        shorthand for --failure-mode max\n"
         << "  --no-warmup          skip pre-trial pipeline warmup recovery\n"
+        << "  --node-repair        multi-stripe repair for whole failed nodes\n"
+        << "  --failed-nodes LIST  node ids, e.g. 2,15 (implies --node-repair)\n"
+        << "  --failed-node-ips LIST  node IPs, e.g. 172.16.3.66,172.16.3.65\n"
+        << "  --reuse-stripes      node-repair: skip write; repair last GLRC_STRIPE_NUM stripes\n"
+        << "  -n also repeats node-repair trials with 500ms isolation gap\n"
         << "  -h, --help           show this help\n"
         << "\n"
         << "If -f/-n are omitted: prompt interactively when stdin is a TTY;\n"
         << "otherwise use env GLRC_FAIL_COUNT / GLRC_TRIALS (default 1/1).\n"
-        << "Equivalent env vars: GLRC_FAILED_BLOCKS and GLRC_RANDOM_SEED.\n"
+        << "Stripe count: GLRC_STRIPE_NUM (default 1).\n"
+        << "Equivalent env vars: GLRC_FAILED_BLOCKS, GLRC_RANDOM_SEED,\n"
+        << "GLRC_FAILED_NODES, GLRC_FAILED_NODE_IPS, GLRC_REUSE_STRIPES=1.\n"
         << "Coordinator may also be set via COORDINATOR_ADDR.\n";
+}
+
+static bool parse_int_list(const std::string &raw, std::vector<int> &out, std::string &error)
+{
+    out.clear();
+    std::stringstream ss(raw);
+    std::string token;
+    while (std::getline(ss, token, ','))
+    {
+        token.erase(token.begin(), std::find_if(token.begin(), token.end(),
+                                               [](unsigned char c) { return !std::isspace(c); }));
+        token.erase(std::find_if(token.rbegin(), token.rend(),
+                                [](unsigned char c) { return !std::isspace(c); }).base(),
+                    token.end());
+        if (token.empty())
+            continue;
+        try
+        {
+            size_t consumed = 0;
+            const int value = std::stoi(token, &consumed);
+            if (consumed != token.size() || value < 0)
+                throw std::invalid_argument("bad int");
+            out.push_back(value);
+        }
+        catch (const std::exception &)
+        {
+            error = "invalid integer list token: " + token;
+            return false;
+        }
+    }
+    if (out.empty())
+    {
+        error = "integer list is empty";
+        return false;
+    }
+    return true;
+}
+
+static bool parse_string_list(const std::string &raw, std::vector<std::string> &out, std::string &error)
+{
+    out.clear();
+    std::stringstream ss(raw);
+    std::string token;
+    while (std::getline(ss, token, ','))
+    {
+        token.erase(token.begin(), std::find_if(token.begin(), token.end(),
+                                               [](unsigned char c) { return !std::isspace(c); }));
+        token.erase(std::find_if(token.rbegin(), token.rend(),
+                                [](unsigned char c) { return !std::isspace(c); }).base(),
+                    token.end());
+        if (token.empty())
+            continue;
+        out.push_back(token);
+    }
+    if (out.empty())
+    {
+        error = "string list is empty";
+        return false;
+    }
+    return true;
 }
 
 /** Returns false on parse error / --help. Sets *show_help if help was requested. */
 static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &trial_count,
                                 bool &have_f, bool &have_n, std::string &coordinator_override,
                                 bool &show_help, bool &skip_warmup, std::string &failure_mode,
-                                std::string &fixed_failed_raw, std::string &seed_raw)
+                                std::string &fixed_failed_raw, std::string &seed_raw,
+                                bool &node_repair, std::string &failed_nodes_raw,
+                                std::string &failed_node_ips_raw, bool &reuse_stripes)
 {
     have_f = false;
     have_n = false;
     show_help = false;
     skip_warmup = false;
+    node_repair = false;
+    reuse_stripes = false;
     fail_count = 0;
     trial_count = 0;
     coordinator_override.clear();
     failure_mode.clear();
     fixed_failed_raw.clear();
     seed_raw.clear();
+    failed_nodes_raw.clear();
+    failed_node_ips_raw.clear();
 
     for (int i = 1; i < argc; ++i)
     {
@@ -202,6 +431,35 @@ static bool parse_glrc_cli_args(int argc, char **argv, int &fail_count, int &tri
             if (!v)
                 return false;
             failure_mode = v;
+            continue;
+        }
+        if (arg == "--node-repair")
+        {
+            node_repair = true;
+            continue;
+        }
+        if (arg == "--reuse-stripes")
+        {
+            reuse_stripes = true;
+            node_repair = true;
+            continue;
+        }
+        if (arg == "--failed-nodes")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            failed_nodes_raw = v;
+            node_repair = true;
+            continue;
+        }
+        if (arg == "--failed-node-ips")
+        {
+            const char *v = need_value(arg.c_str());
+            if (!v)
+                return false;
+            failed_node_ips_raw = v;
+            node_repair = true;
             continue;
         }
         if (!arg.empty() && arg[0] == '-')
@@ -424,6 +682,356 @@ static void print_glrc_trial_metrics(const ECProject::GlrcMultiRecoveryMetrics &
         std::cout << "  hotspot_residual:        " << hotspot_residual
                   << "  (actual data_plane - theoretical network critical)" << std::endl;
     }
+}
+
+static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject::Config *config,
+                                     const std::string &failed_nodes_raw,
+                                     const std::string &failed_node_ips_raw,
+                                     int trial_count, bool have_n, bool reuse_stripes)
+{
+    const int k = config->k;
+    const int r = config->r;
+    const int z = config->z;
+    const int n = k + r + z;
+    const int stripe_num = env_int_or("GLRC_STRIPE_NUM", 1);
+    const size_t block_bytes = static_cast<size_t>(config->BlockSize);
+
+    if (!reuse_stripes)
+    {
+        if (const char *env = std::getenv("GLRC_REUSE_STRIPES"))
+        {
+            if (env[0] == '1' || env[0] == 'y' || env[0] == 'Y' || env[0] == 't' || env[0] == 'T')
+                reuse_stripes = true;
+        }
+    }
+
+    if (!have_n)
+    {
+        const char *env_t = std::getenv("GLRC_TRIALS");
+        trial_count = (env_t && env_t[0]) ? std::max(1, std::atoi(env_t)) : 1;
+    }
+    if (trial_count < 1)
+    {
+        std::cerr << "[gLRC] invalid trial count: " << trial_count << std::endl;
+        return 1;
+    }
+
+    std::string nodes_raw = failed_nodes_raw;
+    std::string ips_raw = failed_node_ips_raw;
+    if (nodes_raw.empty())
+    {
+        if (const char *env = std::getenv("GLRC_FAILED_NODES"))
+            nodes_raw = env;
+    }
+    if (ips_raw.empty())
+    {
+        if (const char *env = std::getenv("GLRC_FAILED_NODE_IPS"))
+            ips_raw = env;
+    }
+
+    std::vector<int> node_ids;
+    std::vector<std::string> node_ips;
+    std::string parse_error;
+    if (!nodes_raw.empty() && !parse_int_list(nodes_raw, node_ids, parse_error))
+    {
+        std::cerr << "[gLRC] invalid --failed-nodes: " << parse_error << std::endl;
+        return 1;
+    }
+    if (!ips_raw.empty() && !parse_string_list(ips_raw, node_ips, parse_error))
+    {
+        std::cerr << "[gLRC] invalid --failed-node-ips: " << parse_error << std::endl;
+        return 1;
+    }
+    if (node_ids.empty() && node_ips.empty())
+    {
+        std::cerr << "[gLRC] --node-repair requires --failed-nodes and/or --failed-node-ips"
+                  << std::endl;
+        return 1;
+    }
+
+    ExperimentLogger logger;
+    logger.start("glrc_node_repair");
+    if (logger.summary_csv.is_open())
+    {
+        logger.summary_csv
+            << "trial,success,stripes_repaired,stripes_total,failed_blocks,"
+            << "batch_wall_time_s,avg_stripe_repair_time_s,avg_stripe_data_plane_s,"
+            << "sum_stripe_repair_time_s,recovered_mib,throughput_mib_s,"
+            << "repair_mode,equation_policy,failed_nodes\n";
+    }
+
+    std::cout << "[gLRC] node-repair mode (n,k,r,z)=(" << n << "," << k << "," << r << "," << z
+              << ") mode=" << config->GlrcRepairMode
+              << " policy=" << config->GlrcEquationPolicy
+              << " stripes=" << stripe_num
+              << " trials=" << trial_count
+              << (reuse_stripes ? " reuse_stripes=1" : " reuse_stripes=0") << std::endl;
+
+    std::unordered_set<int> target_stripe_set;
+    if (reuse_stripes)
+    {
+        std::vector<int> existing;
+        std::string list_error;
+        if (!client.list_stripe_ids(existing, list_error))
+        {
+            std::cerr << "[gLRC] list_stripe_ids failed: " << list_error << std::endl;
+            return 1;
+        }
+        if (existing.empty())
+        {
+            std::cerr << "[gLRC] --reuse-stripes requires existing stripes on coordinator"
+                      << std::endl;
+            return 1;
+        }
+        std::sort(existing.begin(), existing.end());
+        const int take = std::min(stripe_num, static_cast<int>(existing.size()));
+        for (int i = static_cast<int>(existing.size()) - take; i < static_cast<int>(existing.size());
+             ++i)
+            target_stripe_set.insert(existing[static_cast<size_t>(i)]);
+        std::vector<int> selected(target_stripe_set.begin(), target_stripe_set.end());
+        std::sort(selected.begin(), selected.end());
+        std::cout << "[gLRC] reuse-stripes: coordinator has " << existing.size()
+                  << " stripe(s); repairing last " << take << " by id:";
+        for (int sid : selected)
+            std::cout << " " << sid;
+        std::cout << std::endl;
+        if (take < stripe_num)
+        {
+            std::cout << "[gLRC] warning: requested GLRC_STRIPE_NUM=" << stripe_num
+                      << " but only " << existing.size() << " stripe(s) exist" << std::endl;
+        }
+    }
+    else
+    {
+        // Coordinator keeps stripes across client runs. Only repair stripes created
+        // in this experiment, not leftovers from a previous node-repair / single-stripe run.
+        std::vector<int> stripes_before;
+        std::string list_error;
+        if (!client.list_stripe_ids(stripes_before, list_error))
+        {
+            std::cerr << "[gLRC] list_stripe_ids failed before write: " << list_error << std::endl;
+            return 1;
+        }
+        if (!stripes_before.empty())
+        {
+            std::cout << "[gLRC] warning: coordinator already has " << stripes_before.size()
+                      << " stripe(s); this run will only repair newly written stripes"
+                      << std::endl;
+        }
+        std::unordered_set<int> before_set(stripes_before.begin(), stripes_before.end());
+
+        std::cout << "[gLRC] Writing " << stripe_num << " stripe(s)..." << std::endl;
+        for (int i = 0; i < stripe_num; i++)
+        {
+            if (!client.set())
+            {
+                std::cerr << "[gLRC] set() failed at stripe index " << i << std::endl;
+                return 1;
+            }
+        }
+
+        std::vector<int> stripes_after;
+        if (!client.list_stripe_ids(stripes_after, list_error))
+        {
+            std::cerr << "[gLRC] list_stripe_ids failed after write: " << list_error << std::endl;
+            return 1;
+        }
+        for (int sid : stripes_after)
+        {
+            if (!before_set.count(sid))
+                target_stripe_set.insert(sid);
+        }
+    }
+
+    // Freeze the failure pattern once, matching single-stripe fixed-block trials:
+    // each trial re-repairs the same logical blocks (writeback stays on original nodes).
+    std::vector<int> resolved_node_ids;
+    std::vector<std::string> resolved_node_ips;
+    std::map<int, std::vector<int>> stripe_to_failed;
+    std::string query_error;
+    if (!client.get_blocks_on_nodes(node_ids, node_ips, resolved_node_ids, resolved_node_ips,
+                                    stripe_to_failed, query_error))
+    {
+        std::cerr << "[gLRC] get_blocks_on_nodes failed: " << query_error << std::endl;
+        return 1;
+    }
+
+    for (auto it = stripe_to_failed.begin(); it != stripe_to_failed.end();)
+    {
+        if (!target_stripe_set.count(it->first))
+            it = stripe_to_failed.erase(it);
+        else
+            ++it;
+    }
+
+    std::cout << "[gLRC] Failed nodes:";
+    for (size_t i = 0; i < resolved_node_ids.size(); ++i)
+    {
+        std::cout << " " << resolved_node_ids[i];
+        if (i < resolved_node_ips.size())
+            std::cout << "(" << resolved_node_ips[i] << ")";
+    }
+    std::cout << std::endl;
+
+    if (stripe_to_failed.empty())
+    {
+        std::cerr << "[gLRC] no target-stripe blocks found on the selected nodes" << std::endl;
+        return 1;
+    }
+
+    std::vector<int> stripe_ids;
+    stripe_ids.reserve(stripe_to_failed.size());
+    for (const auto &kv : stripe_to_failed)
+        stripe_ids.push_back(kv.first);
+    std::sort(stripe_ids.begin(), stripe_ids.end());
+    if (static_cast<int>(stripe_ids.size()) != static_cast<int>(target_stripe_set.size()))
+    {
+        std::cout << "[gLRC] warning: expected " << target_stripe_set.size()
+                  << " target stripe(s) on failed nodes, found " << stripe_ids.size()
+                  << std::endl;
+    }
+
+    int total_failed_blocks = 0;
+    for (int stripe_id : stripe_ids)
+        total_failed_blocks += static_cast<int>(stripe_to_failed[stripe_id].size());
+
+    std::cout << "[gLRC] Will repair " << stripe_ids.size() << " stripe(s), "
+              << total_failed_blocks << " failed block(s) in stripe order, "
+              << trial_count << " trial(s)" << std::endl;
+    for (int stripe_id : stripe_ids)
+    {
+        std::cout << "  stripe " << stripe_id << ": "
+                  << ECProject::glrc_format_block_list(stripe_to_failed[stripe_id], k, r, z)
+                  << std::endl;
+    }
+
+    const double recovered_mib =
+        static_cast<double>(total_failed_blocks) * static_cast<double>(block_bytes) / (1024.0 * 1024.0);
+
+    int full_success_trials = 0;
+    double sum_batch_wall = 0.0;
+    double sum_avg_stripe_repair = 0.0;
+    double sum_throughput = 0.0;
+
+    for (int t = 0; t < trial_count; ++t)
+    {
+        std::cout << "\n########## node-repair trial " << (t + 1) << "/" << trial_count
+                  << " ##########" << std::endl;
+
+        int success_count = 0;
+        double sum_repair = 0.0;
+        double sum_data_plane = 0.0;
+        const auto batch_start = std::chrono::steady_clock::now();
+
+        for (size_t i = 0; i < stripe_ids.size(); ++i)
+        {
+            const int stripe_id = stripe_ids[i];
+            const std::vector<int> &failed = stripe_to_failed[stripe_id];
+            ECProject::GlrcMultiRecoveryMetrics m;
+            std::cout << "\n--- trial " << (t + 1) << "/" << trial_count
+                      << " stripe " << (i + 1) << "/" << stripe_ids.size()
+                      << " id=" << stripe_id
+                      << " failed_blocks: " << ECProject::glrc_format_block_list(failed, k, r, z)
+                      << std::endl;
+            if (!client.multi_block_recovery_breakdown(stripe_id, failed, m))
+            {
+                std::cerr << "  FAILED: " << m.message << std::endl;
+                continue;
+            }
+            success_count++;
+            sum_repair += m.total_time;
+            sum_data_plane += (m.data_plane_time > 0.0 ? m.data_plane_time : m.network_time);
+            print_glrc_trial_metrics(m, k, r, z);
+        }
+
+        const double batch_wall =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - batch_start).count();
+        const bool trial_ok = (success_count == static_cast<int>(stripe_ids.size()));
+        if (trial_ok)
+            full_success_trials++;
+
+        std::cout << "\n========== gLRC node-repair trial " << (t + 1) << "/" << trial_count
+                  << " summary ==========" << std::endl;
+        std::cout << "  mode=" << config->GlrcRepairMode
+                  << " policy=" << config->GlrcEquationPolicy << std::endl;
+        std::cout << "  stripes_written=" << stripe_num
+                  << " stripes_repaired=" << success_count << "/" << stripe_ids.size()
+                  << " failed_blocks=" << total_failed_blocks << std::endl;
+        std::cout << std::fixed << std::setprecision(6);
+        std::cout << "  batch_wall_time:          " << batch_wall << " s" << std::endl;
+        if (success_count > 0)
+        {
+            const double cnt = static_cast<double>(success_count);
+            std::cout << "  avg_stripe_repair_time:   " << (sum_repair / cnt) << " s" << std::endl;
+            std::cout << "  avg_stripe_data_plane:    " << (sum_data_plane / cnt) << " s" << std::endl;
+            std::cout << "  sum_stripe_repair_time:   " << sum_repair << " s" << std::endl;
+            if (trial_ok)
+            {
+                sum_batch_wall += batch_wall;
+                sum_avg_stripe_repair += (sum_repair / cnt);
+                if (batch_wall > 0.0)
+                    sum_throughput += (recovered_mib / batch_wall);
+            }
+        }
+        std::cout << "  recovered_data:           " << recovered_mib << " MiB" << std::endl;
+        const double throughput =
+            (batch_wall > 0.0) ? (recovered_mib / batch_wall) : 0.0;
+        if (batch_wall > 0.0)
+            std::cout << "  throughput:               " << throughput << " MiB/s" << std::endl;
+        std::cout << "================================================" << std::endl;
+
+        if (logger.summary_csv.is_open())
+        {
+            const double avg_repair =
+                (success_count > 0) ? (sum_repair / static_cast<double>(success_count)) : 0.0;
+            const double avg_dp =
+                (success_count > 0) ? (sum_data_plane / static_cast<double>(success_count)) : 0.0;
+            std::ostringstream nodes_ss;
+            for (size_t ni = 0; ni < resolved_node_ids.size(); ++ni)
+            {
+                if (ni)
+                    nodes_ss << ";";
+                nodes_ss << resolved_node_ids[ni];
+                if (ni < resolved_node_ips.size())
+                    nodes_ss << "(" << resolved_node_ips[ni] << ")";
+            }
+            logger.summary_csv << std::fixed << std::setprecision(6)
+                               << (t + 1) << "," << (trial_ok ? 1 : 0) << ","
+                               << success_count << "," << stripe_ids.size() << ","
+                               << total_failed_blocks << ","
+                               << batch_wall << "," << avg_repair << "," << avg_dp << ","
+                               << sum_repair << "," << recovered_mib << "," << throughput << ","
+                               << config->GlrcRepairMode << "," << config->GlrcEquationPolicy << ","
+                               << nodes_ss.str() << "\n";
+            logger.summary_csv.flush();
+        }
+
+        // Same inter-trial gap as single-stripe experiments: let limiter / sockets settle.
+        if (t + 1 < trial_count)
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+
+    if (trial_count > 1)
+    {
+        std::cout << "\n========== gLRC node-repair batch summary ==========" << std::endl;
+        std::cout << "  trials=" << trial_count
+                  << " full_success=" << full_success_trials << std::endl;
+        if (full_success_trials > 0)
+        {
+            const double cnt = static_cast<double>(full_success_trials);
+            std::cout << std::fixed << std::setprecision(6);
+            std::cout << "  avg_batch_wall_time:       " << (sum_batch_wall / cnt) << " s"
+                      << std::endl;
+            std::cout << "  avg_avg_stripe_repair:     " << (sum_avg_stripe_repair / cnt) << " s"
+                      << std::endl;
+            std::cout << "  avg_throughput:            " << (sum_throughput / cnt) << " MiB/s"
+                      << std::endl;
+        }
+        std::cout << "====================================================" << std::endl;
+    }
+
+    logger.stop();
+    return (full_success_trials == trial_count) ? 0 : 1;
 }
 
 static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Config *config,
@@ -697,10 +1305,13 @@ int main(int argc, char **argv)
 {
     int cli_fail = 0, cli_trials = 0;
     bool have_f = false, have_n = false, show_help = false, skip_warmup = false;
+    bool node_repair = false, reuse_stripes = false;
     std::string coordinator_override, failure_mode, fixed_failed_raw, seed_raw;
+    std::string failed_nodes_raw, failed_node_ips_raw;
     if (!parse_glrc_cli_args(argc, argv, cli_fail, cli_trials, have_f, have_n,
                              coordinator_override, show_help, skip_warmup, failure_mode,
-                             fixed_failed_raw, seed_raw))
+                             fixed_failed_raw, seed_raw, node_repair, failed_nodes_raw,
+                             failed_node_ips_raw, reuse_stripes))
     {
         print_glrc_client_usage(argc > 0 ? argv[0] : nullptr);
         return show_help ? 0 : 2;
@@ -709,6 +1320,25 @@ int main(int argc, char **argv)
     {
         if (const char *env_mode = std::getenv("GLRC_FAILURE_MODE"))
             failure_mode = env_mode;
+    }
+    if (!node_repair)
+    {
+        if (const char *env_nodes = std::getenv("GLRC_FAILED_NODES"))
+        {
+            if (env_nodes[0] != '\0')
+            {
+                failed_nodes_raw = env_nodes;
+                node_repair = true;
+            }
+        }
+        if (const char *env_ips = std::getenv("GLRC_FAILED_NODE_IPS"))
+        {
+            if (env_ips[0] != '\0')
+            {
+                failed_node_ips_raw = env_ips;
+                node_repair = true;
+            }
+        }
     }
 
     const std::string sys_config_path =
@@ -736,8 +1366,13 @@ int main(int argc, char **argv)
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
     if (config->CodeType == "gLRC")
+    {
+        if (node_repair)
+            return run_glrc_node_repair_test(client, config, failed_nodes_raw, failed_node_ips_raw,
+                                            cli_trials, have_n, reuse_stripes);
         return run_glrc_repair_test(client, config, cli_fail, cli_trials, have_f, have_n,
                                     skip_warmup, failure_mode, fixed_failed_raw, seed_raw);
+    }
 
     std::vector<int> parameters = client.get_parameters();
     int k = parameters[0];
