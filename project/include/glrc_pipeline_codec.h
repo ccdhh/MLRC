@@ -15,18 +15,20 @@ namespace ECProject
   };
 
   /** Build per-block coefficients for one recovery equation (same system as decode_glrc_ilp). */
-  void glrc_pipeline_build_coef_row(int k, int r, int z, int eq_index, std::vector<unsigned char> &coef_row_out);
+  void glrc_pipeline_build_coef_row(int k, int r, int z, int eq_index, std::vector<unsigned char> &coef_row_out,
+                                   GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
   GlrcPipelineEqCodec glrc_pipeline_equation_codec(int k, int r, int z, int eq_index);
 
   /**
    * Validate coefficient row matches equation semantics:
    *   local  -> data uses local-vector coefficients; parity uses coef 1
-   *   global -> D0..D(k-1) Cauchy coeffs + G_g coef 1
+   *   global -> D0..D(k-1) Cauchy/RS coeffs + G_g coef 1
    */
   bool glrc_pipeline_verify_coef_row(int k, int r, int z, int eq_index,
                                      const std::vector<unsigned char> &coef_row,
-                                     std::string &error_message);
+                                     std::string &error_message,
+                                     GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
   /** RHS byte update: dst ^= coef*src. */
   void glrc_pipeline_accumulate_byte(unsigned char &dst, unsigned char src, unsigned char coef,

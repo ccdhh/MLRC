@@ -22,6 +22,17 @@ struct GlrcHybridChooseResult
 };
 
 /**
+ * Auto p=0 shortcut (full-stripe local-first pipeline).
+ * gLRC: true when each placement group has at most one failure (each group has a local parity).
+ * AzureLRC: same, but never when any global parity G* failed — Azure's global bucket has no
+ *           local parity, so a G failure needs the T_hot/T_hub cost model (may choose p>0).
+ * OptimalLRC: always false. Optimal local equations include every G*, so concurrent local
+ *             chains share those hops and the hotspot stays ≈f (not 1); forcing p=0 undercounts.
+ */
+bool glrc_hybrid_auto_forces_p0(int k, int r, int z, const std::vector<int> &failed_block_ids,
+                                GlrcCodecMode codec = GlrcCodecMode::GLRC);
+
+/**
  * Choose hybrid split point p in [0, S-1].
  * GlrcHybridP config: "auto" or integer in [0, S-1].
  *
@@ -34,14 +45,19 @@ struct GlrcHybridChooseResult
  * Global stripe [0,p) runs Phase2+ILP (split across failed blocks; p<f allowed — some blocks get 0 shards).
  * Global stripe [p,S) runs Pipeline+local-first on every failed block's repair proxy.
  *
- * p=0: all shards via local-first pipeline when each placement group has at most one failure, or GlrcHybridP=0.
+ * p=0: GlrcHybridP=0, or auto + glrc_hybrid_auto_forces_p0(...).
+ * Azure + failed G*: auto never forces p=0; p* modeling ignores local-direct so a lone
+ * global hub chain cannot collapse to the f_hub=1 / p*=0 fixed point.
+ * Optimal: auto never forces p=0; p* modeling always ignores local-direct (shared G* hops
+ * keep f_hub≈f even when every selected equation is classified local-direct).
  */
 GlrcHybridChooseResult glrc_hybrid_choose_p(int k, int r, int z, int f, int global_shard_count, int block_size,
                                             double link_mbps, const GlrcIlpRepairPlan *plan_ilp, int hub_block_id,
                                             int pipeline_local_direct_count,
                                             const std::unordered_set<int> &local_direct_failed_block_ids,
                                             const std::vector<int> &failed_block_ids,
-                                            const std::string &hybrid_p_config);
+                                            const std::string &hybrid_p_config,
+                                            GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
 } // namespace ECProject
 

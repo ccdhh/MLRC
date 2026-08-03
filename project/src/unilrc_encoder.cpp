@@ -1129,13 +1129,34 @@ namespace
   static void build_block_coef_row(int k, int r, int z, int n, int eq_index,
                                    const unsigned char *encode_matrix,
                                    const std::vector<std::vector<int>> &groups,
-                                   std::vector<unsigned char> &coef_row)
+                                   std::vector<unsigned char> &coef_row,
+                                   ECProject::GlrcCodecMode codec)
   {
     coef_row.assign(n, 0);
     if (eq_index < z)
     {
-      for (int b : groups[eq_index])
-        coef_row[b] = ECProject::glrc_local_block_coefficient(b, k, r);
+      if (codec == ECProject::GlrcCodecMode::AZURE)
+      {
+        for (int b : groups[eq_index])
+          coef_row[b] = 1;
+      }
+      else if (codec == ECProject::GlrcCodecMode::OPTIMAL)
+      {
+        for (int b : groups[eq_index])
+        {
+          if (b < k)
+            coef_row[b] = ECProject::glrc_local_block_coefficient(b, k, r);
+          else
+            coef_row[b] = 1; // Li
+        }
+        for (int g = 0; g < r; g++)
+          coef_row[k + g] = 1;
+      }
+      else
+      {
+        for (int b : groups[eq_index])
+          coef_row[b] = ECProject::glrc_local_block_coefficient(b, k, r);
+      }
     }
     else
     {
@@ -1158,14 +1179,15 @@ namespace
                                      const std::vector<int> &selected_equation_indices,
                                      const unsigned char *encode_matrix,
                                      const std::vector<std::vector<int>> &groups,
-                                     std::vector<unsigned char> &A_inv_out)
+                                     std::vector<unsigned char> &A_inv_out,
+                                     ECProject::GlrcCodecMode codec)
   {
     const int f = (int)failed_block_ids.size();
     std::vector<unsigned char> coef_row(n);
     std::vector<unsigned char> A(f * f);
     for (int ei = 0; ei < f; ei++)
     {
-      build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row);
+      build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row, codec);
       for (int t = 0; t < f; t++)
         A[ei * f + t] = coef_row[failed_block_ids[t]];
     }
@@ -1178,7 +1200,8 @@ namespace
 
 bool ECProject::glrc_ilp_decode_matrix_invertible(int k, int r, int z,
                                                   const std::vector<int> &failed_block_ids,
-                                                  const std::vector<int> &selected_equation_indices)
+                                                  const std::vector<int> &selected_equation_indices,
+                                                  GlrcCodecMode codec)
 {
   const int f = (int)failed_block_ids.size();
   if (f == 0 || (int)selected_equation_indices.size() != f)
@@ -1186,14 +1209,24 @@ bool ECProject::glrc_ilp_decode_matrix_invertible(int k, int r, int z,
 
   const int n = k + r + z;
   std::vector<std::vector<int>> groups;
-  glrc_build_placement_groups(k, r, z, groups);
+  if (codec == GlrcCodecMode::AZURE)
+    azure_build_placement_groups(k, r, z, groups);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    optimal_build_placement_groups(k, r, z, groups);
+  else
+    glrc_build_placement_groups(k, r, z, groups);
 
   unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
-  gen_glrc_matrix(encode_matrix, k, r, z);
+  if (codec == GlrcCodecMode::AZURE)
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
+  else
+    gen_glrc_matrix(encode_matrix, k, r, z);
 
   std::vector<unsigned char> A_inv;
   bool ok = glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                                   encode_matrix, groups, A_inv);
+                                   encode_matrix, groups, A_inv, codec);
 
   delete[] encode_matrix;
   return ok;
@@ -1202,7 +1235,8 @@ bool ECProject::glrc_ilp_decode_matrix_invertible(int k, int r, int z,
 bool ECProject::glrc_ilp_prepare_inverse(const int k, const int r, const int z,
                                          const std::vector<int> &failed_block_ids,
                                          const std::vector<int> &selected_equation_indices,
-                                         std::vector<unsigned char> &A_inv_out)
+                                         std::vector<unsigned char> &A_inv_out,
+                                         GlrcCodecMode codec)
 {
   const int f = (int)failed_block_ids.size();
   if (f == 0 || (int)selected_equation_indices.size() != f)
@@ -1210,12 +1244,22 @@ bool ECProject::glrc_ilp_prepare_inverse(const int k, const int r, const int z,
 
   const int n = k + r + z;
   std::vector<std::vector<int>> groups;
-  glrc_build_placement_groups(k, r, z, groups);
+  if (codec == GlrcCodecMode::AZURE)
+    azure_build_placement_groups(k, r, z, groups);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    optimal_build_placement_groups(k, r, z, groups);
+  else
+    glrc_build_placement_groups(k, r, z, groups);
 
   unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
-  gen_glrc_matrix(encode_matrix, k, r, z);
+  if (codec == GlrcCodecMode::AZURE)
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
+  else
+    gen_glrc_matrix(encode_matrix, k, r, z);
   const bool ok = glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                                         encode_matrix, groups, A_inv_out);
+                                         encode_matrix, groups, A_inv_out, codec);
   delete[] encode_matrix;
   return ok;
 }
@@ -1252,7 +1296,8 @@ bool ECProject::glrc_ilp_prepare_helper_decode(const int k, const int r, const i
                                                const std::vector<int> &selected_equation_indices,
                                                std::vector<unsigned char> &A_inv_out,
                                                std::vector<std::vector<int>> &eq_helper_indices_out,
-                                               std::vector<std::vector<unsigned char>> &eq_helper_coefs_out)
+                                               std::vector<std::vector<unsigned char>> &eq_helper_coefs_out,
+                                               GlrcCodecMode codec)
 {
   const int n = k + r + z;
   const int f = (int)failed_block_ids.size();
@@ -1260,12 +1305,22 @@ bool ECProject::glrc_ilp_prepare_helper_decode(const int k, const int r, const i
     return false;
 
   std::vector<std::vector<int>> groups;
-  glrc_build_placement_groups(k, r, z, groups);
+  if (codec == GlrcCodecMode::AZURE)
+    azure_build_placement_groups(k, r, z, groups);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    optimal_build_placement_groups(k, r, z, groups);
+  else
+    glrc_build_placement_groups(k, r, z, groups);
   unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
-  gen_glrc_matrix(encode_matrix, k, r, z);
+  if (codec == GlrcCodecMode::AZURE)
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
+  else
+    gen_glrc_matrix(encode_matrix, k, r, z);
 
   if (!glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                              encode_matrix, groups, A_inv_out))
+                              encode_matrix, groups, A_inv_out, codec))
   {
     delete[] encode_matrix;
     return false;
@@ -1281,7 +1336,7 @@ bool ECProject::glrc_ilp_prepare_helper_decode(const int k, const int r, const i
   std::vector<unsigned char> coef_row(n);
   for (int ei = 0; ei < f; ei++)
   {
-    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row);
+    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row, codec);
     for (int b = 0; b < n; b++)
     {
       if (!coef_row[b] || failed_set.count(b))
@@ -1417,7 +1472,8 @@ bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block
                                 const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
                                 const std::vector<int> &failed_block_ids,
                                 const std::vector<int> &selected_equation_indices,
-                                std::vector<unsigned char *> &recovered_ptrs)
+                                std::vector<unsigned char *> &recovered_ptrs,
+                                GlrcCodecMode codec)
 {
   const int n = k + r + z;
   const int f = (int)failed_block_ids.size();
@@ -1425,10 +1481,20 @@ bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block
     return false;
 
   std::vector<std::vector<int>> groups;
-  glrc_build_placement_groups(k, r, z, groups);
+  if (codec == GlrcCodecMode::AZURE)
+    azure_build_placement_groups(k, r, z, groups);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    optimal_build_placement_groups(k, r, z, groups);
+  else
+    glrc_build_placement_groups(k, r, z, groups);
 
   unsigned char *encode_matrix = new unsigned char[(k + r + z) * k];
-  gen_glrc_matrix(encode_matrix, k, r, z);
+  if (codec == GlrcCodecMode::AZURE)
+    gen_azure_lrc_matrix(encode_matrix, k, r, z);
+  else if (codec == GlrcCodecMode::OPTIMAL)
+    gen_optimal_lrc_matrix(encode_matrix, k, r, z);
+  else
+    gen_glrc_matrix(encode_matrix, k, r, z);
 
   std::unordered_map<int, int> helper_pos;
   for (int i = 0; i < (int)helper_block_ids.size(); i++)
@@ -1438,7 +1504,7 @@ bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block
 
   std::vector<unsigned char> A_inv;
   if (!glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                              encode_matrix, groups, A_inv))
+                              encode_matrix, groups, A_inv, codec))
   {
     delete[] encode_matrix;
     return false;
@@ -1448,7 +1514,7 @@ bool ECProject::decode_glrc_ilp(const int k, const int r, const int z, int block
   std::vector<unsigned char> coef_row(n);
   for (int ei = 0; ei < f; ei++)
   {
-    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row);
+    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row, codec);
     for (int b = 0; b < n; b++)
     {
       if (!coef_row[b] || failed_set.count(b))
@@ -1543,7 +1609,7 @@ bool ECProject::decode_glrc_ilp_range(const int k, const int r, const int z, int
 
   std::vector<unsigned char> A_inv;
   if (!glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                              encode_matrix, groups, A_inv))
+                              encode_matrix, groups, A_inv, ECProject::GlrcCodecMode::GLRC))
   {
     delete[] encode_matrix;
     return false;
@@ -1553,7 +1619,8 @@ bool ECProject::decode_glrc_ilp_range(const int k, const int r, const int z, int
   std::vector<unsigned char> coef_row(n);
   for (int ei = 0; ei < f; ei++)
   {
-    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row);
+    build_block_coef_row(k, r, z, n, selected_equation_indices[ei], encode_matrix, groups, coef_row,
+                         ECProject::GlrcCodecMode::GLRC);
     for (int b = 0; b < n; b++)
     {
       if (!coef_row[b] || failed_set.count(b))
@@ -1618,7 +1685,7 @@ bool ECProject::decode_glrc_ilp_rhs_range(const int k, const int r, const int z,
 
   std::vector<unsigned char> A_inv;
   if (!glrc_ilp_build_inverse(k, r, z, n, failed_block_ids, selected_equation_indices,
-                              encode_matrix, groups, A_inv))
+                              encode_matrix, groups, A_inv, ECProject::GlrcCodecMode::GLRC))
   {
     delete[] encode_matrix;
     return false;

@@ -860,7 +860,8 @@ bool ProxyImpl::glrcIlpPhase2Recovery(const proxy_proto::RecoveryRequest *recove
   std::vector<std::vector<unsigned char>> phase2_eq_helper_coefs;
   if (!glrc_ilp_prepare_helper_decode(m_sys_config->k, m_sys_config->r, m_sys_config->z, block_idxs, failed_ids,
                                       eq_indices, phase2_decode_inverse, phase2_eq_helper_indices,
-                                      phase2_eq_helper_coefs))
+                                      phase2_eq_helper_coefs,
+                                      glrc_codec_mode(m_sys_config->CodeType)))
   {
     set_phase2_error("phase2 prepare helper decode failed");
     return false;

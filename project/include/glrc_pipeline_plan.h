@@ -89,7 +89,8 @@ namespace ECProject
                                 const GlrcIlpRepairPlan &repair_plan,
                                 const std::vector<GlrcEquation> &all_equations, int hub_block_id,
                                 const std::vector<GlrcPipelineNodeLookup> &node_lookup, int exchange_epoch,
-                                GlrcPipelinePlan &out_plan, std::string &error_message);
+                                GlrcPipelinePlan &out_plan, std::string &error_message,
+                                GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
 } // namespace ECProject
 

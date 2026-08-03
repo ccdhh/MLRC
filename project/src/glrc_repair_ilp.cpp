@@ -26,6 +26,46 @@ namespace ECProject
     }
   }
 
+  void azure_build_placement_groups(int k, int r, int z, std::vector<std::vector<int>> &groups)
+  {
+    groups.clear();
+    groups.resize(z);
+    if (z <= 0 || k % z != 0)
+      return;
+    const int data_per = k / z;
+    for (int g = 0; g < z; g++)
+    {
+      for (int j = 0; j < data_per; j++)
+        groups[g].push_back(g * data_per + j);
+      groups[g].push_back(k + r + g);
+    }
+    (void)r;
+  }
+
+  void optimal_build_placement_groups(int k, int r, int z, std::vector<std::vector<int>> &groups)
+  {
+    // Flat Optimal uses the same algebraic local groups as Azure (k/z data + Li).
+    azure_build_placement_groups(k, r, z, groups);
+  }
+
+  GlrcCodecMode glrc_codec_mode(const std::string &code_type)
+  {
+    if (code_type == "AzureLRC")
+      return GlrcCodecMode::AZURE;
+    if (code_type == "OptimalLRC")
+      return GlrcCodecMode::OPTIMAL;
+    return GlrcCodecMode::GLRC;
+  }
+
+  bool glrc_code_is_azure(const std::string &code_type) { return code_type == "AzureLRC"; }
+
+  bool glrc_code_is_optimal(const std::string &code_type) { return code_type == "OptimalLRC"; }
+
+  bool glrc_code_supports_hybrid(const std::string &code_type)
+  {
+    return code_type == "gLRC" || code_type == "AzureLRC" || code_type == "OptimalLRC";
+  }
+
   static void build_equation_from_group(int k, int r, int z, int group_id,
                                         const std::vector<std::vector<int>> &groups, GlrcEquation &eq)
   {
@@ -81,6 +121,85 @@ namespace ECProject
       }
     }
   }
+
+  void azure_build_recovery_equations(int k, int r, int z, const std::vector<int> &failed_block_ids,
+                                      std::vector<GlrcEquation> &all_equations,
+                                      std::vector<int> &candidate_equation_indices)
+  {
+    all_equations.clear();
+    candidate_equation_indices.clear();
+    std::vector<std::vector<int>> groups;
+    azure_build_placement_groups(k, r, z, groups);
+
+    for (int i = 0; i < z; i++)
+    {
+      GlrcEquation eq;
+      build_equation_from_group(k, r, z, i, groups, eq);
+      all_equations.push_back(eq);
+    }
+    for (int j = 0; j < r; j++)
+    {
+      GlrcEquation eq;
+      build_global_equation(k, j, eq);
+      all_equations.push_back(eq);
+    }
+
+    std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
+    for (int idx = 0; idx < (int)all_equations.size(); idx++)
+    {
+      for (int b : all_equations[idx].involved_blocks)
+      {
+        if (failed_set.count(b))
+        {
+          candidate_equation_indices.push_back(idx);
+          break;
+        }
+      }
+    }
+  }
+
+  void optimal_build_recovery_equations(int k, int r, int z, const std::vector<int> &failed_block_ids,
+                                        std::vector<GlrcEquation> &all_equations,
+                                        std::vector<int> &candidate_equation_indices)
+  {
+    all_equations.clear();
+    candidate_equation_indices.clear();
+    std::vector<std::vector<int>> groups;
+    optimal_build_placement_groups(k, r, z, groups);
+
+    for (int i = 0; i < z; i++)
+    {
+      GlrcEquation eq;
+      eq.type = GlrcEquationType::LOCAL;
+      eq.index = i;
+      eq.name = "L" + std::to_string(i);
+      eq.involved_blocks = groups[i];
+      // Optimal local identity: weighted(data)+Li+G0+...+G{r-1}=0
+      for (int g = 0; g < r; g++)
+        eq.involved_blocks.push_back(k + g);
+      all_equations.push_back(eq);
+    }
+    for (int j = 0; j < r; j++)
+    {
+      GlrcEquation eq;
+      build_global_equation(k, j, eq);
+      all_equations.push_back(eq);
+    }
+
+    std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
+    for (int eidx = 0; eidx < (int)all_equations.size(); eidx++)
+    {
+      for (int b : all_equations[eidx].involved_blocks)
+      {
+        if (failed_set.count(b))
+        {
+          candidate_equation_indices.push_back(eidx);
+          break;
+        }
+      }
+    }
+  }
+
 
   static std::vector<int> helper_blocks_for_equation(const GlrcEquation &eq,
                                                      const std::unordered_set<int> &failed_set)
@@ -139,7 +258,7 @@ namespace ECProject
   }
 
   bool glrc_solve_repair_ilp(int k, int r, int z, const std::vector<int> &failed_block_ids,
-                             GlrcIlpRepairPlan &plan)
+                             GlrcIlpRepairPlan &plan, GlrcCodecMode codec)
   {
     plan = GlrcIlpRepairPlan();
     plan.failed_block_ids = failed_block_ids;
@@ -152,7 +271,12 @@ namespace ECProject
     auto t0 = std::chrono::high_resolution_clock::now();
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
-    glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    if (codec == GlrcCodecMode::AZURE)
+      azure_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else if (codec == GlrcCodecMode::OPTIMAL)
+      optimal_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else
+      glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
 
     int f = (int)failed_block_ids.size();
     if ((int)candidate_indices.size() < f)
@@ -177,7 +301,7 @@ namespace ECProject
         selected.push_back(candidate_indices[pos]);
       if (!combination_covers(selected, all_equations, failed_set))
         continue;
-      if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, selected))
+      if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, selected, codec))
         continue;
       std::vector<int> helpers;
       int cnt = union_helper_count(selected, all_equations, failed_set, helpers);
@@ -208,21 +332,32 @@ namespace ECProject
     return true;
   }
 
-  static int local_then_global_primary_equation_index(int failed_id, int k, int r, int z)
+  static int local_then_global_primary_equation_index(int failed_id, int k, int r, int z, GlrcCodecMode codec)
   {
-    if (failed_id < k + r)
+    if (failed_id >= k && failed_id < k + r)
+      return z + (failed_id - k); // prefer matching global equation for a failed G
+    if (failed_id < k)
+    {
+      if (codec == GlrcCodecMode::AZURE || codec == GlrcCodecMode::OPTIMAL)
+      {
+        if (z > 0 && k % z == 0)
+          return failed_id / (k / z);
+        return 0;
+      }
       return glrc_payload_group_id(failed_id, k, r, z);
+    }
     return failed_id - k - r;
   }
 
   static bool fill_plan_from_selection(const std::vector<int> &selected,
                                        const std::vector<GlrcEquation> &all_equations,
                                        const std::unordered_set<int> &failed_set, int k, int r, int z,
-                                       const std::vector<int> &failed_block_ids, GlrcIlpRepairPlan &plan)
+                                       const std::vector<int> &failed_block_ids, GlrcIlpRepairPlan &plan,
+                                       GlrcCodecMode codec)
   {
     if (!combination_covers(selected, all_equations, failed_set))
       return false;
-    if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, selected))
+    if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, selected, codec))
       return false;
     std::vector<int> helpers;
     const int cnt = union_helper_count(selected, all_equations, failed_set, helpers);
@@ -313,19 +448,22 @@ namespace ECProject
   static bool try_local_variants(const std::vector<int> &base, int f, int k, int r, int z,
                                  const std::unordered_set<int> &failed_set,
                                  const std::vector<int> &failed_block_ids,
-                                 const std::vector<GlrcEquation> &all_equations, GlrcIlpRepairPlan &plan)
+                                 const std::vector<GlrcEquation> &all_equations, GlrcIlpRepairPlan &plan,
+                                 GlrcCodecMode codec)
   {
     const int anchor_local =
-        local_then_global_primary_equation_index(failed_block_ids[0], k, r, z);
+        local_then_global_primary_equation_index(failed_block_ids[0], k, r, z, codec);
     std::vector<int> try_locals;
-    try_locals.push_back(anchor_local);
+    // Prefer local equation indices only for local-variant swaps.
+    if (anchor_local < z)
+      try_locals.push_back(anchor_local);
     for (int lg = 0; lg < z; lg++)
     {
       if (lg != anchor_local)
         try_locals.push_back(lg);
     }
 
-    if (fill_plan_from_selection(base, all_equations, failed_set, k, r, z, failed_block_ids, plan))
+    if (fill_plan_from_selection(base, all_equations, failed_set, k, r, z, failed_block_ids, plan, codec))
       return true;
 
     for (int lg : try_locals)
@@ -345,7 +483,7 @@ namespace ECProject
       }
       if (!replaced && !variant.empty())
         variant.back() = lg;
-      if (fill_plan_from_selection(variant, all_equations, failed_set, k, r, z, failed_block_ids, plan))
+      if (fill_plan_from_selection(variant, all_equations, failed_set, k, r, z, failed_block_ids, plan, codec))
         return true;
     }
     return false;
@@ -355,12 +493,13 @@ namespace ECProject
                                         const std::unordered_set<int> &failed_set,
                                         const std::vector<int> &failed_block_ids,
                                         const std::vector<GlrcEquation> &all_equations,
-                                        const std::vector<int> &candidate_indices, GlrcIlpRepairPlan &plan)
+                                        const std::vector<int> &candidate_indices, GlrcIlpRepairPlan &plan,
+                                        GlrcCodecMode codec)
   {
     std::vector<int> prefix;
     build_global_prefix_selection(f, k, r, z, prefix);
     if ((int)prefix.size() == f && try_local_variants(prefix, f, k, r, z, failed_set, failed_block_ids,
-                                                      all_equations, plan))
+                                                      all_equations, plan, codec))
       return true;
 
     std::vector<std::vector<int>> combos;
@@ -387,14 +526,14 @@ namespace ECProject
       std::vector<int> selected;
       for (int pos : positions)
         selected.push_back(candidate_indices[pos]);
-      if (fill_plan_from_selection(selected, all_equations, failed_set, k, r, z, failed_block_ids, plan))
+      if (fill_plan_from_selection(selected, all_equations, failed_set, k, r, z, failed_block_ids, plan, codec))
         return true;
     }
     return false;
   }
 
   bool glrc_solve_repair_local_then_global(int k, int r, int z, const std::vector<int> &failed_block_ids,
-                                           GlrcIlpRepairPlan &plan)
+                                           GlrcIlpRepairPlan &plan, GlrcCodecMode codec)
   {
     plan = GlrcIlpRepairPlan();
     plan.failed_block_ids = failed_block_ids;
@@ -407,7 +546,12 @@ namespace ECProject
     auto t0 = std::chrono::high_resolution_clock::now();
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
-    glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    if (codec == GlrcCodecMode::AZURE)
+      azure_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else if (codec == GlrcCodecMode::OPTIMAL)
+      optimal_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else
+      glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
 
     const int f = (int)failed_block_ids.size();
     std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
@@ -415,8 +559,8 @@ namespace ECProject
 
     if (f == 1)
     {
-      selected.push_back(local_then_global_primary_equation_index(failed_block_ids[0], k, r, z));
-      if (!fill_plan_from_selection(selected, all_equations, failed_set, k, r, z, failed_block_ids, plan))
+      selected.push_back(local_then_global_primary_equation_index(failed_block_ids[0], k, r, z, codec));
+      if (!fill_plan_from_selection(selected, all_equations, failed_set, k, r, z, failed_block_ids, plan, codec))
         plan.error_message = "single-failure local equation not decodable";
     }
     else
@@ -424,9 +568,9 @@ namespace ECProject
       build_local_then_global_base_selection(f, k, r, z, all_equations, failed_set, selected);
       if ((int)selected.size() < f)
         plan.error_message = "not enough equations for failure count";
-      else if (!try_local_variants(selected, f, k, r, z, failed_set, failed_block_ids, all_equations, plan) &&
+      else if (!try_local_variants(selected, f, k, r, z, failed_set, failed_block_ids, all_equations, plan, codec) &&
                !try_global_first_fallback(f, k, r, z, failed_set, failed_block_ids, all_equations,
-                                          candidate_indices, plan))
+                                          candidate_indices, plan, codec))
         plan.error_message = "local-then-global could not find decodable equation set";
     }
 
@@ -437,7 +581,7 @@ namespace ECProject
   }
 
   bool glrc_solve_repair_local_first(int k, int r, int z, const std::vector<int> &failed_block_ids,
-                                     GlrcIlpRepairPlan &plan)
+                                     GlrcIlpRepairPlan &plan, GlrcCodecMode codec)
   {
     plan = GlrcIlpRepairPlan();
     plan.failed_block_ids = failed_block_ids;
@@ -450,7 +594,12 @@ namespace ECProject
     auto t0 = std::chrono::high_resolution_clock::now();
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
-    glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    if (codec == GlrcCodecMode::AZURE)
+      azure_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else if (codec == GlrcCodecMode::OPTIMAL)
+      optimal_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
+    else
+      glrc_build_recovery_equations(k, r, z, failed_block_ids, all_equations, candidate_indices);
 
     const int f = (int)failed_block_ids.size();
     if ((int)candidate_indices.size() < f)
@@ -482,7 +631,7 @@ namespace ECProject
         cand.selected.push_back(candidate_indices[pos]);
       if (!combination_covers(cand.selected, all_equations, failed_set))
         continue;
-      if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, cand.selected))
+      if (!glrc_ilp_decode_matrix_invertible(k, r, z, failed_block_ids, cand.selected, codec))
         continue;
 
       for (int eq_idx : cand.selected)
@@ -541,15 +690,16 @@ namespace ECProject
   }
 
   bool glrc_solve_repair_plan(int k, int r, int z, const std::vector<int> &failed_block_ids,
-                              const std::string &equation_policy, GlrcIlpRepairPlan &plan)
+                              const std::string &equation_policy, GlrcIlpRepairPlan &plan,
+                              GlrcCodecMode codec)
   {
     const std::string normalized = glrc_normalize_equation_policy(equation_policy);
     if (normalized == "local-then-global")
-      return glrc_solve_repair_local_then_global(k, r, z, failed_block_ids, plan);
+      return glrc_solve_repair_local_then_global(k, r, z, failed_block_ids, plan, codec);
     if (normalized == "local-first")
-      return glrc_solve_repair_local_first(k, r, z, failed_block_ids, plan);
+      return glrc_solve_repair_local_first(k, r, z, failed_block_ids, plan, codec);
     if (normalized == "ilp-min-helper")
-      return glrc_solve_repair_ilp(k, r, z, failed_block_ids, plan);
+      return glrc_solve_repair_ilp(k, r, z, failed_block_ids, plan, codec);
     plan = GlrcIlpRepairPlan();
     plan.failed_block_ids = failed_block_ids;
     plan.error_message = "unknown GlrcEquationPolicy: " + equation_policy;
@@ -597,12 +747,28 @@ double glrc_phase2_est_system_network_sec(int helper_count, int failed_count,
   return est_max;
 }
 
-bool glrc_failures_at_most_one_per_group(int k, int r, int z, const std::vector<int> &failed_block_ids)
+bool glrc_failures_at_most_one_per_group(int k, int r, int z, const std::vector<int> &failed_block_ids,
+                                           GlrcCodecMode codec)
 {
   if (failed_block_ids.empty())
     return false;
   std::vector<std::vector<int>> groups;
-  glrc_build_placement_groups(k, r, z, groups);
+  if (codec == GlrcCodecMode::AZURE || codec == GlrcCodecMode::OPTIMAL)
+  {
+    if (codec == GlrcCodecMode::OPTIMAL)
+      optimal_build_placement_groups(k, r, z, groups);
+    else
+      azure_build_placement_groups(k, r, z, groups);
+    // All global parities share one logical bucket so multi-G failures force hybrid p>0.
+    std::vector<int> globals;
+    for (int g = 0; g < r; g++)
+      globals.push_back(k + g);
+    groups.push_back(std::move(globals));
+  }
+  else
+  {
+    glrc_build_placement_groups(k, r, z, groups);
+  }
   std::vector<int> per_group(groups.size(), 0);
   for (int fid : failed_block_ids)
   {

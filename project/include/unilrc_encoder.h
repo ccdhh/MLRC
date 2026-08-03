@@ -2,6 +2,7 @@
 #define UNILRC_ENCODER_H
 #include <memory>
 #include <vector>
+#include "glrc_repair_ilp.h"
 #include <cstring>
 #include <chrono>
 namespace ECProject
@@ -106,7 +107,8 @@ namespace ECProject
                          const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
                          const std::vector<int> &failed_block_ids,
                          const std::vector<int> &selected_equation_indices,
-                         std::vector<unsigned char *> &recovered_ptrs);
+                         std::vector<unsigned char *> &recovered_ptrs,
+                         GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
     bool decode_glrc_ilp_range(const int k, const int r, const int z, int block_size,
                                const std::vector<int> &helper_block_ids, unsigned char **helper_ptrs,
@@ -127,7 +129,8 @@ namespace ECProject
     bool glrc_ilp_prepare_inverse(const int k, const int r, const int z,
                                   const std::vector<int> &failed_block_ids,
                                   const std::vector<int> &selected_equation_indices,
-                                  std::vector<unsigned char> &A_inv_out);
+                                  std::vector<unsigned char> &A_inv_out,
+                                  GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
     /** Decode compact per-shard RHS buffers using a precomputed inverse matrix. */
     bool decode_glrc_ilp_rhs_compact(const std::vector<unsigned char *> &rhs_ptrs,
@@ -142,7 +145,8 @@ namespace ECProject
                                         const std::vector<int> &selected_equation_indices,
                                         std::vector<unsigned char> &A_inv_out,
                                         std::vector<std::vector<int>> &eq_helper_indices_out,
-                                        std::vector<std::vector<unsigned char>> &eq_helper_coefs_out);
+                                        std::vector<std::vector<unsigned char>> &eq_helper_coefs_out,
+                                        GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
     /** Decode compact recovered shard buffers from full helper buffers using precomputed Phase2 terms. */
     bool decode_glrc_ilp_helper_compact(unsigned char **helper_ptrs,
@@ -162,7 +166,8 @@ namespace ECProject
 
     bool glrc_ilp_decode_matrix_invertible(int k, int r, int z,
                                            const std::vector<int> &failed_block_ids,
-                                           const std::vector<int> &selected_equation_indices);
+                                           const std::vector<int> &selected_equation_indices,
+                                           GlrcCodecMode codec = GlrcCodecMode::GLRC);
 
     void decode_uniform_lrc(const int k, const int r, const int z, const int block_num,
                             const std::vector<int> *block_indexes, unsigned char **block_ptrs, unsigned char *res_ptr, int block_size,

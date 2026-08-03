@@ -444,20 +444,14 @@ namespace ECProject
 
   void CoordinatorImpl::initialize_optimal_lrc_stripe_placement(Stripe *stripe)
   {
-    // range 0~k-1: data blocks
-    // range k~k+r-1: global parity blocks
-    // range k+r~k+r+z-1: local parity blocks
+    // Optimal-LRC flat placement (no rack), same ring layout as flat Azure-LRC:
+    //   local groups 0..z-1: each k/z data + Li, then trailing G0..G{r-1}.
+    //   position j -> node[(j + stripe_id) % N], storage count must equal n.
+    // Encoding remains Optimal (weighted local + Cauchy global); only placement is flat.
+    assert(stripe->z > 0 && stripe->k % stripe->z == 0);
     Block *blocks_info = new Block[stripe->n];
-    // a stripe is only created by a single client
     assert(stripe->object_keys.size() == 1);
-    // choose a cluster: round robin
-    int t_cluster_id = stripe->stripe_id % m_sys_config->ClusterNum;
-    int group_size = stripe->r + 1;
-    int local_group_size = int(stripe->k / stripe->z);
-    int group_num_of_one_local_group = local_group_size / group_size;
-    if (local_group_size % group_size != 0)
-      group_num_of_one_local_group++;
-
+    const int data_per_group = stripe->k / stripe->z;
     for (int i = 0; i < stripe->n; i++)
     {
       blocks_info[i].block_size = m_sys_config->BlockSize;
@@ -465,46 +459,77 @@ namespace ECProject
       blocks_info[i].map2key = stripe->object_keys[0];
       if (i < stripe->k)
       {
-        std::string tmp = "_D";
-        if (i < 10)
-          tmp = "_D0";
+        std::string tmp = (i < 10) ? "_D0" : "_D";
         blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
         blocks_info[i].block_id = i;
         blocks_info[i].block_type = 'D';
-        blocks_info[i].map2group = (i % local_group_size / group_size) + i / local_group_size * group_num_of_one_local_group;
+        blocks_info[i].map2group = i / data_per_group;
       }
-      else if (i >= stripe->k && i < stripe->k + stripe->r)
+      else if (i < stripe->k + stripe->r)
       {
-        std::string tmp = "_G";
-        if (i - stripe->k < 10)
-          tmp = "_G0";
-        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - stripe->k);
+        const int g = i - stripe->k;
+        std::string tmp = (g < 10) ? "_G0" : "_G";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(g);
         blocks_info[i].block_id = i;
         blocks_info[i].block_type = 'G';
-        blocks_info[i].map2group = stripe->z * group_num_of_one_local_group;
+        blocks_info[i].map2group = stripe->z; // logical global group, not a rack
       }
       else
       {
-        std::string tmp = "_L";
-        if (i - stripe->k - stripe->r < 10)
-          tmp = "_L0";
-        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i - stripe->k - stripe->r);
+        const int local_idx = i - stripe->k - stripe->r;
+        std::string tmp = (local_idx < 10) ? "_L0" : "_L";
+        blocks_info[i].block_key =
+            std::to_string(stripe->stripe_id) + tmp + std::to_string(local_idx);
         blocks_info[i].block_id = i;
         blocks_info[i].block_type = 'L';
-        blocks_info[i].map2group = (i - stripe->k - stripe->r + 1) * group_num_of_one_local_group - 1;
+        blocks_info[i].map2group = local_idx;
       }
-      blocks_info[i].map2cluster = (t_cluster_id + blocks_info[i].map2group) % m_sys_config->ClusterNum;
-      int t_node_id = randomly_select_a_node(blocks_info[i].map2cluster, stripe->stripe_id);
-      blocks_info[i].map2node = t_node_id;
-      update_stripe_info_in_node(t_node_id, stripe->stripe_id, i);
-      m_cluster_table[blocks_info[i].map2cluster].blocks.push_back(&blocks_info[i]);
-      m_cluster_table[blocks_info[i].map2cluster].stripes.insert(stripe->stripe_id);
+      blocks_info[i].map2cluster = -1;
+      blocks_info[i].map2node = -1;
+    }
+
+    std::vector<std::vector<int>> groups;
+    optimal_build_placement_groups(stripe->k, stripe->r, stripe->z, groups);
+    assert(static_cast<int>(groups.size()) == stripe->z);
+
+    std::vector<int> stripe_blocks;
+    stripe_blocks.reserve(static_cast<size_t>(stripe->n));
+    for (int g = 0; g < stripe->z; g++)
+      stripe_blocks.insert(stripe_blocks.end(), groups[g].begin(), groups[g].end());
+    for (int g = 0; g < stripe->r; g++)
+      stripe_blocks.push_back(stripe->k + g);
+    assert(static_cast<int>(stripe_blocks.size()) == stripe->n);
+
+    std::vector<int> all_nodes;
+    all_nodes.reserve(static_cast<size_t>(stripe->n));
+    for (const auto &kv : m_node_table)
+      all_nodes.push_back(kv.first);
+    assert(static_cast<int>(all_nodes.size()) == stripe->n &&
+           "OptimalLRC global round-robin requires storage-node count == n");
+
+    const int N = stripe->n;
+    for (int j = 0; j < N; j++)
+    {
+      const int block_id = stripe_blocks[j];
+      const int node_idx = (j + stripe->stripe_id) % N;
+      const int t_node_id = all_nodes[node_idx];
+      const int cluster_id = m_node_table[t_node_id].cluster_id;
+      blocks_info[block_id].map2node = t_node_id;
+      blocks_info[block_id].map2cluster = cluster_id;
+      update_stripe_info_in_node(t_node_id, stripe->stripe_id, block_id);
+      m_cluster_table[cluster_id].blocks.push_back(&blocks_info[block_id]);
+      m_cluster_table[cluster_id].stripes.insert(stripe->stripe_id);
+      stripe->place2clusters.insert(cluster_id);
+    }
+
+    for (int i = 0; i < stripe->n; i++)
+    {
+      assert(blocks_info[i].map2node >= 0 && "OptimalLRC block missing round-robin placement");
       stripe->blocks.push_back(&blocks_info[i]);
-      stripe->place2clusters.insert(blocks_info[i].map2cluster);
       add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
     }
 
-    stripe->num_groups = stripe->group_to_blocks.size();
+    stripe->num_groups = stripe->z + 1; // z local groups + 1 logical global group
   }
 
   void CoordinatorImpl::initialize_glrc_stripe_placement(Stripe *stripe)
@@ -604,6 +629,95 @@ namespace ECProject
     }
 
     stripe->num_groups = stripe->z;
+  }
+
+  void CoordinatorImpl::initialize_azurelrc_stripe_placement(Stripe *stripe)
+  {
+    // Azure-LRC flat placement (no rack):
+    //   local groups 0..z-1: each k/z data + Li, then trailing G0..G{r-1}.
+    //   position j -> node[(j + stripe_id) % N], storage count must equal n.
+    assert(stripe->z > 0 && stripe->k % stripe->z == 0);
+    Block *blocks_info = new Block[stripe->n];
+    assert(stripe->object_keys.size() == 1);
+    const int data_per_group = stripe->k / stripe->z;
+    for (int i = 0; i < stripe->n; i++)
+    {
+      blocks_info[i].block_size = m_sys_config->BlockSize;
+      blocks_info[i].map2stripe = stripe->stripe_id;
+      blocks_info[i].map2key = stripe->object_keys[0];
+      if (i < stripe->k)
+      {
+        std::string tmp = (i < 10) ? "_D0" : "_D";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(i);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'D';
+        blocks_info[i].map2group = i / data_per_group;
+      }
+      else if (i < stripe->k + stripe->r)
+      {
+        const int g = i - stripe->k;
+        std::string tmp = (g < 10) ? "_G0" : "_G";
+        blocks_info[i].block_key = std::to_string(stripe->stripe_id) + tmp + std::to_string(g);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'G';
+        blocks_info[i].map2group = stripe->z; // logical global group, not a rack
+      }
+      else
+      {
+        const int local_idx = i - stripe->k - stripe->r;
+        std::string tmp = (local_idx < 10) ? "_L0" : "_L";
+        blocks_info[i].block_key =
+            std::to_string(stripe->stripe_id) + tmp + std::to_string(local_idx);
+        blocks_info[i].block_id = i;
+        blocks_info[i].block_type = 'L';
+        blocks_info[i].map2group = local_idx;
+      }
+      blocks_info[i].map2cluster = -1;
+      blocks_info[i].map2node = -1;
+    }
+
+    std::vector<std::vector<int>> groups;
+    azure_build_placement_groups(stripe->k, stripe->r, stripe->z, groups);
+    assert(static_cast<int>(groups.size()) == stripe->z);
+
+    std::vector<int> stripe_blocks;
+    stripe_blocks.reserve(static_cast<size_t>(stripe->n));
+    for (int g = 0; g < stripe->z; g++)
+      stripe_blocks.insert(stripe_blocks.end(), groups[g].begin(), groups[g].end());
+    for (int g = 0; g < stripe->r; g++)
+      stripe_blocks.push_back(stripe->k + g);
+    assert(static_cast<int>(stripe_blocks.size()) == stripe->n);
+
+    std::vector<int> all_nodes;
+    all_nodes.reserve(static_cast<size_t>(stripe->n));
+    for (const auto &kv : m_node_table)
+      all_nodes.push_back(kv.first);
+    assert(static_cast<int>(all_nodes.size()) == stripe->n &&
+           "AzureLRC global round-robin requires storage-node count == n");
+
+    const int N = stripe->n;
+    for (int j = 0; j < N; j++)
+    {
+      const int block_id = stripe_blocks[j];
+      const int node_idx = (j + stripe->stripe_id) % N;
+      const int t_node_id = all_nodes[node_idx];
+      const int cluster_id = m_node_table[t_node_id].cluster_id;
+      blocks_info[block_id].map2node = t_node_id;
+      blocks_info[block_id].map2cluster = cluster_id;
+      update_stripe_info_in_node(t_node_id, stripe->stripe_id, block_id);
+      m_cluster_table[cluster_id].blocks.push_back(&blocks_info[block_id]);
+      m_cluster_table[cluster_id].stripes.insert(stripe->stripe_id);
+      stripe->place2clusters.insert(cluster_id);
+    }
+
+    for (int i = 0; i < stripe->n; i++)
+    {
+      assert(blocks_info[i].map2node >= 0 && "AzureLRC block missing round-robin placement");
+      stripe->blocks.push_back(&blocks_info[i]);
+      add_to_map(stripe->group_to_blocks, blocks_info[i].map2group, i);
+    }
+
+    stripe->num_groups = stripe->z + 1; // z local groups + 1 logical global group
   }
 
   void CoordinatorImpl::initialize_uniform_lrc_stripe_placement(Stripe *stripe)
@@ -1165,9 +1279,13 @@ namespace ECProject
     t_stripe.r = m_sys_config->r;
     t_stripe.z = m_sys_config->z;
     t_stripe.object_keys.push_back(clientID);
-    if (code_type == "UniLRC" || code_type == "AzureLRC")
+    if (code_type == "UniLRC")
     {
       initialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);
+    }
+    else if (code_type == "AzureLRC")
+    {
+      initialize_azurelrc_stripe_placement(&t_stripe);
     }
     else if (code_type == "OptimalLRC")
     {
@@ -1241,9 +1359,13 @@ namespace ECProject
     t_stripe.r = m_sys_config->r;
     t_stripe.z = m_sys_config->z;
     t_stripe.object_keys.push_back(clientID);
-    if (code_type == "UniLRC" || code_type == "AzureLRC")
+    if (code_type == "UniLRC")
     {
       initialize_unilrc_and_azurelrc_stripe_placement(&t_stripe);
+    }
+    else if (code_type == "AzureLRC")
+    {
+      initialize_azurelrc_stripe_placement(&t_stripe);
     }
     else if (code_type == "OptimalLRC")
     {
@@ -2917,9 +3039,9 @@ namespace ECProject
   bool CoordinatorImpl::recovery_glrc_ilp_breakdown(int stripe_id, const std::vector<int> &failed_block_ids,
                                                     coordinator_proto::RecoveryReply *recovery_reply)
   {
-    if (m_sys_config->CodeType != "gLRC")
+    if (!glrc_code_supports_hybrid(m_sys_config->CodeType))
     {
-      recovery_reply->set_message("recovery_glrc_ilp_breakdown requires CodeType gLRC");
+      recovery_reply->set_message("recovery_glrc_ilp_breakdown requires CodeType gLRC or AzureLRC");
       recovery_reply->set_success(false);
       return false;
     }
@@ -2938,7 +3060,7 @@ namespace ECProject
         glrc_normalize_equation_policy(m_sys_config->GlrcEquationPolicy);
     GlrcIlpRepairPlan plan;
     if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                equation_policy, plan))
+                                equation_policy, plan, glrc_codec_mode(m_sys_config->CodeType)))
     {
       recovery_reply->set_message(plan.error_message);
       recovery_reply->set_success(false);
@@ -3066,9 +3188,9 @@ namespace ECProject
                                                             bool share_proxy_node_bandwidth,
                                                             const std::string &hybrid_commit_token)
   {
-    if (m_sys_config->CodeType != "gLRC")
+    if (!glrc_code_supports_hybrid(m_sys_config->CodeType))
     {
-      recovery_reply->set_message("recovery_glrc_ilp_phase2 requires CodeType gLRC");
+      recovery_reply->set_message("recovery_glrc_ilp_phase2 requires CodeType gLRC or AzureLRC");
       recovery_reply->set_success(false);
       return false;
     }
@@ -3097,7 +3219,7 @@ namespace ECProject
     if (!plan_ptr)
     {
       if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                  equation_policy, owned_plan))
+                                  equation_policy, owned_plan, glrc_codec_mode(m_sys_config->CodeType)))
       {
         recovery_reply->set_message(owned_plan.error_message);
         recovery_reply->set_success(false);
@@ -3472,9 +3594,9 @@ namespace ECProject
       *out_hub_egress_wall_sec = 0.0;
     if (out_local_direct_hot_wall_sec)
       *out_local_direct_hot_wall_sec = 0.0;
-    if (m_sys_config->CodeType != "gLRC")
+    if (!glrc_code_supports_hybrid(m_sys_config->CodeType))
     {
-      recovery_reply->set_message("recovery_glrc_ilp_pipeline requires CodeType gLRC");
+      recovery_reply->set_message("recovery_glrc_ilp_pipeline requires CodeType gLRC or AzureLRC");
       recovery_reply->set_success(false);
       return false;
     }
@@ -3502,7 +3624,7 @@ namespace ECProject
     if (!plan_ptr)
     {
       if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                  equation_policy, owned_plan))
+                                  equation_policy, owned_plan, glrc_codec_mode(m_sys_config->CodeType)))
       {
         recovery_reply->set_message(owned_plan.error_message);
         recovery_reply->set_success(false);
@@ -3522,8 +3644,15 @@ namespace ECProject
 
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
-    glrc_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                  all_equations, candidate_indices);
+    if (glrc_code_is_azure(m_sys_config->CodeType))
+      azure_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                     all_equations, candidate_indices);
+    else if (glrc_code_is_optimal(m_sys_config->CodeType))
+      optimal_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                       all_equations, candidate_indices);
+    else
+      glrc_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                    all_equations, candidate_indices);
     std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
 
     int hub_block_id = hub_block_id_preset;
@@ -3588,7 +3717,7 @@ namespace ECProject
     {
       if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan,
                                     all_equations, hub_block_id, node_lookup, exchange_epoch, owned_pipeline_plan,
-                                    plan_error))
+                                    plan_error, glrc_codec_mode(m_sys_config->CodeType)))
       {
         recovery_reply->set_message(plan_error);
         recovery_reply->set_success(false);
@@ -4163,9 +4292,9 @@ namespace ECProject
                                                            const std::vector<int> &failed_block_ids,
                                                            coordinator_proto::RecoveryReply *recovery_reply)
   {
-    if (m_sys_config->CodeType != "gLRC")
+    if (!glrc_code_supports_hybrid(m_sys_config->CodeType))
     {
-      recovery_reply->set_message("recovery_glrc_ilp_hybrid requires CodeType gLRC");
+      recovery_reply->set_message("recovery_glrc_ilp_hybrid requires CodeType gLRC or AzureLRC");
       recovery_reply->set_success(false);
       return false;
     }
@@ -4188,7 +4317,7 @@ namespace ECProject
 
     GlrcIlpRepairPlan plan_lf;
     if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                "local-first", plan_lf))
+                                "local-first", plan_lf, glrc_codec_mode(m_sys_config->CodeType)))
     {
       recovery_reply->set_message(plan_lf.error_message);
       recovery_reply->set_success(false);
@@ -4198,8 +4327,15 @@ namespace ECProject
 
     std::vector<GlrcEquation> all_equations;
     std::vector<int> candidate_indices;
-    glrc_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, all_equations,
-                                  candidate_indices);
+    if (glrc_code_is_azure(m_sys_config->CodeType))
+      azure_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                     all_equations, candidate_indices);
+    else if (glrc_code_is_optimal(m_sys_config->CodeType))
+      optimal_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                       all_equations, candidate_indices);
+    else
+      glrc_build_recovery_equations(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                    all_equations, candidate_indices);
     std::unordered_set<int> failed_set(failed_block_ids.begin(), failed_block_ids.end());
 
     std::unordered_map<int, int> helper_equation_count;
@@ -4256,7 +4392,7 @@ namespace ECProject
     GlrcPipelinePlan pipeline_plan;
     std::string plan_error;
     if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan_lf,
-                                  all_equations, hub_block_id, node_lookup, pipeline_epoch, pipeline_plan, plan_error))
+                                  all_equations, hub_block_id, node_lookup, pipeline_epoch, pipeline_plan, plan_error, glrc_codec_mode(m_sys_config->CodeType)))
     {
       recovery_reply->set_message(plan_error);
       recovery_reply->set_success(false);
@@ -4270,16 +4406,18 @@ namespace ECProject
 
     const std::string &hybrid_p_cfg = m_sys_config->GlrcHybridP;
     const bool hybrid_fixed_zero = (hybrid_p_cfg == "0");
+    const GlrcCodecMode hybrid_codec = glrc_codec_mode(m_sys_config->CodeType);
     const bool hybrid_auto_pipeline_only =
         (hybrid_p_cfg == "auto" || hybrid_p_cfg == "AUTO") &&
-        glrc_failures_at_most_one_per_group(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids);
+        glrc_hybrid_auto_forces_p0(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
+                                   hybrid_codec);
 
     GlrcIlpRepairPlan plan_ilp;
     const GlrcIlpRepairPlan *plan_ilp_ptr = nullptr;
     if (!hybrid_fixed_zero && !hybrid_auto_pipeline_only)
     {
       if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                  "ilp-min-helper", plan_ilp))
+                                  "ilp-min-helper", plan_ilp, glrc_codec_mode(m_sys_config->CodeType)))
       {
         recovery_reply->set_message(plan_ilp.error_message);
         recovery_reply->set_success(false);
@@ -4293,7 +4431,7 @@ namespace ECProject
     GlrcHybridChooseResult choose = glrc_hybrid_choose_p(
         m_sys_config->k, m_sys_config->r, m_sys_config->z, f, global_S, m_sys_config->BlockSize,
         m_sys_config->NodeBlockBandwidthMBps, plan_ilp_ptr, hub_block_id, pipeline_local_direct_count,
-        local_direct_failed, failed_block_ids, hybrid_p_cfg);
+        local_direct_failed, failed_block_ids, hybrid_p_cfg, hybrid_codec);
     const double p_select_sec =
         std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - p_select_start).count();
     if (!choose.success)
@@ -4306,7 +4444,7 @@ namespace ECProject
     if (p > 0 && !plan_ilp.success)
     {
       if (!glrc_solve_repair_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids,
-                                  "ilp-min-helper", plan_ilp))
+                                  "ilp-min-helper", plan_ilp, glrc_codec_mode(m_sys_config->CodeType)))
       {
         recovery_reply->set_message(plan_ilp.error_message);
         recovery_reply->set_success(false);
@@ -4317,7 +4455,9 @@ namespace ECProject
     {
       std::cout << "[Coordinator] gLRC Hybrid plan: f=" << f
                 << " failed_blocks=" << glrc_format_block_list(failed_block_ids, ck, cr, cz)
-                << " p=0 (pipeline-only full stripe, <=1 failure per group) pipeline_shards=[0," << global_S << ")"
+                << " p=0 (pipeline-only full stripe"
+                << (hybrid_auto_pipeline_only || hybrid_fixed_zero ? ", auto/fixed shortcut" : ", cost model chose 0")
+                << ") pipeline_shards=[0," << global_S << ")"
                 << " local_direct=" << pipeline_local_direct_count
                 << " hub_chains=" << pipeline_plan.hub_chains.size() << std::endl;
     }
@@ -4441,7 +4581,7 @@ namespace ECProject
         std::string retry_plan_error;
         if (!glrc_build_pipeline_plan(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_block_ids, plan_lf,
                                       all_equations, hub_block_id, node_lookup, retry_epoch, retry_plan,
-                                      retry_plan_error))
+                                      retry_plan_error, glrc_codec_mode(m_sys_config->CodeType)))
         {
           recovery_reply->set_message(retry_plan_error);
           recovery_reply->set_success(false);
@@ -4512,7 +4652,8 @@ namespace ECProject
       GlrcHybridChooseResult candidate_model = glrc_hybrid_choose_p(
           m_sys_config->k, m_sys_config->r, m_sys_config->z, f, global_S, m_sys_config->BlockSize,
           m_sys_config->NodeBlockBandwidthMBps, &plan_ilp, hub_block_id, pipeline_local_direct_count,
-          local_direct_failed, failed_block_ids, std::to_string(candidate_p));
+          local_direct_failed, failed_block_ids, std::to_string(candidate_p),
+          glrc_codec_mode(m_sys_config->CodeType));
       if (!candidate_model.success)
       {
         recovery_reply->set_success(false);
@@ -4666,11 +4807,11 @@ namespace ECProject
       return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "empty failed block list");
     }
 
-    if (m_sys_config->CodeType != "gLRC")
+    if (!glrc_code_supports_hybrid(m_sys_config->CodeType))
     {
       replyClient->set_success(false);
-      replyClient->set_message("multiBlockRecovery ILP path only supports gLRC");
-      return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "only gLRC supported");
+      replyClient->set_message("multiBlockRecovery ILP path only supports gLRC or AzureLRC");
+      return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "only gLRC/AzureLRC supported");
     }
 
     bool ok = false;
@@ -5109,14 +5250,28 @@ namespace ECProject
       if (proxy_ip_and_port.empty() || registered.count(proxy_ip_and_port))
         return;
       registered.insert(proxy_ip_and_port);
-      auto _stub = proxy_proto::proxyService::NewStub(
-          grpc::CreateChannel(proxy_ip_and_port, grpc::InsecureChannelCredentials()));
-      proxy_proto::CheckaliveCMD Cmd;
-      proxy_proto::RequestResult result;
-      grpc::ClientContext clientContext;
-      Cmd.set_name("coordinator");
-      grpc::Status status = _stub->checkalive(&clientContext, Cmd, &result);
-      if (status.ok())
+      // Retry briefly: Real-system may still be bringing up the last proxies
+      // when the coordinator process starts.
+      bool ok = false;
+      std::unique_ptr<proxy_proto::proxyService::Stub> _stub;
+      for (int attempt = 0; attempt < 30; ++attempt)
+      {
+        _stub = proxy_proto::proxyService::NewStub(
+            grpc::CreateChannel(proxy_ip_and_port, grpc::InsecureChannelCredentials()));
+        proxy_proto::CheckaliveCMD Cmd;
+        proxy_proto::RequestResult result;
+        grpc::ClientContext clientContext;
+        clientContext.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(2));
+        Cmd.set_name("coordinator");
+        grpc::Status status = _stub->checkalive(&clientContext, Cmd, &result);
+        if (status.ok())
+        {
+          ok = true;
+          break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      }
+      if (ok)
         std::cout << "[Proxy Check] ok from " << proxy_ip_and_port << std::endl;
       else
         std::cout << "[Proxy Check] failed to connect " << proxy_ip_and_port << std::endl;

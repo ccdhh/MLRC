@@ -261,12 +261,36 @@ int discretize_p(double p_continuous, int global_shard_count, int f, int block_s
 
 } // namespace
 
+bool glrc_hybrid_auto_forces_p0(int k, int r, int z, const std::vector<int> &failed_block_ids, GlrcCodecMode codec)
+{
+  // Optimal local equations include every G*. Two local-direct chains still share those
+  // intermediate hops, so the hottest node carries ≈f streams — not the gLRC "one per
+  // group ⇒ independent local repair ⇒ p=0" case.
+  if (codec == GlrcCodecMode::OPTIMAL)
+    return false;
+
+  if (!glrc_failures_at_most_one_per_group(k, r, z, failed_block_ids, codec))
+    return false;
+  // Azure global parities have no local XOR equation; a failed G* must not inherit the
+  // gLRC "one failure per group => pipeline-only" shortcut.
+  if (codec == GlrcCodecMode::AZURE)
+  {
+    for (int fid : failed_block_ids)
+    {
+      if (fid >= k && fid < k + r)
+        return false;
+    }
+  }
+  return true;
+}
+
 GlrcHybridChooseResult glrc_hybrid_choose_p(int k, int r, int z, int f, int global_shard_count, int block_size,
                                             double link_mbps, const GlrcIlpRepairPlan *plan_ilp, int hub_block_id,
                                             int pipeline_local_direct_count,
                                             const std::unordered_set<int> &local_direct_failed_block_ids,
                                             const std::vector<int> &failed_block_ids,
-                                            const std::string &hybrid_p_config)
+                                            const std::string &hybrid_p_config,
+                                            GlrcCodecMode codec)
 {
   GlrcHybridChooseResult out;
   if (f < 1 || global_shard_count < 1 || block_size < 1 || block_size % global_shard_count != 0)
@@ -309,8 +333,8 @@ GlrcHybridChooseResult glrc_hybrid_choose_p(int k, int r, int z, int f, int glob
     return out;
   }
 
-  // Auto: at most one failure per placement group => p=0 (full-stripe local-first pipeline).
-  if (glrc_failures_at_most_one_per_group(k, r, z, failed_block_ids))
+  // Auto shortcut: p=0 full-stripe local-first pipeline (see glrc_hybrid_auto_forces_p0).
+  if (glrc_hybrid_auto_forces_p0(k, r, z, failed_block_ids, codec))
   {
     out.p = 0;
     out.p_continuous = 0.0;
@@ -326,12 +350,36 @@ GlrcHybridChooseResult glrc_hybrid_choose_p(int k, int r, int z, int f, int glob
     return out;
   }
 
+  // Azure: a failed G* drives a long global hub chain. Counting a concurrent local-direct
+  // repair in f_hub (= f - local_direct) makes f_hub=1 and forces p*=0 structurally.
+  // Optimal: every local eq includes all G*, so concurrent local-direct chains still share
+  // those hops — f_hub must stay ≈f for p* (ignore local-direct always, not only on G fail).
+  int model_local_direct = pipeline_local_direct_count;
+  std::unordered_set<int> model_local_direct_failed = local_direct_failed_block_ids;
+  if (codec == GlrcCodecMode::OPTIMAL)
+  {
+    model_local_direct = 0;
+    model_local_direct_failed.clear();
+  }
+  else if (codec == GlrcCodecMode::AZURE)
+  {
+    for (int fid : failed_block_ids)
+    {
+      if (fid >= k && fid < k + r)
+      {
+        model_local_direct = 0;
+        model_local_direct_failed.clear();
+        break;
+      }
+    }
+  }
+
   const int hot_guess = max_partition_failed_block_id(global_shard_count / 2, f, failed_block_ids);
   out.p_continuous =
       solve_continuous_p(f, global_shard_count, stripe_byte_len, link_mbps, *plan_ilp, hub_block_id,
-                         local_direct_failed_block_ids, hot_guess, pipeline_local_direct_count);
+                         model_local_direct_failed, hot_guess, model_local_direct);
   out.p = discretize_p(out.p_continuous, global_shard_count, f, block_size, stripe_byte_len, link_mbps, *plan_ilp,
-                       hub_block_id, pipeline_local_direct_count, local_direct_failed_block_ids, failed_block_ids,
+                       hub_block_id, model_local_direct, model_local_direct_failed, failed_block_ids,
                        out.t_phase2_est_sec, out.t_pipeline_est_sec);
   out.max_partition_failed_block_id = max_partition_failed_block_id(out.p, f, failed_block_ids);
   out.success = true;

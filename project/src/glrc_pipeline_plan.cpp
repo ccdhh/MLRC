@@ -50,7 +50,8 @@ bool glrc_build_pipeline_plan(int k, int r, int z, const std::vector<int> &faile
                               const GlrcIlpRepairPlan &repair_plan,
                               const std::vector<GlrcEquation> &all_equations, int hub_block_id,
                               const std::vector<GlrcPipelineNodeLookup> &node_lookup, int exchange_epoch,
-                              GlrcPipelinePlan &out_plan, std::string &error_message)
+                              GlrcPipelinePlan &out_plan, std::string &error_message,
+                              GlrcCodecMode codec)
 {
   out_plan = GlrcPipelinePlan{};
   out_plan.hub_block_id = hub_block_id;
@@ -97,7 +98,7 @@ bool glrc_build_pipeline_plan(int k, int r, int z, const std::vector<int> &faile
 
     const GlrcEquation &eq = all_equations[eq_idx];
     std::vector<unsigned char> coef_row;
-    glrc_pipeline_build_coef_row(k, r, z, eq_idx, coef_row);
+    glrc_pipeline_build_coef_row(k, r, z, eq_idx, coef_row, codec);
 
     std::vector<int> survivors;
     for (int b : eq.involved_blocks)

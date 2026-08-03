@@ -1760,7 +1760,7 @@ bool ProxyImpl::glrcIlpPipelineHubRecovery(const proxy_proto::RecoveryRequest *r
   }
   std::vector<unsigned char> hub_decode_inverse;
   if (!glrc_ilp_prepare_inverse(m_sys_config->k, m_sys_config->r, m_sys_config->z, failed_ids, eq_indices,
-                                hub_decode_inverse))
+                                hub_decode_inverse, glrc_codec_mode(m_sys_config->CodeType)))
   {
     set_pipeline_error("pipeline hub inverse prepare failed");
     return false;

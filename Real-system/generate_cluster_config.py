@@ -102,7 +102,7 @@ def main() -> int:
     parser.add_argument(
         "--clusters",
         type=int,
-        help="Placement-cluster count; defaults to z for gLRC, otherwise the current ClusterNum.",
+        help="Placement-cluster count; defaults to z for gLRC, ClusterNum for AzureLRC/others.",
     )
     args = parser.parse_args()
 
@@ -125,6 +125,7 @@ def main() -> int:
     elif code_type == "gLRC":
         cluster_count = int(xml_value(parameter_root, "z"))
     else:
+        # AzureLRC flat placement: keep ClusterNum from XML (proxy sharding only).
         cluster_count = int(xml_value(parameter_root, "ClusterNum"))
     if cluster_count < 1 or cluster_count > len(storage):
         raise ValueError(f"invalid cluster count {cluster_count} for {len(storage)} storage hosts")
@@ -142,6 +143,10 @@ def main() -> int:
             + 1
             for group_id in range(z)
         ]
+    elif code_type in ("AzureLRC", "OptimalLRC"):
+        # Flat hybrid: evenly partition n storage nodes across ClusterNum (proxy only).
+        base, rem = divmod(len(storage), cluster_count)
+        cluster_sizes = [base + (1 if i < rem else 0) for i in range(cluster_count)]
 
     per_cluster = build_cluster_xml(
         storage, cluster_count, args.cluster_config, cluster_sizes

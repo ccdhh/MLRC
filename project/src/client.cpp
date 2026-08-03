@@ -397,30 +397,12 @@ namespace ECProject
   std::vector<int> Client::get_data_block_num_per_group(int k, int r, int z, std::string code_type)
   {
     std::vector<int> data_block_num_per_group;
-    if (code_type == "AzureLRC")
+    if (code_type == "AzureLRC" || code_type == "OptimalLRC")
     {
+      // Flat hybrid layout: z algebraic local groups + trailing global group.
       for (int i = 0; i < z; i++)
       {
         data_block_num_per_group.push_back((k / z));
-      }
-      data_block_num_per_group.push_back(0);
-    }
-    else if (code_type == "OptimalLRC")
-    {
-      int group_size = r + 1;
-      int local_group_size = (k / z);
-      int group_num_of_one_local_group = local_group_size / group_size + 1;
-      int group_num = z * group_num_of_one_local_group + 1;
-      for (int i = 0; i < group_num - 1; i++)
-      {
-        if ((i + 1) % group_num_of_one_local_group)
-        {
-          data_block_num_per_group.push_back(group_size);
-        }
-        else
-        {
-          data_block_num_per_group.push_back(local_group_size % group_size);
-        }
       }
       data_block_num_per_group.push_back(0);
     }
@@ -504,21 +486,9 @@ namespace ECProject
   std::vector<int> Client::get_global_parity_block_num_per_group(int k, int r, int z, std::string code_type)
   {
     std::vector<int> global_pairty_block_num_per_group;
-    if (code_type == "AzureLRC")
+    if (code_type == "AzureLRC" || code_type == "OptimalLRC")
     {
       for (int i = 0; i < z; i++)
-      {
-        global_pairty_block_num_per_group.push_back(0);
-      }
-      global_pairty_block_num_per_group.push_back(r);
-    }
-    else if (code_type == "OptimalLRC")
-    {
-      int group_size = r + 1;
-      int local_group_size = (k / z);
-      int group_num_of_one_local_group = local_group_size / group_size + 1;
-      int group_num = z * group_num_of_one_local_group + 1;
-      for (int i = 0; i < group_num - 1; i++)
       {
         global_pairty_block_num_per_group.push_back(0);
       }
@@ -592,30 +562,11 @@ namespace ECProject
   std::vector<int> Client::get_local_parity_block_num_per_group(int k, int r, int z, std::string code_type)
   {
     std::vector<int> local_parity_block_num_per_group;
-    if (code_type == "AzureLRC")
+    if (code_type == "AzureLRC" || code_type == "OptimalLRC")
     {
       for (int i = 0; i < z; i++)
       {
         local_parity_block_num_per_group.push_back(1);
-      }
-      local_parity_block_num_per_group.push_back(0);
-    }
-    else if (code_type == "OptimalLRC")
-    {
-      int group_size = r + 1;
-      int local_group_size = (k / z);
-      int group_num_of_one_local_group = local_group_size / group_size + 1;
-      int group_num = z * group_num_of_one_local_group + 1;
-      for (int i = 0; i < group_num - 1; i++)
-      {
-        if ((i + 1) % group_num_of_one_local_group)
-        {
-          local_parity_block_num_per_group.push_back(0);
-        }
-        else
-        {
-          local_parity_block_num_per_group.push_back(1);
-        }
       }
       local_parity_block_num_per_group.push_back(0);
     }

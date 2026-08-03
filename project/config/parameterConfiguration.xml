@@ -42,7 +42,7 @@
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
     <!-- 修复方式：phase1 | phase2 | pipeline | hybrid -->
-    <GlrcRepairMode>hybrid</GlrcRepairMode>
+    <GlrcRepairMode>phase1</GlrcRepairMode>
     <GlrcHybridP>auto</GlrcHybridP>
     <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
     <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
@@ -51,9 +51,9 @@
     <GlrcPipelineWindow>0</GlrcPipelineWindow>
     <GlrcPhase2WriteBack>true</GlrcPhase2WriteBack>
 
-    <!-- Real-system: z=4 gLRC placement groups over 55 storage nodes. -->
-    <DatanodeNumPerCluster>14</DatanodeNumPerCluster>
-    <ClusterNum>4</ClusterNum>
+    <!-- Real-system: flat Azure-LRC over 55 storage nodes (no rack co-location). -->
+    <DatanodeNumPerCluster>28</DatanodeNumPerCluster>
+    <ClusterNum>2</ClusterNum>
     <CoordinatorIP>172.16.3.68</CoordinatorIP>
     <CoordinatorPort>55555</CoordinatorPort>
     <ClientIP>172.16.3.75</ClientIP>
@@ -62,8 +62,8 @@
     <AppendMode>UNILRC_MODE</AppendMode>
     <alpha>2</alpha>
 
-    <CodeType>gLRC</CodeType>
-    <!-- n=55: k=48 数据块, r=3 全局校验 G, z=4 局部校验 L；k+r 按 z 个大组均匀划分 -->
+    <CodeType>AzureLRC</CodeType>
+    <!-- n=55: k=48 数据块, r=3 全局校验 G, z=4 局部校验 L；Azure 编码 + 扁平全局 RR -->
     <k>48</k>
     <r>3</r>
     <z>4</z>

@@ -38,7 +38,7 @@ namespace ECProject
     assert(BlockSize % UnitSize == 0 && "Error: BlockSize must be divisible by UnitSize");
     assert((AppendMode == "REP_MODE" || AppendMode == "UNILRC_MODE" || AppendMode == "CACHED_MODE" || AppendMode == "EQUIOX_MODE") && "Error: AppendMode must be REP_MODE, UNILRC_MODE, or CACHED_MODE");
     assert((CodeType == "UniLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC" || CodeType == "UniformLRC" || CodeType == "gLRC" || CodeType == "RS") && "Error: CodeType must be UniLRC, AzureLRC, OptimalLRC, UniformLRC, gLRC, or RS");
-    if (CodeType == "gLRC")
+    if (CodeType == "gLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC")
     {
       assert((GlrcRepairMode == "phase1" || GlrcRepairMode == "phase2" ||
               GlrcRepairMode == "pipeline" || GlrcRepairMode == "hybrid") &&
@@ -53,13 +53,27 @@ namespace ECProject
     }
     if (CodeType == "AzureLRC")
     {
-      assert(DatanodeNumPerCluster > k / z + 1 && "Error: DatanodeNumPerCluster must be greater than k / z + 1");
-      assert(ClusterNum > z + 1 && "Error: ClusterNum must be greater than z + 1");
+      // Flat (rack-free) Azure-LRC: same hybrid data-plane as gLRC; cluster is
+      // only a proxy partitioning, not a co-location constraint.
+      assert(z > 0 && "Error: z must be positive for AzureLRC");
+      assert(k % z == 0 && "Error: k must be divisible by z for AzureLRC");
+      const int max_blocks_per_local_group = k / z + 1;
+      assert(DatanodeNumPerCluster >= max_blocks_per_local_group &&
+             "Error: DatanodeNumPerCluster must fit an AzureLRC local group");
+      assert(ClusterNum * DatanodeNumPerCluster >= n &&
+             "Error: ClusterNum * DatanodeNumPerCluster must be >= n for AzureLRC");
     }
     if (CodeType == "OptimalLRC")
     {
-      assert(DatanodeNumPerCluster > r + 1 && "Error: DatanodeNumPerCluster must be greater than r + 1");
-      assert(ClusterNum > std::ceil(1.0 * k / z / (r + 1)) * z + 1 && "Error: ClusterNum must be greater than std::ceil(1.0 * k / z / (r + 1)) * z + 1");
+      // Flat (rack-free) Optimal-LRC: hybrid data-plane like Azure/gLRC; cluster is
+      // only proxy partitioning, not rack co-location.
+      assert(z > 0 && "Error: z must be positive for OptimalLRC");
+      assert(k % z == 0 && "Error: k must be divisible by z for OptimalLRC");
+      const int max_blocks_per_local_group = k / z + 1;
+      assert(DatanodeNumPerCluster >= max_blocks_per_local_group &&
+             "Error: DatanodeNumPerCluster must fit an OptimalLRC local group");
+      assert(ClusterNum * DatanodeNumPerCluster >= n &&
+             "Error: ClusterNum * DatanodeNumPerCluster must be >= n for OptimalLRC");
     }
     if (CodeType == "UniformLRC")
     {
@@ -214,7 +228,7 @@ namespace ECProject
     std::cout << "  ClientPort: " << ClientPort << std::endl;
     std::cout << "  AppendMode: " << AppendMode << std::endl;
     std::cout << "  CodeType: " << CodeType << std::endl;
-    if (CodeType == "gLRC")
+    if (CodeType == "gLRC" || CodeType == "AzureLRC" || CodeType == "OptimalLRC")
     {
       std::cout << "  GlrcRepairMode: " << GlrcRepairMode << std::endl;
       std::cout << "  GlrcEquationPolicy: " << GlrcEquationPolicy << std::endl;

@@ -2395,7 +2395,8 @@ namespace ECProject
   {
     response->Clear();
     const bool glrc_concurrent_recovery =
-        recovery_request->glrc_ilp_recovery() && m_sys_config != nullptr && m_sys_config->CodeType == "gLRC" &&
+        recovery_request->glrc_ilp_recovery() && m_sys_config != nullptr &&
+        glrc_code_supports_hybrid(m_sys_config->CodeType) &&
         (recovery_request->glrc_ilp_pipeline() || recovery_request->glrc_ilp_phase2());
     // Pipeline / Phase2 may run several recoveryBreakdown RPCs concurrently on one proxy
     // (hub/hop/chain, or hybrid phase2+pipeline on the same repair proxy). Resetting shared
@@ -2412,23 +2413,25 @@ namespace ECProject
       }
 
       std::string code_type = m_sys_config->CodeType;
-      if (recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_phase2() && code_type == "gLRC")
+      if (recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_phase2() &&
+          glrc_code_supports_hybrid(code_type))
       {
         if (!glrcIlpPhase2Recovery(recovery_request, response))
         {
           const std::string detail = glrc_phase2_take_last_error();
           return grpc::Status(grpc::StatusCode::INTERNAL,
-                              detail.empty() ? "gLRC ILP phase2 failed" : detail);
+                              detail.empty() ? "ILP phase2 failed" : detail);
         }
         return grpc::Status::OK;
       }
-      if (recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_pipeline() && code_type == "gLRC")
+      if (recovery_request->glrc_ilp_recovery() && recovery_request->glrc_ilp_pipeline() &&
+          glrc_code_supports_hybrid(code_type))
       {
         if (!glrcIlpPipelineRecovery(recovery_request, response))
         {
           const std::string detail = glrc_pipeline_take_last_error();
           return grpc::Status(grpc::StatusCode::INTERNAL,
-                              detail.empty() ? "gLRC ILP pipeline failed" : detail);
+                              detail.empty() ? "ILP pipeline failed" : detail);
         }
         return grpc::Status::OK;
       }
@@ -2542,7 +2545,8 @@ namespace ECProject
         }
         std::vector<unsigned char *> block_ptrs = convertToUnsignedCharArray(get_bufs);
 
-        if (recovery_request->glrc_ilp_recovery() && code_type == "gLRC")
+        if (recovery_request->glrc_ilp_recovery() &&
+            glrc_code_supports_hybrid(code_type))
         {
           std::vector<int> failed_ids;
           std::vector<int> eq_indices;
@@ -2555,7 +2559,8 @@ namespace ECProject
           std::vector<unsigned char *> recovered_ptrs;
           bool decode_ok = decode_glrc_ilp(m_sys_config->k, m_sys_config->r, m_sys_config->z,
                                           m_sys_config->BlockSize, block_idxs, block_ptrs.data(),
-                                          failed_ids, eq_indices, recovered_ptrs);
+                                          failed_ids, eq_indices, recovered_ptrs,
+                                          glrc_codec_mode(code_type));
           std::chrono::high_resolution_clock::time_point t4 = std::chrono::high_resolution_clock::now();
           response->set_decode_start_time(
               std::chrono::duration_cast<std::chrono::duration<double>>(t3.time_since_epoch()).count());

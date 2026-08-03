@@ -90,7 +90,7 @@ struct ExperimentLogger
 
     if (mkdir(log_dir.c_str(), 0755) != 0 && errno != EEXIST)
     {
-      std::cerr << "[gLRC] warning: cannot create log dir " << log_dir << std::endl;
+      std::cerr << "[client] warning: cannot create log dir " << log_dir << std::endl;
       return false;
     }
 
@@ -110,7 +110,7 @@ struct ExperimentLogger
     summary_csv.open(summary_csv_path, std::ios::out | std::ios::trunc);
     if (!full_log.is_open())
     {
-      std::cerr << "[gLRC] warning: cannot open log file " << full_log_path << std::endl;
+      std::cerr << "[client] warning: cannot open log file " << full_log_path << std::endl;
       return false;
     }
 
@@ -121,9 +121,9 @@ struct ExperimentLogger
     std::cout.rdbuf(tee_out);
     std::cerr.rdbuf(tee_err);
 
-    std::cout << "[gLRC] saving full log: " << full_log_path << std::endl;
+    std::cout << "[client] saving full log: " << full_log_path << std::endl;
     if (summary_csv.is_open())
-      std::cout << "[gLRC] saving summary csv: " << summary_csv_path << std::endl;
+      std::cout << "[client] saving summary csv: " << summary_csv_path << std::endl;
     latest_log_path_ = latest_log;
     latest_csv_path_ = latest_csv;
     return true;
@@ -154,7 +154,7 @@ struct ExperimentLogger
         std::ofstream dst(latest_log_path_, std::ios::binary | std::ios::trunc);
         dst << src.rdbuf();
       }
-      std::cout << "[gLRC] full log saved: " << full_log_path << std::endl;
+      std::cout << "[client] full log saved: " << full_log_path << std::endl;
     }
     if (summary_csv.is_open())
     {
@@ -166,7 +166,7 @@ struct ExperimentLogger
         std::ofstream dst(latest_csv_path_, std::ios::binary | std::ios::trunc);
         dst << src.rdbuf();
       }
-      std::cout << "[gLRC] summary csv saved: " << summary_csv_path << std::endl;
+      std::cout << "[client] summary csv saved: " << summary_csv_path << std::endl;
     }
   }
 
@@ -712,7 +712,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
     }
     if (trial_count < 1)
     {
-        std::cerr << "[gLRC] invalid trial count: " << trial_count << std::endl;
+        std::cerr << "[" << config->CodeType << "] invalid trial count: " << trial_count << std::endl;
         return 1;
     }
 
@@ -734,17 +734,17 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
     std::string parse_error;
     if (!nodes_raw.empty() && !parse_int_list(nodes_raw, node_ids, parse_error))
     {
-        std::cerr << "[gLRC] invalid --failed-nodes: " << parse_error << std::endl;
+        std::cerr << "[" << config->CodeType << "] invalid --failed-nodes: " << parse_error << std::endl;
         return 1;
     }
     if (!ips_raw.empty() && !parse_string_list(ips_raw, node_ips, parse_error))
     {
-        std::cerr << "[gLRC] invalid --failed-node-ips: " << parse_error << std::endl;
+        std::cerr << "[" << config->CodeType << "] invalid --failed-node-ips: " << parse_error << std::endl;
         return 1;
     }
     if (node_ids.empty() && node_ips.empty())
     {
-        std::cerr << "[gLRC] --node-repair requires --failed-nodes and/or --failed-node-ips"
+        std::cerr << "[" << config->CodeType << "] --node-repair requires --failed-nodes and/or --failed-node-ips"
                   << std::endl;
         return 1;
     }
@@ -760,7 +760,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
             << "repair_mode,equation_policy,failed_nodes\n";
     }
 
-    std::cout << "[gLRC] node-repair mode (n,k,r,z)=(" << n << "," << k << "," << r << "," << z
+    std::cout << "[" << config->CodeType << "] node-repair mode (n,k,r,z)=(" << n << "," << k << "," << r << "," << z
               << ") mode=" << config->GlrcRepairMode
               << " policy=" << config->GlrcEquationPolicy
               << " stripes=" << stripe_num
@@ -774,12 +774,12 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
         std::string list_error;
         if (!client.list_stripe_ids(existing, list_error))
         {
-            std::cerr << "[gLRC] list_stripe_ids failed: " << list_error << std::endl;
+            std::cerr << "[" << config->CodeType << "] list_stripe_ids failed: " << list_error << std::endl;
             return 1;
         }
         if (existing.empty())
         {
-            std::cerr << "[gLRC] --reuse-stripes requires existing stripes on coordinator"
+            std::cerr << "[" << config->CodeType << "] --reuse-stripes requires existing stripes on coordinator"
                       << std::endl;
             return 1;
         }
@@ -790,14 +790,14 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
             target_stripe_set.insert(existing[static_cast<size_t>(i)]);
         std::vector<int> selected(target_stripe_set.begin(), target_stripe_set.end());
         std::sort(selected.begin(), selected.end());
-        std::cout << "[gLRC] reuse-stripes: coordinator has " << existing.size()
+        std::cout << "[" << config->CodeType << "] reuse-stripes: coordinator has " << existing.size()
                   << " stripe(s); repairing last " << take << " by id:";
         for (int sid : selected)
             std::cout << " " << sid;
         std::cout << std::endl;
         if (take < stripe_num)
         {
-            std::cout << "[gLRC] warning: requested GLRC_STRIPE_NUM=" << stripe_num
+            std::cout << "[" << config->CodeType << "] warning: requested GLRC_STRIPE_NUM=" << stripe_num
                       << " but only " << existing.size() << " stripe(s) exist" << std::endl;
         }
     }
@@ -809,23 +809,23 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
         std::string list_error;
         if (!client.list_stripe_ids(stripes_before, list_error))
         {
-            std::cerr << "[gLRC] list_stripe_ids failed before write: " << list_error << std::endl;
+            std::cerr << "[" << config->CodeType << "] list_stripe_ids failed before write: " << list_error << std::endl;
             return 1;
         }
         if (!stripes_before.empty())
         {
-            std::cout << "[gLRC] warning: coordinator already has " << stripes_before.size()
+            std::cout << "[" << config->CodeType << "] warning: coordinator already has " << stripes_before.size()
                       << " stripe(s); this run will only repair newly written stripes"
                       << std::endl;
         }
         std::unordered_set<int> before_set(stripes_before.begin(), stripes_before.end());
 
-        std::cout << "[gLRC] Writing " << stripe_num << " stripe(s)..." << std::endl;
+        std::cout << "[" << config->CodeType << "] Writing " << stripe_num << " stripe(s)..." << std::endl;
         for (int i = 0; i < stripe_num; i++)
         {
             if (!client.set())
             {
-                std::cerr << "[gLRC] set() failed at stripe index " << i << std::endl;
+                std::cerr << "[" << config->CodeType << "] set() failed at stripe index " << i << std::endl;
                 return 1;
             }
         }
@@ -833,7 +833,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
         std::vector<int> stripes_after;
         if (!client.list_stripe_ids(stripes_after, list_error))
         {
-            std::cerr << "[gLRC] list_stripe_ids failed after write: " << list_error << std::endl;
+            std::cerr << "[" << config->CodeType << "] list_stripe_ids failed after write: " << list_error << std::endl;
             return 1;
         }
         for (int sid : stripes_after)
@@ -852,7 +852,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
     if (!client.get_blocks_on_nodes(node_ids, node_ips, resolved_node_ids, resolved_node_ips,
                                     stripe_to_failed, query_error))
     {
-        std::cerr << "[gLRC] get_blocks_on_nodes failed: " << query_error << std::endl;
+        std::cerr << "[" << config->CodeType << "] get_blocks_on_nodes failed: " << query_error << std::endl;
         return 1;
     }
 
@@ -864,7 +864,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
             ++it;
     }
 
-    std::cout << "[gLRC] Failed nodes:";
+    std::cout << "[" << config->CodeType << "] Failed nodes:";
     for (size_t i = 0; i < resolved_node_ids.size(); ++i)
     {
         std::cout << " " << resolved_node_ids[i];
@@ -875,7 +875,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
 
     if (stripe_to_failed.empty())
     {
-        std::cerr << "[gLRC] no target-stripe blocks found on the selected nodes" << std::endl;
+        std::cerr << "[" << config->CodeType << "] no target-stripe blocks found on the selected nodes" << std::endl;
         return 1;
     }
 
@@ -886,7 +886,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
     std::sort(stripe_ids.begin(), stripe_ids.end());
     if (static_cast<int>(stripe_ids.size()) != static_cast<int>(target_stripe_set.size()))
     {
-        std::cout << "[gLRC] warning: expected " << target_stripe_set.size()
+        std::cout << "[" << config->CodeType << "] warning: expected " << target_stripe_set.size()
                   << " target stripe(s) on failed nodes, found " << stripe_ids.size()
                   << std::endl;
     }
@@ -895,7 +895,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
     for (int stripe_id : stripe_ids)
         total_failed_blocks += static_cast<int>(stripe_to_failed[stripe_id].size());
 
-    std::cout << "[gLRC] Will repair " << stripe_ids.size() << " stripe(s), "
+    std::cout << "[" << config->CodeType << "] Will repair " << stripe_ids.size() << " stripe(s), "
               << total_failed_blocks << " failed block(s) in stripe order, "
               << trial_count << " trial(s)" << std::endl;
     for (int stripe_id : stripe_ids)
@@ -950,7 +950,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
         if (trial_ok)
             full_success_trials++;
 
-        std::cout << "\n========== gLRC node-repair trial " << (t + 1) << "/" << trial_count
+        std::cout << "\n========== " << config->CodeType << " node-repair trial " << (t + 1) << "/" << trial_count
                   << " summary ==========" << std::endl;
         std::cout << "  mode=" << config->GlrcRepairMode
                   << " policy=" << config->GlrcEquationPolicy << std::endl;
@@ -1013,7 +1013,7 @@ static int run_glrc_node_repair_test(ECProject::Client &client, const ECProject:
 
     if (trial_count > 1)
     {
-        std::cout << "\n========== gLRC node-repair batch summary ==========" << std::endl;
+        std::cout << "\n========== " << config->CodeType << " node-repair batch summary ==========" << std::endl;
         std::cout << "  trials=" << trial_count
                   << " full_success=" << full_success_trials << std::endl;
         if (full_success_trials > 0)
@@ -1068,17 +1068,17 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         std::string parse_error;
         if (!parse_failed_blocks(fixed_failed_raw, k, r, z, fixed_failed, parse_error))
         {
-            std::cerr << "[gLRC] invalid fixed failure list: " << parse_error << std::endl;
+            std::cerr << "[" << config->CodeType << "] invalid fixed failure list: " << parse_error << std::endl;
             return 1;
         }
         if (failure_mode == "max")
         {
-            std::cerr << "[gLRC] --failed-blocks cannot be combined with failure_mode=max" << std::endl;
+            std::cerr << "[" << config->CodeType << "] --failed-blocks cannot be combined with failure_mode=max" << std::endl;
             return 1;
         }
         if (have_f && fail_count != static_cast<int>(fixed_failed.size()))
         {
-            std::cerr << "[gLRC] fixed failure count " << fixed_failed.size()
+            std::cerr << "[" << config->CodeType << "] fixed failure count " << fixed_failed.size()
                       << " does not match --fail-count " << fail_count << std::endl;
             return 1;
         }
@@ -1108,13 +1108,13 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         }
         catch (const std::exception &)
         {
-            std::cerr << "[gLRC] invalid random seed: " << seed_raw
+            std::cerr << "[" << config->CodeType << "] invalid random seed: " << seed_raw
                       << " (expected 0.." << std::numeric_limits<uint32_t>::max() << ")" << std::endl;
             return 1;
         }
     }
 
-    std::cout << "[gLRC] config (n,k,r,z)=(" << n << "," << k << "," << r << "," << z << ")"
+    std::cout << "[" << config->CodeType << "] config (n,k,r,z)=(" << n << "," << k << "," << r << "," << z << ")"
               << " mode=" << config->GlrcRepairMode
               << " policy=" << config->GlrcEquationPolicy
               << " failure_mode=" << failure_mode
@@ -1126,12 +1126,12 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     if (!read_glrc_test_params(n, fail_count, trial_count, have_f, have_n))
         return 1;
 
-    std::cout << "[gLRC] Writing " << stripe_num << " stripe(s)..." << std::endl;
+    std::cout << "[" << config->CodeType << "] Writing " << stripe_num << " stripe(s)..." << std::endl;
     for (int i = 0; i < stripe_num; i++)
     {
         if (!client.set())
         {
-            std::cerr << "[gLRC] set() failed at stripe index " << i << std::endl;
+            std::cerr << "[" << config->CodeType << "] set() failed at stripe index " << i << std::endl;
             return 1;
         }
     }
@@ -1174,7 +1174,7 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         {
             warmup_failed = {use_fixed && !fixed_failed.empty() ? fixed_failed.front() : 0};
         }
-        std::cout << "\n[gLRC] Warmup recovery (excluded from trial stats) failed_blocks: "
+        std::cout << "\n[" << config->CodeType << "] Warmup recovery (excluded from trial stats) failed_blocks: "
                   << ECProject::glrc_format_block_list(warmup_failed, k, r, z) << std::endl;
         ECProject::GlrcMultiRecoveryMetrics warmup_metrics;
         if (!client.multi_block_recovery_breakdown(0, warmup_failed, warmup_metrics))
@@ -1185,7 +1185,7 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
         std::cout << "  warmup data_plane_time: " << warmup_metrics.network_time << " s" << std::endl;
     }
 
-    std::cout << "\n[gLRC] Running " << trial_count << " " << failure_mode
+    std::cout << "\n[" << config->CodeType << "] Running " << trial_count << " " << failure_mode
               << " trial(s) with f=" << fail_count
               << " on stripe 0..." << std::endl;
 
@@ -1261,7 +1261,7 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 
-    std::cout << "\n========== gLRC repair batch summary ==========" << std::endl;
+    std::cout << "\n========== " << config->CodeType << " repair batch summary ==========" << std::endl;
     std::cout << "  mode=" << config->GlrcRepairMode
               << " policy=" << config->GlrcEquationPolicy
               << " failure_mode=" << failure_mode << std::endl;
@@ -1365,7 +1365,7 @@ int main(int argc, char **argv)
     ECProject::Client client(client_ip, client_port, coordinator_addr, sys_config_path);
     std::cout << client.sayHelloToCoordinatorByGrpc("Client ID: " + client_ip + ":" + std::to_string(client_port)) << std::endl;
 
-    if (config->CodeType == "gLRC")
+    if (config->CodeType == "gLRC" || config->CodeType == "AzureLRC" || config->CodeType == "OptimalLRC")
     {
         if (node_repair)
             return run_glrc_node_repair_test(client, config, failed_nodes_raw, failed_node_ips_raw,
