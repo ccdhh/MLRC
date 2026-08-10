@@ -1,4 +1,5 @@
 #!/bin/bash
+# Clear wondershaper / qdisc bandwidth limits on local NICs.
 
 set -u
 
