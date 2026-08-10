@@ -80,7 +80,7 @@ namespace ECProject
     std::vector<int> object_sizes;
     std::vector<Block *> blocks;
     std::unordered_set<int> place2clusters;
-    int N;//L1的放置参数
+    int N;// L1 placement parameter
     std::vector<int> num_arry;
     int n, r, z;
     int num_groups;
@@ -127,11 +127,11 @@ namespace ECProject
       delete[] slice_ptr;
     }
 
-    // 禁止复制构造函数和赋值运算符
+    // Disallow copy constructor and assignment
     ParitySlice(const ParitySlice &) = delete;
     ParitySlice &operator=(const ParitySlice &) = delete;
 
-    // 允许移动构造函数和赋值运算符
+    // Allow move constructor and assignment
     ParitySlice(ParitySlice &&other) noexcept
         : offset(other.offset), size(other.size), slice_ptr(other.slice_ptr)
     {

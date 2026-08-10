@@ -56,10 +56,10 @@ namespace ECProject
   bool ToolBox::random_generate_kv(std::string &key, std::string &value,
                                    int key_length, int value_length)
   {
-    /*如果长度为0，则随机生成长度,key的长度不大于MAX_KEY_LENGTH，value的长度不大于MAX_VALUE_LENGTH*/
-    /*现在生成的key,value内容是固定的，可以改成随机的(增加参数)*/
-    /*如果需要生成的key太多，避免重复生成，可以改成写文件保存下来keyvalue，下次直接读文件的形式，
-    但这个需要修改函数参数或者修改run_client的内容了*/
+    /* If length is 0, generate a random length (key <= MAX_KEY_LENGTH, value <= MAX_VALUE_LENGTH). */
+    /* Current key/value contents are fixed; can be made random with an extra parameter. */
+    /* If many keys are needed, persist key/value pairs to a file and reload next time
+       (requires changing function args or run_client). */
 
     struct timespec tp;
 
@@ -119,7 +119,7 @@ namespace ECProject
 
   bool ToolBox::random_generate_value(std::string &value, int value_length)
   {
-    /*生成一个固定大小的随机value*/
+    /* Generate a fixed-size random value */
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<unsigned int> dis(0, 25);
@@ -147,23 +147,23 @@ namespace ECProject
   }
 
   void ToolBox::remove_common_zeros(std::vector<int>& vec1, std::vector<int>& vec2, std::vector<int>& vec3) {
-    // 检查三个vector大小是否相同
+    // Ensure the three vectors have the same size
     if (vec1.size() != vec2.size() || vec2.size() != vec3.size()) {
-        std::cerr << "错误：三个vector大小不同！" << std::endl;
+        std::cerr << "Error: the three vectors have different sizes!" << std::endl;
         return;
     }
     
-    // 存储需要删除的索引
+    // Indices to remove
     std::vector<size_t> indices_to_remove;
     
-    // 遍历所有索引，找出所有三个元素都为0的位置
+    // Find positions where all three elements are zero
     for (size_t i = 0; i < vec1.size(); ++i) {
         if (vec1[i] == 0 && vec2[i] == 0 && vec3[i] == 0) {
             indices_to_remove.push_back(i);
         }
     }
     
-    // 从后往前删除元素（避免索引变化问题）
+    // Erase from back to front to keep indices stable
     std::sort(indices_to_remove.rbegin(), indices_to_remove.rend());
     for (size_t index : indices_to_remove) {
         vec1.erase(vec1.begin() + index);

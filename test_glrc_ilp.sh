@@ -1,15 +1,15 @@
 #!/bin/bash
 # gLRC repair test helper (interactive f + trial count, full metrics).
 #
-# 一键交互测试（推荐，会提示输入 f 和实验次数）:
+# One-shot interactive test (recommended; prompts for f and trial count):
 #   cd /users/chendh/DdlRT && ./test_glrc_ilp.sh test
 #
-# 其他子命令:
-#   start   启动集群
-#   stop    停止并清 storage
-#   client  仅跑 client（非 TTY 时用 GLRC_FAIL_COUNT / GLRC_TRIALS 环境变量）
+# Other subcommands:
+#   start   start the cluster
+#   stop    stop processes and clear storage
+#   client  run client only (non-TTY: use GLRC_FAIL_COUNT / GLRC_TRIALS)
 #
-# 切换 C0–C3: 改 project/config/parameterConfiguration.xml 后 restart
+# Switch C0-C3: edit project/config/parameterConfiguration.xml then restart
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -57,7 +57,7 @@ run_client_interactive() {
   fi
   export GLRC_STRIPE_NUM="${GLRC_STRIPE_NUM:-1}"
   export COORDINATOR_ADDR="${COORDINATOR_ADDR:-127.0.0.1:55555}"
-  # 交互模式：不预设 f / trials，由 main_client 从终端读取
+  # Interactive mode: do not preset f/trials; main_client reads from the terminal
   unset GLRC_FAIL_COUNT GLRC_TRIALS GLRC_FAILED_BLOCKS
 
   echo ""
@@ -71,7 +71,7 @@ run_client_interactive() {
   if [[ -t 0 ]]; then
     "$CLIENT" "$COORDINATOR_ADDR"
   else
-    # 从脚本调用时仍尝试绑定终端以支持 cin >> f / trials
+    # When launched from a script, still attach to the TTY for cin >> f / trials
     "$CLIENT" "$COORDINATOR_ADDR" </dev/tty
   fi
 }
@@ -100,12 +100,12 @@ case "$cmd" in
     cat <<EOF
 Usage: $0 {test|start|stop|client}
 
-  test    一键测试：自动启集群（若未运行）→ 交互输入 f 与实验次数 → 输出完整指标
-  start   仅启动集群
-  stop    停止集群
-  client  非交互 client（环境变量 GLRC_FAIL_COUNT / GLRC_TRIALS）
+  test    one-shot test: start cluster if needed -> prompt f/trials -> print metrics
+  start   start the cluster only
+  stop    stop the cluster
+  client  non-interactive client (env GLRC_FAIL_COUNT / GLRC_TRIALS)
 
-示例:
+Examples:
   cd $ROOT && ./test_glrc_ilp.sh test
 EOF
     exit 1

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 检查enp6s0f0是否存在且处于UP状态
+# Check whether enp6s0f0 exists and is UP
 if ip link show enp6s0f0 &> /dev/null && \
    ip link show enp6s0f0 | grep -q 'state UP'
 then
@@ -8,7 +8,7 @@ then
     exit 0
 fi
 
-# 检查enp6s0f1是否存在且处于UP状态
+# Check whether enp6s0f1 exists and is UP
 if ip link show enp6s0f1 &> /dev/null && \
    ip link show enp6s0f1 | grep -q 'state UP'
 then
@@ -16,6 +16,6 @@ then
     exit 0
 fi
 
-# 如果都不满足则报错
+# Error out if neither interface is usable
 echo "Error: No active interface found!" >&2
 exit 1

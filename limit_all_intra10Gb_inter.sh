@@ -1,8 +1,8 @@
 #!/bin/bash
-# 在所有 proxy 节点上：机架内 10Gb/s + 指定机架间带宽（Gb/s）
-# 用法: sh limit_all_intra10Gb_inter.sh <0.5|1|2|5|10>
+# Apply on all proxy nodes: intra-rack 10 Gb/s + configurable inter-rack bandwidth (Gb/s).
+# Usage: sh limit_all_intra10Gb_inter.sh <0.5|1|2|5|10>
 #
-# 五次实验示例（每次合并前执行一条，合并后 unlimit_all_proxy.sh）:
+# Example for five trials (run one before each merge; then unlimit_all_proxy.sh):
 #   sh limit_all_intra10Gb_inter.sh 0.5
 #   sh limit_all_intra10Gb_inter.sh 1
 #   sh limit_all_intra10Gb_inter.sh 2
