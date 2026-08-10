@@ -1,17 +1,17 @@
 #!/bin/bash
-# 机架内 10Gb/s、机架间 1Gb/s（wondershaper，单位 Kbps）
+# Intra-rack 10 Gb/s, inter-rack 1 Gb/s (wondershaper, Kbps).
 #
-# 建议用法（只测合并阶段带宽影响）：
-#   - 数据放置阶段：不要执行本脚本，避免放置变慢。
-#   - 出现 "start merge now? (Y/N)" 前：在另一终端执行
+# Suggested usage (measure merge-phase bandwidth only):
+#   - During data placement: do not run this script (keeps placement fast).
+#   - Before "start merge now? (Y/N)": in another terminal run
 #       sh limit_all_intra10Gb_inter1Gb.sh
-#   - 再在本机输入 Y 开始 merge。
-#   - 合并结束后：sh unlimit_all_proxy.sh  解除限速。
+#   - Then enter Y locally to start merge.
+#   - After merge: sh unlimit_all_proxy.sh
 #
-# 若网卡与机架对应相反，请交换 enp6s0f0 / enp6s0f1 的带宽值。
+# If NIC-to-rack mapping is reversed, swap the bandwidth values for enp6s0f0 / enp6s0f1.
 
-INTRA_RACK_Kbps=10485760   # 10 Gb/s 机架内
-INTER_RACK_Kbps=1048576    # 1 Gb/s 机架间
+INTRA_RACK_Kbps=10485760   # 10 Gb/s intra-rack
+INTER_RACK_Kbps=1048576    # 1 Gb/s inter-rack
 
 set -u
 
@@ -31,17 +31,17 @@ fi
 
 applied=0
 
-# enp6s0f0: 机架内 (intra-rack)
+# enp6s0f0: intra-rack
 if ip link show enp6s0f0 >/dev/null 2>&1 && ip link show enp6s0f0 | grep -q 'state UP'; then
     "$WS_BIN" -a enp6s0f0 -d "$INTRA_RACK_Kbps" -u "$INTRA_RACK_Kbps" || exit 1
-    echo "enp6s0f0: $INTRA_RACK_Kbps Kbps (10Gb/s 机架内)"
+    echo "enp6s0f0: $INTRA_RACK_Kbps Kbps (10Gb/s intra-rack)"
     applied=1
 fi
 
-# enp6s0f1: 机架间 (inter-rack)
+# enp6s0f1: inter-rack
 if ip link show enp6s0f1 >/dev/null 2>&1 && ip link show enp6s0f1 | grep -q 'state UP'; then
     "$WS_BIN" -a enp6s0f1 -d "$INTER_RACK_Kbps" -u "$INTER_RACK_Kbps" || exit 1
-    echo "enp6s0f1: $INTER_RACK_Kbps Kbps (1Gb/s 机架间)"
+    echo "enp6s0f1: $INTER_RACK_Kbps Kbps (1Gb/s inter-rack)"
     applied=1
 fi
 

@@ -490,17 +490,17 @@ static bool read_glrc_test_params(int n, int &fail_count, int &trial_count,
             fail_count = (env_f && env_f[0]) ? std::max(1, std::atoi(env_f)) : 1;
         else
         {
-            std::cout << "请输入失败块数量 f (1.." << (n - 1) << "): " << std::flush;
+            std::cout << "Enter failure count f (1.." << (n - 1) << "): " << std::flush;
             if (!(std::cin >> fail_count))
             {
-                std::cerr << "无效的 f，请输入 [1, " << (n - 1) << "] 之间的整数。" << std::endl;
+                std::cerr << "Invalid f; enter an integer in [1, " << (n - 1) << "]." << std::endl;
                 return false;
             }
         }
     }
     if (fail_count < 1 || fail_count >= n)
     {
-        std::cerr << "无效的 f=" << fail_count << "，请输入 [1, " << (n - 1) << "] 之间的整数。"
+        std::cerr << "Invalid f=" << fail_count << "; enter an integer in [1, " << (n - 1) << "]."
                   << std::endl;
         return false;
     }
@@ -511,17 +511,17 @@ static bool read_glrc_test_params(int n, int &fail_count, int &trial_count,
             trial_count = (env_t && env_t[0]) ? std::max(1, std::atoi(env_t)) : 1;
         else
         {
-            std::cout << "请输入随机实验次数: " << std::flush;
+            std::cout << "Enter number of random trials: " << std::flush;
             if (!(std::cin >> trial_count))
             {
-                std::cerr << "无效的实验次数，请输入 >= 1 的整数。" << std::endl;
+                std::cerr << "Invalid trial count; enter an integer >= 1." << std::endl;
                 return false;
             }
         }
     }
     if (trial_count < 1)
     {
-        std::cerr << "无效的实验次数=" << trial_count << "，请输入 >= 1 的整数。" << std::endl;
+        std::cerr << "Invalid trial count=" << trial_count << "; enter an integer >= 1." << std::endl;
         return false;
     }
     return true;
@@ -1048,7 +1048,7 @@ static int run_glrc_repair_test(ECProject::Client &client, const ECProject::Conf
     const std::string failure_mode = normalize_failure_mode(requested_failure_mode);
     if (failure_mode != "random" && failure_mode != "max")
     {
-        std::cerr << "无效的 failure mode: " << failure_mode << "（应为 random 或 max）" << std::endl;
+        std::cerr << "Invalid failure mode: " << failure_mode << " (expected random or max)" << std::endl;
         return 1;
     }
     if (failure_mode == "max")
@@ -1406,8 +1406,8 @@ int main(int argc, char **argv)
 
 
     
-    int stripe_num = 1000; // 条带数量
-    size_t total_write_size = static_cast<size_t>(stripe_num * block_size * n); // MB，用于计算 throughput
+    int stripe_num = 1000; // number of stripes
+    size_t total_write_size = static_cast<size_t>(stripe_num * block_size * n); // bytes; used for throughput
     std::cout << "Starting set stripe operation" << std::endl;
     std::chrono::high_resolution_clock::time_point set_start = std::chrono::high_resolution_clock::now();
     for(int i = 0; i < stripe_num; i++){
@@ -1483,17 +1483,17 @@ int main(int argc, char **argv)
     //     }
         // else if(operation=="MERGE")
         // {
-        //      // 1) 选择要读的“部分块”（数据块+校验块）
+        //      // 1) Choose partial blocks to read (data + parity)
         //     auto ids = pick_some_data_and_parity_blocks(...);
 
-        //      // 2) 读取这些块的数据
-        //     auto blocks = client.get_blocks_by_ids(ids);   // 需要你在 Client 新增这个接口
+        //      // 2) Read those blocks
+        //     auto blocks = client.get_blocks_by_ids(ids);   // requires a new Client API
 
-        //      // 3) 合并算法
+        //      // 3) Merge algorithm
         //     auto merged = merge_algorithm(blocks);
 
-        //      // 4) 写回（覆盖写 or 写到新块再切元数据）
-        //     client.put_blocks_by_ids(target_ids, merged);  // 需要你在 Client 新增写接口
+        //      // 4) Write back (overwrite or write new blocks and switch metadata)
+        //     client.put_blocks_by_ids(target_ids, merged);  // requires a new Client write API
         // }
     //     else{
     //         std::cerr << "Unknown operation: " << operation << std::endl;

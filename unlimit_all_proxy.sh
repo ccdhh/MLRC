@@ -1,5 +1,5 @@
 #!/bin/bash
-# 在所有 proxy 节点上解除带宽限制（与 limit_all_intra10Gb_inter1Gb.sh 成对使用）
+# Clear bandwidth limits on all proxy nodes (pair with limit_all_intra10Gb_inter1Gb.sh)
 
 HOSTS_FILE="proxy_hosts"
 USER="root"

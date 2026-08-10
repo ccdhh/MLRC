@@ -1,50 +1,56 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <!--
-  gLRC 修复实验配置说明（两个正交维度，共 2×2=4 种组合 C0–C3）
+  gLRC repair experiment configuration (two orthogonal axes; classic C0-C3 pairs).
 
-  【维度 1】执行架构 — GlrcRepairMode（修复方式 / 谁来执行）
-    phase1  单 anchor repair proxy 拉取全部 helper，整 block 解码后写回。
-            适合 f=1 或作为 baseline；所有 helper 流量经过 anchor 对应 datanode 的 proxy。
-    phase2  按 GlrcShardCount 分片；每个失败块 partition 在各自 datanode 的 repair proxy 上
-            并行执行（部分读 + 分片解码 + proxy 间 exchange）。f>1 时各 partition 带宽独立。
-    pipeline 按 GlrcShardCount 分片；多方程链并行，链内 GlrcPipelineWindow 控制 in-flight 分片（真 pipeline），
-            Hub 为参与方程最多的 survivor proxy；local 单失败块可 local-direct 不经 Hub。
+  [Axis 1] Execution architecture — GlrcRepairMode (how repair runs / who executes)
+    phase1   One anchor repair proxy pulls all helpers, decodes full blocks, writes back.
+             Good for f=1 or as a baseline; all helper traffic goes through the anchor proxy.
+    phase2   Shard by GlrcShardCount; each failed-block partition runs on its own datanode
+             repair proxy in parallel (partial read + shard decode + proxy exchange).
+             For f>1 each partition uses bandwidth independently.
+    pipeline Shard by GlrcShardCount; multiple equation chains run in parallel; GlrcPipelineWindow
+             controls in-flight shards (true pipeline). Hub is the survivor proxy in the most
+             equations; a local single failure may use local-direct and skip the Hub.
 
-  【维度 2】方程选择 — GlrcEquationPolicy（选哪些修复方程）
-    local-then-global  Ceph 风格：优先 local XOR，不足再用 global Cauchy 方程。
-    local-first        pipeline 推荐：优先 local 方程组合，不足再加 global。
-    ilp-min-helper     ILP 穷举：在可解方案中最小化 helper 块数量（helper 并集最小）。
+  [Axis 2] Equation selection — GlrcEquationPolicy (which repair equations to use)
+    local-then-global  Ceph-style: prefer local XOR, then global Cauchy equations.
+    local-first        Recommended for pipeline: prefer local equation sets, then add global.
+    ilp-min-helper     ILP search: among solvable plans, minimize the helper-block union.
 
-  四种实验组合（改下面两个标签即可切换，无需改代码）：
-    C0: phase1 + local-then-global   （默认，Phase1 baseline）
+  Typical combinations (change the two tags below; no code changes needed):
+    C0: phase1 + local-then-global   (default Phase1 baseline)
     C1: phase2 + local-then-global
     C2: phase1 + ilp-min-helper
     C3: phase2 + ilp-min-helper
 
-  其他 gLRC 相关项：
-    GlrcShardCount      分片数；BlockSize 必须能被其整除。
-    GlrcPipelineWindow  pipeline 链上 in-flight 分片窗口 W；0=与 GlrcShardCount 相同（全流水）；1=串行 W=1。
-    GlrcPhase2WriteBack phase2 是否在修复后写回 datanode（重复随机试验可设 false）。
-    NodeBlockBandwidthMBps  节点 NIC 单向带宽（MB/s）；0=不限速。
-                            实现（稳定）：hop→hop 限发送端 node egress；hub/sink 汇聚限接收端
-                            node ingress（发往汇聚点不再限 egress，避免双边 sleep 堵死 TCP）。
-                            同机 DN↔proxy 不限速；跨机 DN→proxy 在 DN.egress 限速。
-                            注：软件里对同一条 TCP 连接两端都 wait 极易卡死，故不在中间 hop 再限 RX。
+  Other gLRC knobs:
+    GlrcShardCount         Number of shards; BlockSize must be divisible by it.
+    GlrcPipelineWindow     In-flight shard window W on a pipeline chain;
+                           0 = W=GlrcShardCount (full pipeline); 1 = serial W=1.
+    GlrcPhase2WriteBack    Whether phase2 writes repaired blocks back to datanodes
+                           (set false for repeated random trials if desired).
+    NodeBlockBandwidthMBps Per-node NIC unidirectional bandwidth (MB/s); 0 = unlimited.
+                           Stable model: hop->hop rate-limits sender egress; hub/sink
+                           aggregation rate-limits receiver ingress (no egress limit toward
+                           the aggregation point, to avoid dual-sided sleep deadlocking TCP).
+                           Same-host DN<->proxy is unlimited; cross-host DN->proxy uses DN.egress.
+                           Note: waiting on both ends of one TCP connection in software often
+                           stalls, so intermediate hops do not also rate-limit RX.
 
-  前置条件：CodeType 必须为 gLRC；ClusterNum >= z。
+  Preconditions: CodeType must be gLRC; ClusterNum >= z.
 -->
 <Configuration>
     <AlignedSize>4096</AlignedSize>
     <UnitSize>8192</UnitSize>
     <BlockSize>67108864</BlockSize>
 
-    <!-- 节点对带宽：每对节点单向 125 MB/s（1 Gbps，ingress/egress 分向独立） -->
+    <!-- Per-node unidirectional bandwidth: 125 MB/s (1 Gbps); ingress/egress independent -->
     <NodeBlockBandwidthMBps>125</NodeBlockBandwidthMBps>
 
-    <!-- 修复方式：phase1 | phase2 | pipeline | hybrid -->
+    <!-- Repair mode: phase1 | phase2 | pipeline | hybrid -->
     <GlrcRepairMode>hybrid</GlrcRepairMode>
     <GlrcHybridP>auto</GlrcHybridP>
-    <!-- 方程选择：local-then-global | local-first | ilp-min-helper -->
+    <!-- Equation policy: local-then-global | local-first | ilp-min-helper -->
     <GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 
     <GlrcShardCount>128</GlrcShardCount>
@@ -63,7 +69,7 @@
     <alpha>2</alpha>
 
     <CodeType>gLRC</CodeType>
-    <!-- n=55: k=48 数据块, r=3 全局校验 G, z=4 局部校验 L；k+r 按 z 个大组均匀划分 -->
+    <!-- n=55: k=48 data, r=3 global parity G, z=4 local parity L; k+r split evenly across z groups -->
     <k>48</k>
     <r>3</r>
     <z>4</z>
