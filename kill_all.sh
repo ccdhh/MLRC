@@ -1,4 +1,5 @@
 #!/bin/bash
+# Stop local gLRC processes (coordinator / proxy / datanode / client) and clear ./storage.
 
 # Best-effort kill by process name first.
 pkill -9 -f run_datanode 2>/dev/null || true
