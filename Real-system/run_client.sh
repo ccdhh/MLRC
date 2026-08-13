@@ -69,7 +69,7 @@ else
   log_file="$log_dir/glrc_${timestamp}_$$.log"
   set +e
   {
-    echo "========== DdlRT client run =========="
+    echo "========== MLRC client run =========="
     echo "started_at: $(date --iso-8601=seconds)"
     echo "client_host: $CLIENT_HOST"
     echo "arguments:${quoted_args:- (interactive)}"

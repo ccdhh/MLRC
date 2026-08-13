@@ -31,7 +31,7 @@ std::mutex g_glrc_hybrid_recovery_mutex;
 
 static void pipeline_plan_trace(const char *msg)
 {
-  FILE *f = fopen("/users/chendh/DdlRT/logs/pipeline_trace.log", "a");
+  FILE *f = fopen("/users/chendh/MLRC/logs/pipeline_trace.log", "a");
   if (f)
   {
     fprintf(f, "%s\n", msg);

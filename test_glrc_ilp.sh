@@ -2,7 +2,7 @@
 # gLRC repair test helper (interactive f + trial count, full metrics).
 #
 # One-shot interactive test (recommended; prompts for f and trial count):
-#   cd /users/chendh/DdlRT && ./test_glrc_ilp.sh test
+#   cd /users/chendh/MLRC && ./test_glrc_ilp.sh test
 #
 # Other subcommands:
 #   start   start the cluster

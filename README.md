@@ -1,13 +1,13 @@
-# DdlRT gLRC Recovery System
+# MLRC Recovery System
 
-DdlRT is a prototype for evaluating gLRC recovery. It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
+MLRC is a prototype for evaluating coded-storage recovery (gLRC / Azure-LRC / Optimal-LRC). It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
 
 - `phase1`: centralized full-block recovery at one anchor proxy;
 - `phase2`: distributed shard decoding and proxy exchange;
 - `pipeline`: parallel local-first recovery chains;
 - `hybrid`: concurrent Phase2 prefix and Pipeline suffix recovery.
 
-In the real-system deployment, each storage host runs one datanode and one proxy. Every host has an independent ingress and egress bandwidth budget. Configuration `cluster` entries represent logical gLRC groups, not physical racks.
+This branch focuses on **flat Azure-LRC / Optimal-LRC** placement. In the real-system deployment, each storage host runs one datanode and one proxy. Every host has an independent ingress and egress bandwidth budget.
 
 ## Repository Layout
 
@@ -23,7 +23,7 @@ In the real-system deployment, each storage host runs one datanode and one proxy
 Run all commands from the repository root:
 
 ```bash
-cd ~/DdlRT
+cd ~/MLRC
 ```
 
 Install build dependencies:
@@ -52,7 +52,7 @@ Optional overrides:
 
 ```bash
 export DDRT_SSH_USER=chendh
-export DDRT_REMOTE_ROOT=~/DdlRT
+export DDRT_REMOTE_ROOT=~/MLRC
 export DDRT_HOSTS_FILE=/path/to/Real-system_hosts
 ```
 
@@ -93,19 +93,19 @@ project/config/parameterConfiguration.xml
 ### Coding Parameters
 
 ```xml
-<CodeType>gLRC</CodeType>
+<CodeType>AzureLRC</CodeType>
 <AppendMode>UNILRC_MODE</AppendMode>
-<k>24</k>
-<r>2</r>
-<z>2</z>
+<k>48</k>
+<r>3</r>
+<z>4</z>
 ```
 
-The stripe width is `n = k + r + z`, and maximum fault tolerance is `r + z`.
+The stripe width is `n = k + r + z`, and maximum fault tolerance is `r + z`. Use `OptimalLRC` for the Optimal-LRC coding variant on this branch, or `gLRC` on the `main` branch.
 
 ### Recovery Mode
 
 ```xml
-<GlrcRepairMode>hybrid</GlrcRepairMode>
+<GlrcRepairMode>phase1</GlrcRepairMode>
 ```
 
 Valid values are `phase1`, `phase2`, `pipeline`, and `hybrid`.
@@ -121,7 +121,7 @@ Use `auto` for analytical selection or an integer for a fixed Phase2 shard count
 ### Equation Policy
 
 ```xml
-<GlrcEquationPolicy>local-first</GlrcEquationPolicy>
+<GlrcEquationPolicy>local-then-global</GlrcEquationPolicy>
 ```
 
 Available policies:
@@ -165,6 +165,7 @@ Complete build-to-run command:
 ```bash
 bash compile.sh && \
 export DDRT_SSH_KEY=~/.ssh/cloudlab_ddlrt && \
+export DDRT_REMOTE_ROOT=~/MLRC && \
 ./Real-system/deploy.sh && \
 ./Real-system/start.sh && \
 ./Real-system/run_client.sh

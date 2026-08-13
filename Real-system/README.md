@@ -49,7 +49,7 @@ Set `DDRT_SSH_USER` or `DDRT_REMOTE_ROOT` when the remote username or
 repository directory differs:
 
 ```bash
-DDRT_SSH_USER=chendh DDRT_REMOTE_ROOT=~/DdlRT ./Real-system/deploy.sh
+DDRT_SSH_USER=chendh DDRT_REMOTE_ROOT=~/MLRC ./Real-system/deploy.sh
 ```
 
 Stop processes without deleting block data:

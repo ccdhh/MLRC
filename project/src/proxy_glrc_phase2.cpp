@@ -45,7 +45,7 @@ std::unordered_set<int> g_phase2_active_listen_ports;
 
 void phase2_trace(const char *msg)
 {
-  FILE *f = fopen("/users/chendh/DdlRT/logs/phase2_trace.log", "a");
+  FILE *f = fopen("/users/chendh/MLRC/logs/phase2_trace.log", "a");
   if (f)
   {
     fprintf(f, "%s\n", msg);
