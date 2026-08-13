@@ -1,6 +1,6 @@
-# DdlRT gLRC Recovery System
+# MLRC
 
-DdlRT is a prototype for evaluating gLRC recovery. It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
+MLRC is a prototype for evaluating LRC recovery. It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
 
 - `phase1`: centralized full-block recovery at one anchor proxy;
 - `phase2`: distributed shard decoding and proxy exchange;
@@ -23,7 +23,7 @@ In the real-system deployment, each storage host runs one datanode and one proxy
 Run all commands from the repository root:
 
 ```bash
-cd ~/DdlRT
+cd ~/main
 ```
 
 Install build dependencies:
