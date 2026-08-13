@@ -60,6 +60,6 @@ done
 
 echo
 echo "SSH setup complete. Next:"
-echo "  cd ~/DdlRT"
+echo "  cd ~/MLRC"
 echo "  ./Real-system/deploy.sh"
 echo "  ./Real-system/start.sh"

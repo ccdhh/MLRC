@@ -155,7 +155,7 @@ static std::vector<PipelineHubReadyAcceptor> take_hub_ready_acceptors(int epoch)
 
 void pipeline_trace(const char *msg)
 {
-  FILE *f = fopen("/users/chendh/DdlRT/logs/pipeline_trace.log", "a");
+  FILE *f = fopen("/users/chendh/MLRC/logs/pipeline_trace.log", "a");
   if (f)
   {
     fprintf(f, "%s\n", msg);

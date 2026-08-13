@@ -1,6 +1,6 @@
 # MLRC
 
-MLRC is a prototype for evaluating LRC recovery. It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
+MLRC is a prototype for evaluating gLRC recovery. It contains a client, coordinator, proxies, and datanodes, and supports four recovery architectures:
 
 - `phase1`: centralized full-block recovery at one anchor proxy;
 - `phase2`: distributed shard decoding and proxy exchange;
@@ -23,7 +23,7 @@ In the real-system deployment, each storage host runs one datanode and one proxy
 Run all commands from the repository root:
 
 ```bash
-cd ~/main
+cd ~/MLRC
 ```
 
 Install build dependencies:
@@ -52,7 +52,7 @@ Optional overrides:
 
 ```bash
 export DDRT_SSH_USER=chendh
-export DDRT_REMOTE_ROOT=~/DdlRT
+export DDRT_REMOTE_ROOT=~/MLRC
 export DDRT_HOSTS_FILE=/path/to/Real-system_hosts
 ```
 
@@ -165,6 +165,7 @@ Complete build-to-run command:
 ```bash
 bash compile.sh && \
 export DDRT_SSH_KEY=~/.ssh/cloudlab_ddlrt && \
+export DDRT_REMOTE_ROOT=~/MLRC && \
 ./Real-system/deploy.sh && \
 ./Real-system/start.sh && \
 ./Real-system/run_client.sh

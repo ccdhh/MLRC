@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a one-proxy-per-host real-system topology for DdlRT.
+"""Generate a one-proxy-per-host real-system topology for MLRC.
 
 The hosts file uses one entry per line:
   <IP-or-hostname> [optional labels...]

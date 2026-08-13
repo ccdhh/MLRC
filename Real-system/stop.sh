@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Stop all DdlRT roles.  Storage is preserved by default; pass
+# Stop all MLRC roles.  Storage is preserved by default; pass
 # --clear-storage only when a new experiment must start with empty disks.
 
 set -euo pipefail
